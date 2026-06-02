@@ -13,6 +13,10 @@ import {
   Truck,
   Boxes,
   ArrowRight,
+  CalendarClock,
+  PackageCheck,
+  WalletCards,
+  Gauge,
 } from "lucide-react";
 
 import Topbar from "@/components/Topbar";
@@ -21,7 +25,7 @@ import { getDashboardStats } from "@/modules/orders/actions";
 import "./dashboard.css";
 import Link from "next/link";
 
-export default async function AdminDashboard({ user }: { user: any }) {
+export default async function AdminDashboard({ user }: { user: { name?: string | null } | null }) {
   const stats = await getDashboardStats();
 
   return (
@@ -33,11 +37,11 @@ export default async function AdminDashboard({ user }: { user: any }) {
           <div className="dashboard-hero-copy">
             <span className="dashboard-kicker">Pilotage du jour</span>
             <h2>Bonjour, {user?.name?.split(" ")[0] || "Admin"}</h2>
-            <p>Commandes, stock et files logistiques en un seul coup d'oeil.</p>
+            <p>Commandes, stock et files logistiques en un seul coup d&apos;oeil.</p>
           </div>
           <div className="dashboard-hero-actions">
             <div className="dashboard-hero-metric">
-              <span>Aujourd'hui</span>
+              <span>Aujourd&apos;hui</span>
               <strong>{stats.todayOrders}</strong>
               <small>{formatPrice(stats.todayRevenue || 0)}</small>
             </div>
@@ -55,8 +59,8 @@ export default async function AdminDashboard({ user }: { user: any }) {
             accent
           />
           <StatCard
-            label="CHIFFRE D'AFFAIRES"
-            value={formatPrice(stats.totalRevenue)}
+            label="CA LIVRE DU MOIS"
+            value={formatPrice(stats.monthRevenue)}
             icon={<TrendingUp size={20} />}
             color="var(--orange)"
           />
@@ -71,6 +75,37 @@ export default async function AdminDashboard({ user }: { user: any }) {
             value={stats.outOfStockCount}
             icon={<AlertTriangle size={20} />}
             color={stats.outOfStockCount > 0 ? "var(--red)" : "var(--green)"}
+          />
+        </div>
+
+        <div className="dashboard-stats-grid dashboard-stats-grid-secondary">
+          <StatCard
+            label="TAUX DE LIVRAISON"
+            value={`${stats.deliverySuccessRate}%`}
+            trend="Livrees et partielles sur sorties cloturees"
+            icon={<Gauge size={20} />}
+            color="var(--green)"
+          />
+          <StatCard
+            label="REPRO-DISPO EN ATTENTE"
+            value={stats.reproDispoCount}
+            trend={`${stats.reprogrammedCount} reprogrammation(s) ce mois`}
+            icon={<CalendarClock size={20} />}
+            color={stats.reproDispoCount > 0 ? "var(--amber)" : "var(--green)"}
+          />
+          <StatCard
+            label="PANIER MOYEN LIVRE"
+            value={formatPrice(stats.averageOrderValue)}
+            trend="Commandes livrees du mois"
+            icon={<WalletCards size={20} />}
+            color="var(--orange)"
+          />
+          <StatCard
+            label="COLIS PRETS NON ATTRIBUES"
+            value={stats.readyUnassignedCount}
+            trend="Emballes ou repro-dispo"
+            icon={<PackageCheck size={20} />}
+            color={stats.readyUnassignedCount > 0 ? "var(--blue)" : "var(--green)"}
           />
         </div>
 
@@ -107,6 +142,55 @@ export default async function AdminDashboard({ user }: { user: any }) {
             </span>
             <ArrowRight size={16} />
           </Link>
+        </div>
+
+        <div className="dashboard-data-grid">
+          <TableCard
+            title="Activite sur 7 jours"
+            meta={`Moyenne : ${stats.sevenDayAverage} commande(s) / jour`}
+            actions={
+              <span className={`dashboard-trend-evolution ${stats.sevenDayEvolution >= 0 ? "up" : "down"}`}>
+                {stats.sevenDayEvolution >= 0 ? "+" : ""}{stats.sevenDayEvolution}% vs semaine precedente
+              </span>
+            }
+          >
+            <div className="dashboard-trend-chart">
+              {stats.sevenDayTrend.map((day) => {
+                const maxOrders = Math.max(...stats.sevenDayTrend.map((item) => item.orders), 1);
+                const height = Math.max(8, Math.round((day.orders / maxOrders) * 100));
+                const isToday = day.key === new Date().toISOString().split("T")[0];
+                return (
+                  <div key={day.key} className={`dashboard-trend-day ${isToday ? "today" : ""}`}>
+                    <div className="dashboard-trend-value">{day.orders}</div>
+                    <div className="dashboard-trend-track">
+                      <div className="dashboard-trend-bar" style={{ height: `${height}%` }} />
+                    </div>
+                    <strong>{day.label}</strong>
+                    <small>{day.dateLabel}</small>
+                  </div>
+                );
+              })}
+            </div>
+          </TableCard>
+
+          <TableCard title="Statuts du mois" meta={`${stats.monthOrders} commandes`}>
+            <div className="dashboard-status-list">
+              {stats.statusBreakdown.map((item) => {
+                const pct = stats.monthOrders > 0 ? Math.round((item.value / stats.monthOrders) * 100) : 0;
+                return (
+                  <div key={item.label} className="dashboard-status-item">
+                    <div className="dashboard-status-head">
+                      <span>{item.label}</span>
+                      <strong>{item.value} <small>{pct}%</small></strong>
+                    </div>
+                    <div className="dashboard-status-track">
+                      <div className={`dashboard-status-fill ${item.tone}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </TableCard>
         </div>
 
         <div className="dashboard-main-grid">
@@ -180,6 +264,29 @@ export default async function AdminDashboard({ user }: { user: any }) {
                 <Link href="/zangochap-manager/products" className="btn-secondary stock-manage-btn">
                   <Package size={14} /> Gerer les stocks
                 </Link>
+              </div>
+            </TableCard>
+
+            <TableCard
+              title="Top produits"
+              meta="Articles livres ce mois"
+              actions={<Link href="/zangochap-manager/admin/top-products" className="dashboard-card-link">Voir tout</Link>}
+            >
+              <div className="dashboard-product-list">
+                {stats.topProducts.map((product, index) => (
+                  <div key={`${product.name}-${index}`} className="dashboard-product-item">
+                    <span className="dashboard-product-rank">{index + 1}</span>
+                    <span className="dashboard-product-emoji">{product.emoji}</span>
+                    <span className="dashboard-product-info">
+                      <strong>{product.name}</strong>
+                      <small>{formatPrice(product.revenue)}</small>
+                    </span>
+                    <b>{product.quantity}</b>
+                  </div>
+                ))}
+                {stats.topProducts.length === 0 && (
+                  <div className="cell-muted dashboard-empty-data">Aucun produit livre ce mois.</div>
+                )}
               </div>
             </TableCard>
           </div>

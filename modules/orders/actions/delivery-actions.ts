@@ -29,7 +29,11 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
   const history = Array.isArray(order.history) ? [...order.history] : [];
   history.push({
     at: new Date().toISOString(),
-    action: isUnassigning ? "Commande désattribuée (remise en attente)" : `Livreur attribué : ${driver?.name}`,
+    action: isUnassigning
+      ? "Commande désattribuée (remise en attente)"
+      : order.status === "REPRO_DISPO"
+        ? `Repro-dispo remise en livraison et attribuée à : ${driver?.name}`
+        : `Livreur attribué : ${driver?.name}`,
     by: session.email,
     byName: session.name,
   });
@@ -39,6 +43,7 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
     data: {
       deliverymanId: isUnassigning ? null : deliverymanId,
       deliverymanName: isUnassigning ? null : driver?.name,
+      ...(!isUnassigning && order.status === "REPRO_DISPO" ? { status: "ON_DELIVERY" as const } : {}),
       history,
     },
   });
@@ -46,6 +51,7 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-rider");
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/settlement");
   revalidatePath("/zangochap-manager/dashboard");
   return { success: true };
 }
@@ -72,7 +78,11 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
     const history = Array.isArray(order.history) ? [...order.history] : [];
     history.push({
       at: new Date().toISOString(),
-      action: isUnassigning ? "Désattribution groupée" : `Attribution groupée au livreur : ${driver?.name}`,
+      action: isUnassigning
+        ? "Désattribution groupée"
+        : order.status === "REPRO_DISPO"
+          ? `Repro-dispo remise en livraison et attribuée à : ${driver?.name}`
+          : `Attribution groupée au livreur : ${driver?.name}`,
       by: session.email,
       byName: session.name,
     });
@@ -82,11 +92,13 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
       data: {
         deliverymanId: isUnassigning ? null : deliverymanId,
         deliverymanName: isUnassigning ? null : driver?.name,
+        ...(!isUnassigning && order.status === "REPRO_DISPO" ? { status: "ON_DELIVERY" as const } : {}),
         history,
       }
     });
   }));
 
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/settlement");
   return { success: true };
 }

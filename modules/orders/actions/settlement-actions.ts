@@ -42,6 +42,126 @@ function getOrdersSettlementTotals(orders: SettlementAmountOrder[]) {
   );
 }
 
+function getDateRange(from?: string, to?: string) {
+  const range: { gte?: Date; lte?: Date } = {};
+
+  if (from) {
+    range.gte = new Date(`${from}T00:00:00`);
+  }
+
+  if (to) {
+    range.lte = new Date(`${to}T23:59:59.999`);
+  }
+
+  return Object.keys(range).length > 0 ? range : undefined;
+}
+
+const deliverySettlementOrderSelect = {
+  id: true,
+  ref: true,
+  total: true,
+  deliveryFee: true,
+  discount: true,
+  amountReceived: true,
+  paymentMethod: true,
+  customerName: true,
+  customerPhone: true,
+  customerLocation: true,
+  commune: true,
+  deliveryDate: true,
+  deliveredAt: true,
+  updatedAt: true,
+  deliverymanId: true,
+  deliverymanName: true,
+  settlementId: true,
+  status: true,
+  returnReason: true,
+  isCommercialContacted: true,
+} satisfies Prisma.OrderSelect;
+
+type DeliverySettlementOrder = Prisma.OrderGetPayload<{
+  select: typeof deliverySettlementOrderSelect;
+}>;
+
+function serializeSettlementOrder(order: DeliverySettlementOrder) {
+  const amounts = getOrderSettlementAmounts(order);
+
+  return {
+    ...order,
+    amountToSettle: amounts.amount,
+    productsAmount: amounts.productsAmount,
+    deliveryFeesAmount: amounts.deliveryFeesAmount,
+  };
+}
+
+function groupOrdersByRider(orders: ReturnType<typeof serializeSettlementOrder>[]) {
+  const riderMap = new Map<string, {
+    id: string;
+    name: string;
+    orders: ReturnType<typeof serializeSettlementOrder>[];
+    totalDeliveryFees: number;
+    totalProducts: number;
+    totalGrandTotal: number;
+    cashTotal: number;
+    orderCount: number;
+  }>();
+
+  orders.forEach((order) => {
+    const riderId = String(order.deliverymanId || "unknown");
+    const rider = riderMap.get(riderId) || {
+      id: riderId,
+      name: String(order.deliverymanName || "Livreur inconnu"),
+      orders: [],
+      totalDeliveryFees: 0,
+      totalProducts: 0,
+      totalGrandTotal: 0,
+      cashTotal: 0,
+      orderCount: 0,
+    };
+
+    rider.orders.push(order);
+    rider.totalDeliveryFees += order.deliveryFeesAmount;
+    rider.totalProducts += order.productsAmount;
+    rider.totalGrandTotal += order.amountToSettle;
+    rider.orderCount += 1;
+
+    if (String(order.paymentMethod || "").toLowerCase().includes("cash")) {
+      rider.cashTotal += order.amountToSettle;
+    }
+
+    riderMap.set(riderId, rider);
+  });
+
+  return Array.from(riderMap.values()).sort((a, b) => b.totalGrandTotal - a.totalGrandTotal);
+}
+
+function buildSummary(
+  collectableOrders: ReturnType<typeof serializeSettlementOrder>[],
+  returnOrders: ReturnType<typeof serializeSettlementOrder>[],
+  settlements: {
+    amount: number;
+    productsAmount: number;
+    deliveryFeesAmount: number;
+    ordersCount: number;
+    deliverymanId: string | null;
+  }[],
+) {
+  return {
+    toSettleTotal: collectableOrders.reduce((sum, order) => sum + order.amountToSettle, 0),
+    productsTotal: collectableOrders.reduce((sum, order) => sum + order.productsAmount, 0),
+    deliveryFeesTotal: collectableOrders.reduce((sum, order) => sum + order.deliveryFeesAmount, 0),
+    cashTotal: collectableOrders.reduce((sum, order) => (
+      String(order.paymentMethod || "").toLowerCase().includes("cash") ? sum + order.amountToSettle : sum
+    ), 0),
+    collectableOrdersCount: collectableOrders.length,
+    returnOrdersCount: returnOrders.length,
+    uncontactedReturnsCount: returnOrders.filter((order) => !order.isCommercialContacted).length,
+    historyTotal: settlements.reduce((sum, settlement) => sum + Number(settlement.amount || 0), 0),
+    historyOrdersCount: settlements.reduce((sum, settlement) => sum + Number(settlement.ordersCount || 0), 0),
+    historyRidersCount: new Set(settlements.map((settlement) => settlement.deliverymanId).filter(Boolean)).size,
+  };
+}
+
 // ============ PENDING SETTLEMENTS ============
 export async function getPendingSettlements() {
   await ensureAuth(["admin"]);
@@ -195,6 +315,130 @@ export async function getSettlementStats(from?: string, to?: string, commercialI
   })).sort((a, b) => b.total - a.total);
 
   return { methods, orders };
+}
+
+export async function getDeliverySettlementDashboard(from?: string, to?: string, riderId?: string) {
+  const session = await getSession();
+  if (!session || !isRole(session, 'admin')) throw new Error("AccÃ¨s refusÃ©");
+
+  const deliveryDateRange = getDateRange(from, to);
+  const riderFilter: Prisma.OrderWhereInput = riderId ? { deliverymanId: riderId } : { deliverymanId: { not: null } };
+  const settlementRiderFilter: Prisma.SettlementWhereInput = riderId ? { deliverymanId: riderId } : {};
+
+  const [collectableRawOrders, returnRawOrders, settlements, deliverymen] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        ...riderFilter,
+        status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
+        settlementId: null,
+        ...(deliveryDateRange ? { deliveryDate: deliveryDateRange } : {}),
+      },
+      select: deliverySettlementOrderSelect,
+      orderBy: [{ deliverymanName: 'asc' }, { updatedAt: 'desc' }],
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        ...riderFilter,
+        status: { in: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'] },
+        ...(deliveryDateRange ? { deliveryDate: deliveryDateRange } : {}),
+      },
+      select: deliverySettlementOrderSelect,
+      orderBy: [{ isCommercialContacted: 'asc' }, { updatedAt: 'desc' }],
+    }),
+    prisma.settlement.findMany({
+      where: {
+        status: 'COMPLETED',
+        ...settlementRiderFilter,
+        ...(deliveryDateRange ? { orders: { some: { deliveryDate: deliveryDateRange } } } : {}),
+      },
+      select: {
+        id: true,
+        deliverymanId: true,
+        amount: true,
+        productsAmount: true,
+        deliveryFeesAmount: true,
+        ordersCount: true,
+        status: true,
+        notes: true,
+        by: true,
+        createdAt: true,
+        deliveryman: { select: { name: true } },
+        orders: {
+          ...(deliveryDateRange ? { where: { deliveryDate: deliveryDateRange } } : {}),
+          select: {
+            id: true,
+            ref: true,
+            customerName: true,
+            status: true,
+            total: true,
+            deliveryFee: true,
+            discount: true,
+            amountReceived: true,
+            paymentMethod: true,
+            deliveryDate: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    }),
+    prisma.user.findMany({
+      where: { role: 'LIVREUR' },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
+
+  const collectableOrders = collectableRawOrders.map(serializeSettlementOrder);
+  const returnOrders = returnRawOrders.map(serializeSettlementOrder);
+  const riders = groupOrdersByRider(collectableOrders);
+
+  const deliveryDateHistory = settlements.map((settlement) => {
+    const totals = getOrdersSettlementTotals(settlement.orders);
+    return {
+      ...settlement,
+      amount: totals.amount,
+      productsAmount: totals.productsAmount,
+      deliveryFeesAmount: totals.deliveryFeesAmount,
+      ordersCount: settlement.orders.length,
+    };
+  });
+
+  return {
+    filters: { from: from || "", to: to || "", riderId: riderId || "" },
+    riderOptions: deliverymen,
+    collectable: {
+      riders,
+      orders: collectableOrders,
+    },
+    returns: {
+      orders: returnOrders,
+      byRider: Object.values(returnOrders.reduce<Record<string, {
+        id: string;
+        name: string;
+        orders: typeof returnOrders;
+        uncontactedCount: number;
+      }>>((acc, order) => {
+        const id = String(order.deliverymanId || "unknown");
+        if (!acc[id]) {
+          acc[id] = {
+            id,
+            name: String(order.deliverymanName || "Livreur inconnu"),
+            orders: [],
+            uncontactedCount: 0,
+          };
+        }
+        acc[id].orders.push(order);
+        if (!order.isCommercialContacted) acc[id].uncontactedCount += 1;
+        return acc;
+      }, {})).sort((a, b) => b.uncontactedCount - a.uncontactedCount || a.name.localeCompare(b.name)),
+    },
+    history: deliveryDateHistory,
+    summary: buildSummary(collectableOrders, returnOrders, deliveryDateHistory),
+  };
 }
 
 // ============ RIDER SETTLEMENT STATS ============

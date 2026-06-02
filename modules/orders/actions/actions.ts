@@ -43,16 +43,17 @@ export async function getOrCreateDefaultWarehouse() {
 export async function getOrder(id: string) { return orderActions.getOrder(id); }
 export async function createOrder(data: Parameters<typeof orderActions.createOrder>[0]) { return orderActions.createOrder(data); }
 export async function deleteOrder(orderId: string) { return orderActions.deleteOrder(orderId); }
-export async function updateOrderDetails(orderId: string, data: any) { return orderActions.updateOrderDetails(orderId, data); }
+export async function updateOrderDetails(orderId: string, data: Parameters<typeof orderActions.updateOrderDetails>[1]) { return orderActions.updateOrderDetails(orderId, data); }
 export async function addOrderHistoryEntry(orderId: string, action: string) { return orderActions.addOrderHistoryEntry(orderId, action); }
-export async function duplicateOrder(orderId: string, data: any) { return orderActions.duplicateOrder(orderId, data); }
-export async function reprogramOrder(orderId: string, deliveryDate: string) { return orderActions.reprogramOrder(orderId, deliveryDate); }
+export async function duplicateOrder(orderId: string, data: Parameters<typeof orderActions.duplicateOrder>[1]) { return orderActions.duplicateOrder(orderId, data); }
+export async function reprogramOrder(orderId: string, data: Parameters<typeof orderActions.reprogramOrder>[1]) { return orderActions.reprogramOrder(orderId, data); }
 export async function takeToProcessOrder(orderId: string, commercialId?: string) { return orderActions.takeToProcessOrder(orderId, commercialId); }
 export async function reassignOrderLead(orderId: string, newCommercialId: string) { return orderActions.reassignOrderLead(orderId, newCommercialId); }
 export async function updateRoundRobinActiveCommercials(activeCommercialIds: string[]) { return orderActions.updateRoundRobinActiveCommercials(activeCommercialIds); }
 
 // ── Status Changes ──
-export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null) { return statusActions.updateOrderStatus(orderId, newStatus, note, amountReceived); }
+export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null, reproDeliveryDate?: string) { return statusActions.updateOrderStatus(orderId, newStatus, note, amountReceived, reproDeliveryDate); }
+export async function reopenDeliveryOrder(orderId: string, note?: string) { return statusActions.reopenDeliveryOrder(orderId, note); }
 export async function markPartialDelivery(orderId: string, deliveredQuantities: Record<string, number>, note?: string, includeDeliveryFee?: boolean, amountReceived?: number | null) { return statusActions.markPartialDelivery(orderId, deliveredQuantities, note, includeDeliveryFee, amountReceived); }
 
 // ── Delivery Assignments ──
@@ -65,6 +66,7 @@ export async function getSettlementHistory() { return settlementActions.getSettl
 export async function createSettlement(deliverymanId: string, orderIds: string[], amount: number, notes?: string) { return settlementActions.createSettlement(deliverymanId, orderIds, amount, notes); }
 export async function getSettlementStats(from?: string, to?: string, commercialId?: string, method?: string) { return settlementActions.getSettlementStats(from, to, commercialId, method); }
 export async function getRiderSettlementStats(from?: string, to?: string, riderId?: string) { return settlementActions.getRiderSettlementStats(from, to, riderId); }
+export async function getDeliverySettlementDashboard(from?: string, to?: string, riderId?: string) { return settlementActions.getDeliverySettlementDashboard(from, to, riderId); }
 export async function toggleCommercialContacted(orderId: string, value: boolean) { return settlementActions.toggleCommercialContacted(orderId, value); }
 
 // ── Analytics & Dashboard ──

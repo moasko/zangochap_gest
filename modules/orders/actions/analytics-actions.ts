@@ -28,6 +28,10 @@ export async function getDashboardStats() {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const sevenDaysStart = new Date(todayStart);
+  sevenDaysStart.setDate(sevenDaysStart.getDate() - 6);
+  const previousSevenDaysStart = new Date(sevenDaysStart);
+  previousSevenDaysStart.setDate(previousSevenDaysStart.getDate() - 7);
   const publicToProcessWhere = {
     deletedAt: null,
     status: OrderStatus.TO_PROCESS,
@@ -36,24 +40,127 @@ export async function getDashboardStats() {
   };
 
   // 1. Core Counts
-  const [todayOrders, monthOrders, productsCount, toProcessCount, packingQueueCount] = await Promise.all([
+  const [todayOrders, monthOrders, productsCount, toProcessCount, packingQueueCount, readyUnassignedCount] = await Promise.all([
     prisma.order.count({ where: { deletedAt: null, status: { not: OrderStatus.TO_PROCESS }, createdAt: { gte: todayStart } } }),
     prisma.order.count({ where: { deletedAt: null, status: { not: OrderStatus.TO_PROCESS }, createdAt: { gte: monthStart } } }),
     prisma.product.count(),
     prisma.order.count({ where: publicToProcessWhere }),
     prisma.order.count({ where: { deletedAt: null, status: OrderStatus.CONFIRMED } }),
+    prisma.order.count({
+      where: {
+        deletedAt: null,
+        deliverymanId: null,
+        status: { in: [OrderStatus.PACKED, OrderStatus.REPRO_DISPO] },
+      },
+    }),
   ]);
 
   // 2. Revenue (Delivered only)
   const deliveredOrders = await prisma.order.findMany({
     where: { deletedAt: null, status: 'DELIVERED' },
-    select: { total: true, createdAt: true, commune: true, commercialName: true }
+    select: { id: true, total: true, createdAt: true, deliveryDate: true, commune: true, commercialName: true, items: true }
   });
 
   const totalRevenue = deliveredOrders.reduce((sum, o) => sum + o.total, 0);
   const todayRevenue = deliveredOrders
-    .filter(o => new Date(o.createdAt) >= todayStart)
+    .filter(o => new Date(o.deliveryDate || o.createdAt) >= todayStart)
     .reduce((sum, o) => sum + o.total, 0);
+
+  const dashboardPeriodOrders = await prisma.order.findMany({
+    where: {
+      deletedAt: null,
+      status: { not: OrderStatus.TO_PROCESS },
+      createdAt: { gte: previousSevenDaysStart < monthStart ? previousSevenDaysStart : monthStart },
+    },
+    select: {
+      id: true,
+      status: true,
+      type: true,
+      total: true,
+      createdAt: true,
+    },
+  });
+  const monthSnapshotOrders = dashboardPeriodOrders.filter(order => order.createdAt >= monthStart);
+  const deliveryOutcomeStatuses: OrderStatus[] = [
+    OrderStatus.DELIVERED,
+    OrderStatus.PARTIALLY_DELIVERED,
+    OrderStatus.RETURNED,
+    OrderStatus.CANCELLED,
+    OrderStatus.REPRO_DISPO,
+  ];
+  const successfulDeliveryStatuses: OrderStatus[] = [OrderStatus.DELIVERED, OrderStatus.PARTIALLY_DELIVERED];
+  const deliveryOutcomes = monthSnapshotOrders.filter(order => deliveryOutcomeStatuses.includes(order.status));
+  const successfulDeliveries = deliveryOutcomes.filter(order => successfulDeliveryStatuses.includes(order.status));
+  const deliverySuccessRate = deliveryOutcomes.length > 0
+    ? Math.round((successfulDeliveries.length / deliveryOutcomes.length) * 100)
+    : 0;
+  const reproDispoCount = monthSnapshotOrders.filter(order => order.status === OrderStatus.REPRO_DISPO).length;
+  const reprogrammedCount = monthSnapshotOrders.filter(order => order.type === 'Reprogrammé').length;
+  const deliveredThisMonth = monthSnapshotOrders.filter(order => order.status === OrderStatus.DELIVERED);
+  const monthRevenue = deliveredThisMonth.reduce((sum, order) => sum + order.total, 0);
+  const averageOrderValue = deliveredThisMonth.length > 0
+    ? Math.round(monthRevenue / deliveredThisMonth.length)
+    : 0;
+  const statusBreakdown = [
+    { label: 'Livrées', value: monthSnapshotOrders.filter(order => order.status === OrderStatus.DELIVERED).length, tone: 'green' },
+    { label: 'En cours', value: monthSnapshotOrders.filter(order => ([OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.PACKED, OrderStatus.ON_DELIVERY] as OrderStatus[]).includes(order.status)).length, tone: 'blue' },
+    { label: 'Repro-dispo', value: reproDispoCount, tone: 'amber' },
+    { label: 'Retours / annulations', value: monthSnapshotOrders.filter(order => ([OrderStatus.RETURNED, OrderStatus.CANCELLED] as OrderStatus[]).includes(order.status)).length, tone: 'red' },
+  ];
+
+  const trendDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(sevenDaysStart);
+    date.setDate(date.getDate() + index);
+    const key = date.toISOString().split('T')[0];
+    return {
+      key,
+      label: new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(date).replace('.', ''),
+      dateLabel: new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' }).format(date),
+      orders: 0,
+      revenue: 0,
+    };
+  });
+  const trendByDay = new Map(trendDays.map(day => [day.key, day]));
+  dashboardPeriodOrders.forEach(order => {
+    if (order.createdAt < sevenDaysStart) return;
+    const day = trendByDay.get(order.createdAt.toISOString().split('T')[0]);
+    if (day) day.orders += 1;
+  });
+  const currentSevenDaysOrders = dashboardPeriodOrders.filter(order => order.createdAt >= sevenDaysStart).length;
+  const previousSevenDaysOrders = dashboardPeriodOrders.filter(order => (
+    order.createdAt >= previousSevenDaysStart && order.createdAt < sevenDaysStart
+  )).length;
+  const sevenDayAverage = Math.round((currentSevenDaysOrders / 7) * 10) / 10;
+  const sevenDayEvolution = previousSevenDaysOrders > 0
+    ? Math.round(((currentSevenDaysOrders - previousSevenDaysOrders) / previousSevenDaysOrders) * 100)
+    : currentSevenDaysOrders > 0 ? 100 : 0;
+  deliveredOrders.forEach(order => {
+    const deliveryDate = new Date(order.deliveryDate || order.createdAt);
+    if (deliveryDate < sevenDaysStart) return;
+    const day = trendByDay.get(deliveryDate.toISOString().split('T')[0]);
+    if (day) day.revenue += order.total;
+  });
+
+  const topProductMap = new Map<string, { name: string; emoji: string; quantity: number; revenue: number }>();
+  deliveredOrders
+    .filter(order => new Date(order.deliveryDate || order.createdAt) >= monthStart)
+    .forEach(order => {
+      order.items.forEach(item => {
+        const key = item.productId || item.name;
+        const current = topProductMap.get(key) || {
+          name: item.name,
+          emoji: item.emoji || 'P',
+          quantity: 0,
+          revenue: 0,
+        };
+        current.quantity += item.qty;
+        current.revenue += item.price * item.qty;
+        topProductMap.set(key, current);
+      });
+    });
+  const topProducts = Array.from(topProductMap.values())
+    .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
+    .slice(0, 5);
 
   // 3. Top Communes
   const communeMap: Record<string, number> = {};
@@ -135,13 +242,24 @@ export async function getDashboardStats() {
     todayOrders,
     todayRevenue,
     totalRevenue,
+    monthRevenue,
+    averageOrderValue,
     conversionRate,
+    deliverySuccessRate,
+    reproDispoCount,
+    reprogrammedCount,
+    readyUnassignedCount,
     outOfStockCount,
     toProcessCount,
     packingQueueCount,
     collectionQueueCount,
     topCommunes,
     leaderboard,
+    sevenDayTrend: trendDays,
+    sevenDayAverage,
+    sevenDayEvolution,
+    statusBreakdown,
+    topProducts,
     recentOrders,
     monthOrders,
     productsCount

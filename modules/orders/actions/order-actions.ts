@@ -558,95 +558,41 @@ export async function duplicateOrder(orderId: string, data: any) {
 }
 
 // ============ REPROGRAM ORDER ============
-export async function reprogramOrder(orderId: string, deliveryDate: string) {
+export async function reprogramOrder(orderId: string, data: any) {
   const session = await getSession();
   if (!session) throw new Error("Non authentifié");
 
-  const order = await prisma.order.findUnique({ 
-    where: { id: orderId },
-    include: { items: true } 
-  });
-  if (!order || !checkOrderAccess(order, session)) throw new Error("Accès refusé");
+  const original = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!original || !checkOrderAccess(original, session)) throw new Error("Accès refusé");
 
-  const nextDeliveryDate = new Date(deliveryDate);
-  if (Number.isNaN(nextDeliveryDate.getTime())) {
-    throw new Error("Date de livraison invalide");
-  }
-
-  // 1. Generate new REPRO reference
-  const originalRef = String(order.ref || "").replace(/^REPRO/i, "");
+  const originalRef = String(original.ref || "").replace(/^REPRO/i, "");
   const reproRef = `REPRO${originalRef}`;
+  const baseNotes = String(data.notes || "").trim();
+  const finalNotes = `REPROGRAMMATION - Commande originale: ${original.ref}${baseNotes ? `\n---\n${baseNotes}` : ""}`;
 
-  // 2. Prepare items for the new order
-  const items = order.items.map((i: any) => ({
-    productId: i.productId || undefined,
-    variantId: i.variantId || undefined,
-    name: i.name,
-    size: i.size,
-    color: i.color,
-    qty: i.qty,
-    price: i.price,
-    emoji: i.emoji,
-    image: i.image,
-    isCustom: i.isCustom,
-    isGift: i.isGift,
-    notes: i.notes,
-  }));
-
-  // 3. Create the new order via createOrder
-  const newOrderData = {
+  const newOrder = await createOrder({
+    ...data,
     ref: reproRef,
-    customerId: order.customerId || undefined,
-    customerName: order.customerName || "",
-    customerPhone: order.customerPhone || "",
-    customerPhone2: order.customerPhone2 || undefined,
-    customerLocation: order.customerLocation || "",
-    commune: order.commune || "",
-    deliveryFee: order.deliveryFee,
-    deliveryNote: order.deliveryNote || undefined,
-    items,
-    promoCode: order.promoCode || undefined,
-    discount: order.discount || undefined,
-    notes: `Générée suite à la reprogrammation de la commande ${order.ref}\n${order.notes || ''}`.trim(),
-    type: "Reprogrammé",
-    total: order.total,
-    deliveryDate: nextDeliveryDate.toISOString(),
-    paymentMethod: order.paymentMethod || undefined,
-    status: "REPROGRAMMED",
     allowRefRetry: true,
-  };
+    type: "Reprogrammé",
+    status: "CONFIRMED",
+    notes: finalNotes,
+  });
 
-  await createOrder(newOrderData as any);
-
-  // 4. Handle stock and close the original order
-  if (order.stockDecremented) {
-    await restoreStockForOrder(order as any, session, 'ADJUSTMENT');
-  }
-
-  const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
+  const history = Array.isArray(original.history) ? [...(original.history as any[])] : [];
   history.push({
     at: new Date().toISOString(),
-    action: `Clôturée et dupliquée pour reprogrammation au ${deliveryDate} (Nouvelle réf: ${reproRef})`,
+    action: `Nouvelle commande reprogrammée créée : ${newOrder.order.ref}`,
     by: session.email,
-    byName: session.name
+    byName: session.name,
   });
-
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: "REPRO_DISPO",
-      stockDecremented: false,
-      history
-    }
-  });
+  await prisma.order.update({ where: { id: orderId }, data: { history } });
 
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/logistics");
+  revalidatePath("/zangochap-manager/logistics/collection");
   revalidatePath("/zangochap-manager/logistics/packing");
-  revalidatePath("/zangochap-manager/logistics/labels");
-  revalidatePath("/zangochap-manager/admin/delivery");
-  revalidatePath("/zangochap-rider");
-  return { success: true };
+  return newOrder;
 }
 
 async function getNextCommercialForAssignment(tx: any) {

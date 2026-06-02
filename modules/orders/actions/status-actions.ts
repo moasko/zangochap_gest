@@ -1,15 +1,18 @@
 "use server";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/modules/auth/actions";
-import { checkOrderAccess, generateUniqueRef } from "../helpers";
+import { checkOrderAccess, generateUniqueRef, isRole } from "../helpers";
 import { decrementStockForOrder, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
 
 type UpdateOrderStatusResult = {
   success: true;
   order: any;
 };
+
+const CLOSED_DELIVERY_STATUSES = ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED'];
 
 function normalizeAmountReceived(amountReceived?: number | null) {
   if (amountReceived === undefined || amountReceived === null) return undefined;
@@ -21,7 +24,7 @@ function normalizeAmountReceived(amountReceived?: number | null) {
 }
 
 // ============ UPDATE ORDER STATUS ============
-export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null): Promise<UpdateOrderStatusResult> {
+export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null, reproDeliveryDate?: string): Promise<UpdateOrderStatusResult> {
   const session = await getSession();
   if (!session) throw new Error("Non authentifié");
 
@@ -94,21 +97,22 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     throw new Error("Un motif est obligatoire pour clôturer cette livraison.");
   }
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  const tomorrowCreatedAt = new Date(tomorrow);
-  const now = new Date();
-  tomorrowCreatedAt.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
   let updatedOrder: any = null;
 
   await prisma.$transaction(async (tx) => {
     if (normalizedStatus === 'REPRO_DISPO') {
-      updateData.createdAt = tomorrowCreatedAt;
-      updateData.deliveryDate = tomorrow;
-      updateData.deliverymanId = null;
-      updateData.deliverymanName = null;
+      const nextDeliveryDate = reproDeliveryDate ? new Date(`${reproDeliveryDate}T00:00:00`) : null;
+      if (!nextDeliveryDate || Number.isNaN(nextDeliveryDate.getTime())) {
+        throw new Error("Choisissez la nouvelle date de livraison.");
+      }
+      updateData.deliveryDate = nextDeliveryDate;
       updateData.type = 'Repro-dispo';
+      history.push({
+        at: new Date().toISOString(),
+        action: `Report client au ${reproDeliveryDate}${order.deliverymanName ? ` (Livreur: ${order.deliverymanName})` : ''}`,
+        by: session.email,
+        byName: session.name,
+      });
     }
 
     if (['PACKED', 'PARTIAL'].includes(normalizedStatus)) {
@@ -164,8 +168,72 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   revalidatePath("/zangochap-manager/logistics/labels");
   revalidatePath("/zangochap-manager/logistics/verification");
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/settlement");
   revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/zangochap-rider");
+  if (!updatedOrder) throw new Error("Mise a jour impossible.");
+  return { success: true, order: JSON.parse(JSON.stringify(updatedOrder)) };
+}
+
+export async function reopenDeliveryOrder(orderId: string, note?: string) {
+  const session = await getSession();
+  if (!session || !isRole(session, 'admin', 'developer')) {
+    throw new Error("Action réservée aux administrateurs.");
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      ref: true,
+      status: true,
+      history: true,
+      settlementId: true,
+    },
+  });
+  if (!order) throw new Error("Commande introuvable.");
+
+  if (!CLOSED_DELIVERY_STATUSES.includes(order.status)) {
+    throw new Error("Cette commande n'est pas clôturée côté livraison.");
+  }
+
+  if (order.settlementId) {
+    throw new Error("Impossible de faire marche arrière : cette commande est déjà rattachée à un règlement livreur.");
+  }
+
+  const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
+  history.push({
+    at: new Date().toISOString(),
+    action: `Correction admin : remise en livraison depuis ${order.status}`,
+    by: session.email,
+    byName: session.name,
+  });
+  if (note?.trim()) {
+    history.push({
+      at: new Date().toISOString(),
+      action: `Motif correction admin: ${note.trim()}`,
+      by: session.email,
+      byName: session.name,
+    });
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: 'ON_DELIVERY',
+      amountReceived: null,
+      returnReason: null,
+      isCommercialContacted: false,
+      history,
+    },
+    include: { items: true },
+  });
+
+  revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/settlement");
+  revalidatePath("/zangochap-manager/orders");
+  revalidatePath("/zangochap-rider");
+
   return { success: true, order: JSON.parse(JSON.stringify(updatedOrder)) };
 }
 
@@ -210,7 +278,7 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
   const normalizedAmountReceived = normalizeAmountReceived(amountReceived);
 
   // Log original quantities for audit trail before any modification
-  const originalQties = order.items.map((i: any) => `${i.name}(${i.size}/${i.color}): ${i.qty}`).join(', ');
+  const originalQties = order.items.map((item) => `${item.name}(${item.size}/${item.color}): ${item.qty}`).join(', ');
   history.push({
     at: new Date().toISOString(),
     action: `Livraison partielle effectuée. Qté originales: [${originalQties}]. Frais de livraison: ${includeDeliveryFee ? 'Maintenus' : 'Annulés'}`,

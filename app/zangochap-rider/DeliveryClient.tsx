@@ -319,7 +319,7 @@ export default function DeliveryClient({
   const handleUpdateItemQty = useCallback((id: string, qty: number) => { setDeliveredQuantities((prev) => ({ ...prev, [id]: qty })); }, []);
   const handleUpdateReturnReason = useCallback((id: string, reason: string) => { setReturnReasons((prev) => ({ ...prev, [id]: reason })); }, []);
 
-  const executeStatusUpdate = useCallback((id: string, status: string, reason?: string, amountReceived?: number) => {
+  const executeStatusUpdate = useCallback((id: string, status: string, reason?: string, amountReceived?: number, reproDeliveryDate?: string) => {
     const normalizedStatus = status.toUpperCase();
     if (["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(normalizedStatus) && !reason?.trim()) {
       setStatusReasonRequest({
@@ -327,30 +327,29 @@ export default function DeliveryClient({
         status,
         title: normalizedStatus === "REPRO_DISPO" ? "Motif de reprogrammation" : "Motif d'échec",
         helper: normalizedStatus === "REPRO_DISPO"
-          ? "Indiquez pourquoi cette mission doit revenir dans la tournée de demain."
+          ? "Indiquez pourquoi le client reporte la livraison et choisissez la nouvelle date."
           : "Indiquez pourquoi la livraison n'a pas abouti. Ce motif sera visible au bureau.",
         reasons: normalizedStatus === "REPRO_DISPO" ? REPROGRAM_REASONS : FAILURE_REASONS,
       });
       return;
     }
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const tomorrowIso = tomorrow.toISOString();
+    if (normalizedStatus === "REPRO_DISPO" && !reproDeliveryDate) {
+      showToast("Choisissez la nouvelle date de livraison.", "error");
+      return;
+    }
 
     setLocalOrders(prev => prev.map(o => o.id === id ? {
       ...o,
       status: status as RiderOrder["status"],
       amountReceived: normalizedStatus === "DELIVERED" && amountReceived !== undefined ? amountReceived : o.amountReceived,
-      createdAt: normalizedStatus === "REPRO_DISPO" ? tomorrowIso : o.createdAt,
-      deliveryDate: normalizedStatus === "REPRO_DISPO" ? tomorrowIso : o.deliveryDate,
+      deliveryDate: normalizedStatus === "REPRO_DISPO" ? reproDeliveryDate : o.deliveryDate,
       returnReason: reason || o.returnReason,
       updatedAt: new Date().toISOString()
     } : o));
     startTransition(async () => {
       try {
-        await updateOrderStatus(id, status, reason, amountReceived);
+        await updateOrderStatus(id, status, reason, amountReceived, reproDeliveryDate);
         showToast("Statut mis à jour ✓", "success");
         setStatusReasonRequest(null);
         setSelectedOrder(null);
@@ -731,9 +730,9 @@ export default function DeliveryClient({
         <StatusReasonModal
           request={statusReasonRequest}
           onClose={() => setStatusReasonRequest(null)}
-          onConfirm={(reason) => {
+          onConfirm={(reason, reproDeliveryDate) => {
             if (!statusReasonRequest) return;
-            executeStatusUpdate(statusReasonRequest.orderId, statusReasonRequest.status, reason);
+            executeStatusUpdate(statusReasonRequest.orderId, statusReasonRequest.status, reason, undefined, reproDeliveryDate);
           }}
           isPending={isPending}
         />
@@ -776,15 +775,19 @@ function StatusReasonModal({
 }: {
   request: StatusReasonRequest;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, reproDeliveryDate?: string) => void;
   isPending: boolean;
 }) {
   const [selected, setSelected] = useState("");
   const [details, setDetails] = useState("");
+  const [reproDeliveryDate, setReproDeliveryDate] = useState("");
 
   useEffect(() => {
     setSelected("");
     setDetails("");
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setReproDeliveryDate(tomorrow.toISOString().split("T")[0]);
   }, [request?.orderId, request?.status]);
 
   if (!request) return null;
@@ -829,9 +832,20 @@ function StatusReasonModal({
           placeholder="Détail utile pour le bureau..."
           className="w-full min-h-20 rounded-[4px] bg-[#F9FAFB] border border-[#E5E7EB] px-3 py-3 text-[13px] font-semibold outline-none resize-none"
         />
+        {request.status === "REPRO_DISPO" && (
+          <label className="mt-3 block text-[11px] font-black uppercase tracking-wide text-[#475569]">
+            Nouvelle date de livraison
+            <input
+              type="date"
+              value={reproDeliveryDate}
+              onChange={(event) => setReproDeliveryDate(event.target.value)}
+              className="mt-1.5 h-11 w-full rounded-[4px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] font-semibold outline-none"
+            />
+          </label>
+        )}
         <div className="flex gap-2 mt-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-sm bg-[#F3F4F6] text-[#374151] font-bold text-[13px]">Annuler</button>
-          <button onClick={() => onConfirm(reason)} disabled={!reason || isPending} className="flex-[1.4] py-2.5 rounded-sm bg-[#111827] text-white font-bold text-[13px] disabled:opacity-50 flex justify-center items-center gap-2">
+          <button onClick={() => onConfirm(reason, reproDeliveryDate)} disabled={!reason || (request.status === "REPRO_DISPO" && !reproDeliveryDate) || isPending} className="flex-[1.4] py-2.5 rounded-sm bg-[#111827] text-white font-bold text-[13px] disabled:opacity-50 flex justify-center items-center gap-2">
             {isPending && <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />} Confirmer
           </button>
         </div>

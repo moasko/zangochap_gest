@@ -4,8 +4,8 @@ import React, { useState, useTransition, useMemo } from "react";
 import { TableCard, EmptyState, StatCard, StatusBadge } from "@/components/UI";
 import Modal from "@/components/Modal";
 import { formatPrice, formatDate, COMMUNES } from "@/lib/constants";
-import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calendar, LayoutGrid, List, Archive, ChevronRight, FileText, Phone, Printer, CalendarClock, Download } from "lucide-react";
-import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus } from "@/modules/orders/actions";
+import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calendar, LayoutGrid, List, Archive, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2 } from "lucide-react";
+import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder } from "@/modules/orders/actions";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import "./admin-delivery-client.css";
@@ -40,6 +40,7 @@ type DeliveryAdminOrder = {
   deliverymanName?: string | null;
   status: string;
   type?: string | null;
+  settlementId?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
   items?: DeliveryAdminItem[];
@@ -60,16 +61,6 @@ const REPRO_DISPO_REASONS = [
 
 function matchesDateInput(value: unknown, dateInput: string) {
   return !dateInput || (typeof value === "string" && value.startsWith(dateInput));
-}
-
-function isDeliveryDateNextDay(deliveryDate?: string | null) {
-  if (!deliveryDate) return false;
-
-  const next = getNextDeliveryDate();
-  const delivery = new Date(deliveryDate);
-  return delivery.getFullYear() === next.getFullYear()
-    && delivery.getMonth() === next.getMonth()
-    && delivery.getDate() === next.getDate();
 }
 
 function getOrderTimestamp(order: DeliveryAdminOrder) {
@@ -106,6 +97,9 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   const [reproOrder, setReproOrder] = useState<DeliveryAdminOrder | null>(null);
   const [reproReason, setReproReason] = useState("");
   const [reproDetails, setReproDetails] = useState("");
+  const [reproDate, setReproDate] = useState(() => dateInputValue(getNextDeliveryDate()));
+  const [reopenOrder, setReopenOrder] = useState<DeliveryAdminOrder | null>(null);
+  const [reopenNote, setReopenNote] = useState("");
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -170,14 +164,31 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
     startTransition(async () => {
       try {
-        await updateOrderStatus(reproOrder.id, "REPRO_DISPO", note);
-        showToast("Commande repro-dispo pour demain ✓", "success");
+        await updateOrderStatus(reproOrder.id, "REPRO_DISPO", note, undefined, reproDate);
+        showToast("Commande mise en repro-dispo ✓", "success");
         setReproOrder(null);
         setReproReason("");
         setReproDetails("");
+        setReproDate(dateInputValue(getNextDeliveryDate()));
         router.refresh();
       } catch (e: unknown) {
         showToast(e instanceof Error ? e.message : 'Erreur', 'error');
+      }
+    });
+  };
+
+  const handleReopenDelivery = () => {
+    if (!reopenOrder) return;
+
+    startTransition(async () => {
+      try {
+        await reopenDeliveryOrder(reopenOrder.id, reopenNote);
+        showToast("Commande remise en livraison", "success");
+        setReopenOrder(null);
+        setReopenNote("");
+        router.refresh();
+      } catch (e: unknown) {
+        showToast(e instanceof Error ? e.message : "Erreur", "error");
       }
     });
   };
@@ -851,6 +862,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                             <th>Livreur</th>
                             <th>Total</th>
                             <th>Statut</th>
+                            <th>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -864,6 +876,17 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                               <td>{o.deliverymanName || '-'}</td>
                               <td>{formatPrice(Number(o.total || 0) + Number(o.deliveryFee || 0))}</td>
                               <td><StatusBadge status={o.status} size="sm" /></td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="cell-btn-icon"
+                                  onClick={() => setReopenOrder(o)}
+                                  disabled={isPending || Boolean(o.settlementId)}
+                                  title={o.settlementId ? "Commande deja reglee" : "Remettre en livraison"}
+                                >
+                                  <Undo2 size={14} />
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1021,6 +1044,56 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       )}
 
 {
+  reopenOrder && (
+    <Modal
+      isOpen
+      onClose={() => {
+        setReopenOrder(null);
+        setReopenNote("");
+      }}
+      title={`Remettre en livraison ${reopenOrder.ref}`}
+      footer={
+        <>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setReopenOrder(null);
+              setReopenNote("");
+            }}
+            disabled={isPending}
+          >
+            Annuler
+          </button>
+          <button className="btn-orange" onClick={handleReopenDelivery} disabled={isPending}>
+            <Undo2 size={14} /> Remettre en livraison
+          </button>
+        </>
+      }
+    >
+      <div className="repro-modal">
+        <p>
+          Cette action remet la commande en statut En livraison pour permettre une correction.
+          Elle est bloquee si la commande est deja rattachee a un reglement livreur.
+        </p>
+        {reopenOrder.status === "PARTIALLY_DELIVERED" && (
+          <p className="text-[12px] font-bold text-[#B91C1C]">
+            Attention : pour une livraison partielle, les quantites modifiees ne sont pas restaurees automatiquement.
+          </p>
+        )}
+        <label className="field-label-sm" htmlFor="reopen-note">Motif de correction</label>
+        <textarea
+          id="reopen-note"
+          className="field-input repro-note"
+          value={reopenNote}
+          onChange={(event) => setReopenNote(event.target.value)}
+          placeholder="Ex: livreur s'est trompe de statut, client finalement disponible..."
+        />
+      </div>
+    </Modal>
+  )
+}
+
+{
   reproOrder && (
     <Modal
       isOpen
@@ -1028,6 +1101,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setReproOrder(null);
         setReproReason("");
         setReproDetails("");
+        setReproDate(dateInputValue(getNextDeliveryDate()));
       }}
       title={`Repro-dispo ${reproOrder.ref}`}
       footer={
@@ -1038,21 +1112,30 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
               setReproOrder(null);
               setReproReason("");
               setReproDetails("");
+              setReproDate(dateInputValue(getNextDeliveryDate()));
             }}
             disabled={isPending}
           >
             Annuler
           </button>
-          <button className="btn-orange" onClick={handleReproDispo} disabled={isPending || (!reproReason && !reproDetails.trim())}>
-            <CalendarClock size={14} /> Reprogrammer demain
+          <button className="btn-orange" onClick={handleReproDispo} disabled={isPending || !reproDate || (!reproReason && !reproDetails.trim())}>
+            <CalendarClock size={14} /> Confirmer le report
           </button>
         </>
       }
     >
       <div className="repro-modal">
         <p>
-          Le livreur sera retire de la commande et la livraison passera a demain.
+          Le colis reste emballe et collecte. Choisissez la nouvelle date demandee par le client.
         </p>
+        <label className="field-label-sm" htmlFor="repro-date">Nouvelle date de livraison</label>
+        <input
+          id="repro-date"
+          type="date"
+          className="field-input"
+          value={reproDate}
+          onChange={(event) => setReproDate(event.target.value)}
+        />
         <div className="repro-reasons">
           {REPRO_DISPO_REASONS.map((reason) => (
             <button

@@ -141,14 +141,24 @@ export default function DeliveryClient({ orders, user }: { orders: any[]; user: 
     const statusMessages: Record<string, { label: string; confirm: string }> = {
       DELIVERED: { label: "Livraison confirmée", confirm: "LIVRÉE" },
       RETURNED: { label: "Retour enregistré", confirm: "RETOURNÉE" },
-      REPRO_DISPO: { label: "Commande repro-dispo pour demain", confirm: "REPRO-DISPO" },
+      REPRO_DISPO: { label: "Commande mise en repro-dispo", confirm: "REPRO-DISPO" },
     };
     const message = statusMessages[status] || statusMessages.RETURNED;
     if (!confirm(`Souhaitez-vous marquer cette commande comme ${message.confirm} ?`)) return;
+    const reason = ["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(status)
+      ? prompt(status === "REPRO_DISPO" ? "Motif du report client :" : "Motif de l'échec :")?.trim()
+      : undefined;
+    if (["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(status) && !reason) return;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const reproDeliveryDate = status === "REPRO_DISPO"
+      ? prompt("Nouvelle date de livraison (AAAA-MM-JJ) :", tomorrow.toISOString().split("T")[0])?.trim()
+      : undefined;
+    if (status === "REPRO_DISPO" && !reproDeliveryDate) return;
 
     startTransition(async () => {
       try {
-        await updateOrderStatus(orderId, status);
+        await updateOrderStatus(orderId, status, reason, undefined, reproDeliveryDate);
         showToast(message.label, "success");
         setSelectedOrder(null);
         router.refresh();

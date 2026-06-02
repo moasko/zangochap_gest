@@ -2,11 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { CreditCard, Truck } from "lucide-react";
 import Topbar from "@/components/Topbar";
-import {
-  getPendingSettlements,
-  getRiderSettlementStats,
-  getSettlementHistory,
-} from "@/modules/orders/actions";
+import { getDeliverySettlementDashboard } from "@/modules/orders/actions";
 import SettlementClient from "./SettlementClient";
 
 export const metadata = {
@@ -17,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 type SettlementPageProps = {
   searchParams: Promise<{
+    date?: string;
     from?: string;
     to?: string;
     riderId?: string;
@@ -28,15 +25,10 @@ export default async function SettlementPage({ searchParams }: SettlementPagePro
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   
-  const from = resolvedParams.from || today;
-  const to = resolvedParams.to || today;
+  const deliveryDate = resolvedParams.date || resolvedParams.from || today;
   const riderId = resolvedParams.riderId;
 
-  const [pendingOrders, settlementHistory, riderStats] = await Promise.all([
-    getPendingSettlements(),
-    getSettlementHistory(),
-    getRiderSettlementStats(from, to, riderId),
-  ]);
+  const dashboard = await getDeliverySettlementDashboard(deliveryDate, deliveryDate, riderId);
 
   return (
     <>
@@ -64,11 +56,8 @@ export default async function SettlementPage({ searchParams }: SettlementPagePro
         </div>
       </div>
       <SettlementClient
-        pendingOrders={pendingOrders}
-        history={settlementHistory}
-        riderStats={riderStats}
-        initialFrom={from}
-        initialTo={to}
+        dashboard={dashboard}
+        initialDate={deliveryDate}
         initialRiderId={riderId}
       />
     </>

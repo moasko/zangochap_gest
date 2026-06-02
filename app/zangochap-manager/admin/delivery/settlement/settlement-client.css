@@ -6,7 +6,7 @@
 .settlement-filter-head p { margin-top: 3px; color: var(--brown-soft); font-size: 12px; font-weight: 600; }
 .settlement-reset-btn { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); color: var(--brown); font-size: 12px; font-weight: 800; }
 .settlement-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-.settlement-filter-grid { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(200px, 0.45fr); gap: 10px; }
+.settlement-filter-grid { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(190px, 0.4fr) minmax(170px, 0.35fr); gap: 10px; }
 .settlement-search, .settlement-select { min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: #FCFAF7; color: var(--brown-soft); }
 .settlement-search:focus-within, .settlement-select:focus-within { border-color: var(--orange); background: white; box-shadow: 0 0 0 2px rgba(212, 84, 28, 0.08); }
 .settlement-search input, .settlement-select select { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; font-weight: 700; }
@@ -19,6 +19,11 @@
 .date-input-group { display: flex; align-items: center; gap: 6px; color: var(--brown-soft); }
 .date-input-group input { border: none; outline: none; font-size: 12px; font-weight: 600; color: var(--ink); background: transparent; }
 .apply-btn-sm { width: 32px; height: 32px; border-radius: 8px; background: var(--ink); color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chip-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #B91C1C; color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; }
+.settlement-visible-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--line); }
+.settlement-visible-summary div { min-width: 0; padding: 10px 12px; background: #FCFAF7; }
+.settlement-visible-summary span { display: block; color: var(--brown-soft); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+.settlement-visible-summary strong { display: block; margin-top: 2px; color: var(--ink); font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .settle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 20px; }
 .settle-card-simple { background: white; border-radius: 8px; border: 1px solid var(--line); padding: 16px; transition: border-color 0.2s, transform 0.2s; position: relative; overflow: hidden; }
@@ -27,12 +32,20 @@
 .settle-card-simple:hover { border-color: var(--line-2); transform: translateY(-1px); }
 .settle-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; position: relative; }
 .btn-icon-only { position: absolute; right: 0; top: 0; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--cream); color: var(--brown-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.settle-avatar { width: 40px; height: 40px; border-radius: 8px; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; }
+.settle-avatar { width: 40px; height: 40px; border-radius: 8px; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex: 0 0 auto; }
+.settle-avatar.warning { background: #FEF2F2; color: #B91C1C; }
 .settle-amounts-row-simple { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; background: var(--cream); border-radius: 8px; margin-bottom: 16px; }
 .simple-amount { display: flex; flex-direction: column; gap: 2px; }
 .simple-amount .label { font-size: 8px; font-weight: 800; color: var(--brown-soft); text-transform: uppercase; }
 .simple-amount .val { font-size: 14px; font-weight: 900; color: var(--ink); }
-.settle-cta { border-top: 1px dashed var(--line); pt: 16px; }
+.simple-amount .val.blue { color: var(--blue); }
+.simple-amount.strong .val { font-size: 16px; }
+.settle-order-preview, .return-list-preview { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.settle-order-preview span { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #FCFAF7; color: var(--brown); font-size: 11px; font-weight: 800; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.return-preview-row { display: grid; grid-template-columns: minmax(70px, 1fr) auto auto; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; background: #FCFAF7; font-size: 11px; font-weight: 800; color: var(--brown); }
+.return-preview-row strong { font-size: 10px; color: #B91C1C; text-transform: uppercase; }
+.settle-action, .modal-main-action { width: 100%; justify-content: center; }
+.settlement-empty-wide { grid-column: 1 / -1; background: white; border: 1px solid var(--line); border-radius: 8px; }
 
 .settlement-history { display: flex; flex-direction: column; gap: 16px; }
 .settlement-empty { background: white; border: 1px solid var(--line); border-radius: 8px; }
@@ -61,15 +74,15 @@
 /* Modal Styles */
 .modal-rider-details { display: flex; flex-direction: column; gap: 24px; }
 .modal-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.modal-summary-card { background: var(--cream); padding: 16px; border-radius: 16px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.modal-summary-card { background: var(--cream); padding: 16px; border-radius: 8px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
 .modal-summary-card .label { font-size: 11px; font-weight: 700; color: var(--brown-soft); }
 .modal-summary-card .value { font-size: 20px; font-weight: 900; color: var(--ink); }
 
 .modal-sections { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
 .section-title { font-size: 14px; font-weight: 800; color: var(--ink); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
 
-.modal-order-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; padding-right: 8px; }
-.modal-order-row { padding: 12px; border-radius: 12px; border: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
+.modal-order-list { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; padding-right: 8px; }
+.modal-order-row { padding: 12px; border-radius: 8px; border: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; transition: background 0.2s; }
 .modal-order-row:hover { background: var(--cream-2); }
 .order-info { display: flex; flex-direction: column; }
 .order-info .ref { font-weight: 800; font-size: 13px; color: var(--orange); }
@@ -79,8 +92,8 @@
 .order-price .total { font-weight: 800; font-size: 14px; color: var(--ink); }
 .order-price .prod { font-size: 11px; color: var(--blue); font-weight: 600; }
 
-.modal-returned-list { display: flex; flex-direction: column; gap: 12px; }
-.modal-returned-card { padding: 12px; border-radius: 12px; background: var(--red-soft); border: 1px solid rgba(255,0,0,0.1); }
+.modal-returned-list { display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 8px; }
+.modal-returned-card { padding: 12px; border-radius: 8px; background: var(--red-soft); border: 1px solid rgba(255,0,0,0.1); display: flex; flex-direction: column; gap: 10px; }
 .modal-returned-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .modal-returned-card .ref { font-weight: 800; font-size: 13px; }
 .contact-toggle { padding: 6px 10px; border-radius: 8px; font-size: 10px; font-weight: 700; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: white; cursor: pointer; transition: all 0.2s; }
@@ -90,9 +103,12 @@
 
 @media (max-width: 900px) {
   .settlement-filter-grid { grid-template-columns: 1fr; }
+  .settlement-visible-summary { grid-template-columns: 1fr 1fr; }
   .modal-sections { grid-template-columns: 1fr; }
   .modal-summary-grid { grid-template-columns: 1fr; }
   .history-day-head { flex-direction: column; }
   .history-day-total { text-align: left; }
   .history-day-metrics, .history-money-grid { grid-template-columns: 1fr; }
+  .modal-order-row { align-items: flex-start; flex-direction: column; }
+  .order-price { text-align: left; }
 }

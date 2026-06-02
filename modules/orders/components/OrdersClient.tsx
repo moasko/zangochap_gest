@@ -356,7 +356,7 @@ export default function OrdersClient({
               ? {
                 ...o,
                 status,
-                ...(status === "REPRO_DISPO" ? { createdAt: tomorrow, deliveryDate: tomorrow } : {}),
+                ...(status === "REPRO_DISPO" ? { deliveryDate: tomorrow } : {}),
               }
               : o,
           ),
@@ -500,14 +500,16 @@ export default function OrdersClient({
     },
   });
 
-  const reprogramMutation = useMutation({
+  const reproDispoMutation = useMutation({
     mutationFn: ({
       orderId,
       deliveryDate,
+      note,
     }: {
       orderId: string;
       deliveryDate: string;
-    }) => reprogramOrder(orderId, deliveryDate),
+      note: string;
+    }) => updateOrderStatus(orderId, "REPRO_DISPO", note, undefined, deliveryDate),
 
     onMutate: async ({ orderId, deliveryDate }) => {
       await queryClient.cancelQueries({ queryKey: ["orders"] });
@@ -523,7 +525,7 @@ export default function OrdersClient({
 
           orders: old.orders.map((o: any) =>
             o.id === orderId
-              ? { ...o, createdAt: nextDate, deliveryDate: nextDate }
+              ? { ...o, status: "REPRO_DISPO", deliveryDate: nextDate }
               : o,
           ),
         };
@@ -533,7 +535,7 @@ export default function OrdersClient({
     },
 
     onSuccess: () => {
-      showToast("Commande reprogrammée ✓", "success");
+      showToast("Commande mise en repro-dispo ✓", "success");
 
       setSelectedOrder(null);
     },
@@ -558,6 +560,9 @@ export default function OrdersClient({
   const [orderToDuplicate, setOrderToDuplicate] = useState<any>(null);
 
   const [orderToExchange, setOrderToExchange] =
+    useState<typeof orderToDuplicate>(null);
+
+  const [orderToReprogram, setOrderToReprogram] =
     useState<typeof orderToDuplicate>(null);
 
   const [orderToEdit, setOrderToEdit] = useState<any>(null);
@@ -736,11 +741,28 @@ export default function OrdersClient({
     [statusMutation],
   );
 
-  const handleReprogram = useCallback(
-    (orderId: string, deliveryDate: string) => {
-      reprogramMutation.mutate({ orderId, deliveryDate });
+  const handleReproDispo = useCallback(
+    (orderId: string, deliveryDate: string, note: string) => {
+      reproDispoMutation.mutate({ orderId, deliveryDate, note });
     },
-    [reprogramMutation],
+    [reproDispoMutation],
+  );
+
+  const handleReprogram = useCallback(
+    (orderId: string, data: any) => {
+      startTransition(async () => {
+        try {
+          await reprogramOrder(orderId, data);
+          showToast("Commande reprogrammée créée ✓", "success");
+          setOrderToReprogram(null);
+          setSelectedOrder(null);
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
+        } catch (e: any) {
+          showToast(e.message || "Erreur", "error");
+        }
+      });
+    },
+    [showToast, queryClient],
   );
 
   const handleDuplicate = useCallback(
@@ -6137,6 +6159,17 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                     <Copy size={14} /> Créer un échange
                                   </button>
                                 )}
+                              {(user?.role === "admin" ||
+                                user?.role === "commercial" ||
+                                user?.role === "developer") && (
+                                  <button
+                                    type="button"
+                                    className="action-menu-item"
+                                    onClick={() => setOrderToReprogram(order)}
+                                  >
+                                    <Calendar size={14} /> Reprogrammer
+                                  </button>
+                                )}
                               {![
                                 "DELIVERED",
                                 "CANCELLED",
@@ -6145,17 +6178,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                   <button
                                     type="button"
                                     className="action-menu-item"
-                                    onClick={() => {
-                                      if (
-                                        confirm(
-                                          "Mettre cette commande en repro-dispo pour demain ?",
-                                        )
-                                      )
-                                        handleStatusChange(
-                                          order.id,
-                                          "REPRO_DISPO",
-                                        );
-                                    }}
+                                    onClick={() => setSelectedOrder(order)}
                                   >
                                     <CalendarClock size={14} /> Repro-dispo
                                   </button>
@@ -6303,7 +6326,11 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           onDelete={handleDelete}
           onAssign={handleAssign}
           onWhatsApp={handleWhatsApp}
-          onReprogram={handleReprogram}
+          onReproDispo={handleReproDispo}
+          onReprogram={() => {
+            setOrderToReprogram(selectedOrder);
+            setSelectedOrder(null);
+          }}
           deliverymen={deliverymen}
           staffUsers={staffUsers}
           isPending={isPending}
@@ -6343,16 +6370,26 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
         />
       )}
 
+      {orderToReprogram && (
+        <OrderFormModal
+          mode="reprogram"
+          order={orderToReprogram}
+          onClose={() => setOrderToReprogram(null)}
+          onConfirm={(data) => handleReprogram(orderToReprogram.id, data)}
+          isPending={isPending}
+          onPreviewImage={setPreviewImage}
+          products={products}
+        />
+      )}
+
       {orderToEdit && (
         <OrderFormModal
           mode="edit"
           order={orderToEdit}
           onClose={() => setOrderToEdit(null)}
           onReproDispo={() => {
-            if (confirm("Mettre cette commande en repro-dispo pour demain ?")) {
-              handleStatusChange(orderToEdit.id, "REPRO_DISPO");
-              setOrderToEdit(null);
-            }
+            setSelectedOrder(orderToEdit);
+            setOrderToEdit(null);
           }}
           onConfirm={(data) => {
             handleUpdateDetails(orderToEdit.id, data);
@@ -6731,6 +6768,7 @@ function OrderDetailModal({
   onDelete,
   onAssign,
   onWhatsApp,
+  onReproDispo,
   onReprogram,
   deliverymen,
   staffUsers,
@@ -6755,7 +6793,9 @@ function OrderDetailModal({
 
   onWhatsApp: (order: any) => void;
 
-  onReprogram: (id: string, date: string) => void;
+  onReproDispo: (id: string, date: string, note: string) => void;
+
+  onReprogram: () => void;
 
   deliverymen?: any[];
 
@@ -6803,6 +6843,7 @@ function OrderDetailModal({
 
     return tomorrow.toISOString().split("T")[0];
   });
+  const [reprogramNote, setReprogramNote] = useState("");
 
   const history = Array.isArray(order.history) ? order.history : [];
 
@@ -6974,14 +7015,7 @@ function OrderDetailModal({
                     ) && (
                         <button
                           className="btn-secondary"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                "Mettre cette commande en repro-dispo pour demain ?",
-                              )
-                            )
-                              onStatusChange(order.id, "REPRO_DISPO");
-                          }}
+                          onClick={() => setIsReprogramming(true)}
                           disabled={isPending}
                         >
                           <CalendarClock size={14} /> Repro-dispo
@@ -7031,7 +7065,7 @@ function OrderDetailModal({
 
                 <button
                   className="btn-secondary"
-                  onClick={() => setIsReprogramming(true)}
+                  onClick={onReprogram}
                   style={{
                     background: "var(--orange-soft)",
                     color: "var(--orange)",
@@ -7075,7 +7109,7 @@ function OrderDetailModal({
                 marginBottom: 8,
               }}
             >
-              Reprogrammer la commande
+              Mettre en repro-dispo
             </h3>
 
             <p
@@ -7085,8 +7119,8 @@ function OrderDetailModal({
                 marginBottom: 24,
               }}
             >
-              Choisissez la nouvelle date de livraison prévue pour cette
-              commande.
+              Le colis reste emballe, etiquete et collecte. Choisissez la
+              nouvelle date demandee par le client.
             </p>
 
             <div
@@ -7103,6 +7137,15 @@ function OrderDetailModal({
                 value={reprogramDate}
                 onChange={(e) => setReprogramDate(e.target.value)}
                 style={{ textAlign: "center", fontWeight: 700, fontSize: 16 }}
+              />
+            </div>
+            <div className="form-row" style={{ maxWidth: 300, margin: "16px auto 0" }}>
+              <label className="field-label-sm">MOTIF DU REPORT</label>
+              <textarea
+                className="field-input"
+                value={reprogramNote}
+                onChange={(event) => setReprogramNote(event.target.value)}
+                placeholder="Ex: report demande par le client"
               />
             </div>
 
@@ -7123,13 +7166,13 @@ function OrderDetailModal({
 
               <button
                 className="btn-orange"
-                onClick={() => onReprogram(order.id, reprogramDate)}
-                disabled={isPending}
+                onClick={() => onReproDispo(order.id, reprogramDate, reprogramNote.trim())}
+                disabled={isPending || !reprogramDate || !reprogramNote.trim()}
               >
                 {isPending ? (
                   <div className="animate-spin" />
                 ) : (
-                  "Confirmer la reprogrammation"
+                  "Confirmer la repro-dispo"
                 )}
               </button>
             </div>
@@ -7922,7 +7965,7 @@ function OrderFormModal({
   onReproDispo,
 }: {
   order: any;
-  mode?: "duplicate" | "exchange" | "edit";
+  mode?: "duplicate" | "exchange" | "reprogram" | "edit";
   onClose: () => void;
   onConfirm: (data: any) => void;
   isPending: boolean;
@@ -7988,7 +8031,7 @@ function OrderFormModal({
 
       notes: order.notes || "",
 
-      type: mode === "exchange" ? "Echange" : order.type || "Standard",
+      type: mode === "exchange" ? "Echange" : mode === "reprogram" ? "Reprogrammé" : order.type || "Standard",
 
       total: initialItems.reduce(
         (sum: number, i: any) => sum + Number(i.price) * Number(i.qty),
@@ -8228,6 +8271,8 @@ function OrderFormModal({
           ? "Dupliquer la commande"
           : mode === "exchange"
             ? "Créer une commande d'échange"
+            : mode === "reprogram"
+              ? "Reprogrammer la commande"
             : "Modifier la commande"
       }
       full
@@ -8289,6 +8334,8 @@ function OrderFormModal({
                   ? "Dupliquer"
                   : mode === "exchange"
                     ? "Créer l'échange"
+                    : mode === "reprogram"
+                      ? "Créer la reprogrammation"
                     : "Enregistrer"}
               </>
             )}

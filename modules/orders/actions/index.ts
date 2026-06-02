@@ -22,7 +22,7 @@ export async function deleteOrder(orderId: string) {
   return actions.deleteOrder(orderId);
 }
 
-export async function updateOrderDetails(orderId: string, data: any) {
+export async function updateOrderDetails(orderId: string, data: Parameters<typeof actions.updateOrderDetails>[1]) {
   return actions.updateOrderDetails(orderId, data);
 }
 
@@ -30,12 +30,12 @@ export async function addOrderHistoryEntry(orderId: string, action: string) {
   return actions.addOrderHistoryEntry(orderId, action);
 }
 
-export async function duplicateOrder(orderId: string, data: any) {
+export async function duplicateOrder(orderId: string, data: Parameters<typeof actions.duplicateOrder>[1]) {
   return actions.duplicateOrder(orderId, data);
 }
 
-export async function reprogramOrder(orderId: string, deliveryDate: string) {
-  return actions.reprogramOrder(orderId, deliveryDate);
+export async function reprogramOrder(orderId: string, data: Parameters<typeof actions.reprogramOrder>[1]) {
+  return actions.reprogramOrder(orderId, data);
 }
 
 export async function takeToProcessOrder(orderId: string, commercialId?: string) {
@@ -50,8 +50,12 @@ export async function updateRoundRobinActiveCommercials(activeCommercialIds: str
   return actions.updateRoundRobinActiveCommercials(activeCommercialIds);
 }
 
-export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null) {
-  return actions.updateOrderStatus(orderId, newStatus, note, amountReceived);
+export async function updateOrderStatus(orderId: string, newStatus: string, note?: string, amountReceived?: number | null, reproDeliveryDate?: string) {
+  return actions.updateOrderStatus(orderId, newStatus, note, amountReceived, reproDeliveryDate);
+}
+
+export async function reopenDeliveryOrder(orderId: string, note?: string) {
+  return actions.reopenDeliveryOrder(orderId, note);
 }
 
 export async function markPartialDelivery(
@@ -95,6 +99,10 @@ export async function getSettlementStats(from?: string, to?: string, commercialI
 
 export async function getRiderSettlementStats(from?: string, to?: string, riderId?: string) {
   return actions.getRiderSettlementStats(from, to, riderId);
+}
+
+export async function getDeliverySettlementDashboard(from?: string, to?: string, riderId?: string) {
+  return actions.getDeliverySettlementDashboard(from, to, riderId);
 }
 
 export async function toggleCommercialContacted(orderId: string, value: boolean) {
