@@ -15,7 +15,7 @@ export type ChatMessageView = {
   scope: ChatMessageScope;
   targetRole: Role | null;
   recipientId: string | null;
-  senderId: string;
+  senderId: string | null;
   senderName: string;
   senderRole: Role;
   isPinned: boolean;
