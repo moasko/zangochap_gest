@@ -92,11 +92,12 @@ function getNextDeliveryDate() {
 }
 
 export default function AdminDeliveryClient({ activeOrders, archivedOrders, deliverymen }: AdminDeliveryClientProps) {
+  const defaultDeliveryFilterValue = dateInputValue(getNextDeliveryDate());
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterDeliveryman, setFilterDeliveryman] = useState("ALL");
   const [filterCommune, setFilterCommune] = useState("ALL");
-  const [filterDate, setFilterDate] = useState(""); // YYYY-MM-DD
+  const [filterDate, setFilterDate] = useState(defaultDeliveryFilterValue); // YYYY-MM-DD
   const [viewMode, setViewMode] = useState<"table" | "grid" | "history" | "sheet">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -110,7 +111,6 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   const router = useRouter();
   const { showToast } = useToast();
-  const todayFilterValue = dateInputValue(new Date());
 
   const handleAssign = (orderId: string, dId: string) => {
     const isUnassigning = dId === "unassigned" || dId === "";
@@ -557,12 +557,12 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
           </div>
           <button
             type="button"
-            className={`date-shortcut ${filterDate === todayFilterValue ? "active" : ""}`}
-            onClick={() => setFilterDate(todayFilterValue)}
+            className={`date-shortcut ${filterDate === defaultDeliveryFilterValue ? "active" : ""}`}
+            onClick={() => setFilterDate(defaultDeliveryFilterValue)}
           >
-            Aujourd&apos;hui
+            Demain
           </button>
-          {filterDate === todayFilterValue && (
+          {filterDate && (
             <button type="button" className="date-shortcut clear" onClick={() => setFilterDate("")}>
               Tout
             </button>
