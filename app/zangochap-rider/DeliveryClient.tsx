@@ -155,9 +155,18 @@ export default function DeliveryClient({
 
   // ── Derived Data ──
   const completedStatuses = useMemo(() => ["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED", "REPRO_DISPO"], []);
-  const todayOrders = useMemo(() => localOrders.filter((o) => isSameDay(o.deliveryDate || o.createdAt)), [localOrders]);
-  const pending = useMemo(() => todayOrders.filter((o) => !completedStatuses.includes(o.status)), [todayOrders, completedStatuses]);
-  const inProgress = useMemo(() => todayOrders.filter((o) => o.status === "ON_DELIVERY"), [todayOrders]);
+  const activeAssignedOrders = useMemo(() => localOrders.filter((o) => !completedStatuses.includes(o.status)), [localOrders, completedStatuses]);
+  const completedTodayOrders = useMemo(
+    () => localOrders.filter((o) => completedStatuses.includes(o.status) && isSameDay(o.deliveryDate || o.updatedAt || o.createdAt)),
+    [localOrders, completedStatuses],
+  );
+  const todayOrders = useMemo(() => {
+    const byId = new Map<string, RiderOrder>();
+    [...activeAssignedOrders, ...completedTodayOrders].forEach((order) => byId.set(order.id, order));
+    return Array.from(byId.values());
+  }, [activeAssignedOrders, completedTodayOrders]);
+  const pending = useMemo(() => activeAssignedOrders, [activeAssignedOrders]);
+  const inProgress = useMemo(() => activeAssignedOrders.filter((o) => o.status === "ON_DELIVERY"), [activeAssignedOrders]);
   const history = useMemo(() => localOrders.filter((o) => completedStatuses.includes(o.status)), [localOrders, completedStatuses]);
   const historyStatusCounts = useMemo(() => {
     return history.reduce((counts: Record<string, number>, order) => {

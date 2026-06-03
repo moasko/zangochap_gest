@@ -21,20 +21,24 @@ export default async function DeliveryPage() {
   historyStart.setDate(historyStart.getDate() - 60);
 
   const completedStatuses = ["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED", "REPRO_DISPO"] as const;
+  const readyMissionStatuses = ["PACKED", "ON_DELIVERY"] as const;
 
   const ordersRaw = await prisma.order.findMany({
     where: {
-      deliverymanId: user.id,
       deletedAt: null,
       OR: [
         {
-          deliveryDate: {
-            gte: startOfDay,
-            lte: endOfDay,
-          },
+          deliverymanId: user.id,
+          status: { in: [...readyMissionStatuses] },
         },
         {
+          deliverymanId: user.id,
           status: { in: [...completedStatuses] },
+          updatedAt: { gte: historyStart },
+        },
+        {
+          lastDeliveryAttemptRiderId: user.id,
+          status: { in: ["RETURNED", "CANCELLED", "REPRO_DISPO"] },
           updatedAt: { gte: historyStart },
         },
       ],
@@ -96,6 +100,11 @@ export default async function DeliveryPage() {
       deliveryNote: o.deliveryNote,
       notes: o.notes,
       deliveryDate: o.deliveryDate?.toISOString() || null,
+      lastDeliveryAttemptAt: o.lastDeliveryAttemptAt?.toISOString() || null,
+      lastDeliveryAttemptRiderId: o.lastDeliveryAttemptRiderId,
+      lastDeliveryAttemptRiderName: o.lastDeliveryAttemptRiderName,
+      lastDeliveryAttemptStatus: o.lastDeliveryAttemptStatus,
+      lastDeliveryAttemptReason: o.lastDeliveryAttemptReason,
       status: o.status,
       isCommercialContacted: o.isCommercialContacted,
       returnReason: o.returnReason,

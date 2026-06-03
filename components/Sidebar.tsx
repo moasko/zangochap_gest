@@ -14,7 +14,7 @@ import {
   Upload, FileText, LogOut, ClipboardList,
   AlertTriangle, Settings, ChevronRight, ChevronLeft, History, Wallet, Warehouse,
   Image as ImageIcon, Menu, X, Bell, WifiOff,
-  CheckCircle, Plus, Tag
+  CheckCircle, Plus, Tag, MessageCircle
 } from "lucide-react";
 
 interface SidebarProps {
@@ -131,7 +131,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [isNarrowDesktop, setIsNarrowDesktop] = useState(false);
 
-  const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0 };
+  const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0 };
 
   // Fetch counts via a lightweight API. The API derives the user from the session.
   const { data: counts = defaultCounts } = useQuery<SidebarCounts>({
@@ -306,6 +306,23 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
         </nav>
 
         <div className="p-4 flex flex-col gap-3">
+          <Link
+            href="/zangochap-manager/chat"
+            className={`
+              flex items-center justify-between p-[11px_12px] rounded-xl text-[13px] font-semibold transition-all duration-200 no-underline
+              ${pathname === "/zangochap-manager/chat" ? "bg-[#FF6B2C]/10 text-[#FF6B2C] font-bold" : "bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white"}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <MessageCircle size={18} />
+              {!effectiveCollapsed && <span>Chat equipe</span>}
+            </div>
+            {mounted && !effectiveCollapsed && counts.chatUnread > 0 && (
+              <span className="bg-[#FF6B2C] text-white text-[10px] font-black px-1.5 py-0.5 rounded-md">
+                {counts.chatUnread}
+              </span>
+            )}
+          </Link>
           <div className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] p-2.5 rounded-2xl">
             <div className="flex items-center gap-2.5 flex-1 min-w-0">
               <div className="w-[38px] h-[38px] bg-[#FF6B2C] rounded-[10px] flex items-center justify-center font-extrabold text-[13px] text-white">

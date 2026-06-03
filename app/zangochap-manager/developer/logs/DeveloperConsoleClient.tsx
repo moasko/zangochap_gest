@@ -84,13 +84,15 @@ interface DeveloperConsoleClientProps {
   };
   stockMovements: any[];
   orderLogs: any[];
+  developerAuditLogs: any[];
 }
 
 export default function DeveloperConsoleClient({
   sysInfo,
   dbMetrics,
   stockMovements: initialStockMovements,
-  orderLogs: initialOrderLogs
+  orderLogs: initialOrderLogs,
+  developerAuditLogs: initialDeveloperAuditLogs
 }: DeveloperConsoleClientProps) {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<"dashboard" | "tools" | "logs" | "export">("dashboard");
@@ -98,7 +100,7 @@ export default function DeveloperConsoleClient({
 
   // Search filter for logs
   const [logSearch, setLogSearch] = useState("");
-  const [logTypeFilter, setLogTypeFilter] = useState<"all" | "stock" | "orders">("all");
+  const [logTypeFilter, setLogTypeFilter] = useState<"all" | "stock" | "orders" | "developer">("all");
 
   // Export state
   const [exportEntity, setExportEntity] = useState<"orders" | "products" | "customers" | "stock_movements" | "promos" | "all">("orders");
@@ -340,6 +342,18 @@ export default function DeveloperConsoleClient({
              operator.toLowerCase().includes(search);
     });
   }, [initialOrderLogs, logSearch]);
+
+  const filteredDeveloperAuditLogs = useMemo(() => {
+    return initialDeveloperAuditLogs.filter(log => {
+      const search = logSearch.toLowerCase();
+      const details = log.details ? JSON.stringify(log.details) : "";
+      return String(log.action || "").toLowerCase().includes(search) ||
+             String(log.status || "").toLowerCase().includes(search) ||
+             String(log.actorName || "").toLowerCase().includes(search) ||
+             String(log.actorEmail || "").toLowerCase().includes(search) ||
+             details.toLowerCase().includes(search);
+    });
+  }, [initialDeveloperAuditLogs, logSearch]);
 
   const handleOpenAction = useCallback((actionId: string, title: string, description: string) => {
     const needsPreview = ["stock_sync", "clean_test", "customer_stats", "db_check", "catalog_audit", "promo_health"].includes(actionId);
@@ -813,8 +827,69 @@ export default function DeveloperConsoleClient({
               >
                 Activité Commandes
               </button>
+              <button
+                onClick={() => setLogTypeFilter("developer")}
+                className={`flex-1 sm:flex-none px-3.5 py-2 text-[10px] font-bold tracking-wider uppercase border cursor-pointer ${
+                  logTypeFilter === "developer"
+                    ? "bg-[#1A1614] text-white border-[#1A1614]"
+                    : "bg-white text-neutral-600 border-[#E1DBD0] hover:bg-neutral-50"
+                }`}
+              >
+                Audit Dev
+              </button>
             </div>
           </div>
+          {/* Render Stock Movement Table */}
+          {(logTypeFilter === "all" || logTypeFilter === "developer") && (
+            <TableCard
+              title="Audit Developpeur"
+              meta={`${filteredDeveloperAuditLogs.length} action(s) sensible(s)`}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--line)] bg-[var(--cream)] text-[var(--brown-soft)]">
+                      <th className="p-3 font-semibold">Date</th>
+                      <th className="p-3 font-semibold">Action</th>
+                      <th className="p-3 font-semibold">Statut</th>
+                      <th className="p-3 font-semibold">Auteur</th>
+                      <th className="p-3 font-semibold">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDeveloperAuditLogs.map((log) => (
+                      <tr key={log.id} className="border-b border-[var(--line)] hover:bg-[var(--cream)]/30">
+                        <td className="p-3 font-mono text-[10px] text-neutral-500">
+                          {new Date(log.createdAt).toLocaleString("fr-FR")}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-[var(--ink)]">{log.action}</td>
+                        <td className="p-3">
+                          <span className={`inline-flex px-1.5 py-0.5 rounded-[3px] font-bold text-[9px] uppercase border ${
+                            log.status === "success"
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : "bg-red-50 text-red-700 border-red-200"
+                          }`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-neutral-700">{log.actorName || log.actorEmail || "Systeme"}</td>
+                        <td className="p-3 text-neutral-500 font-mono text-[10px] max-w-[420px] truncate">
+                          {log.details ? JSON.stringify(log.details) : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredDeveloperAuditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-neutral-400">
+                          Aucune action developpeur journalisee.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </TableCard>
+          )}
 
           {/* Render Stock Movement Table */}
           {(logTypeFilter === "all" || logTypeFilter === "stock") && (
@@ -1066,7 +1141,7 @@ export default function DeveloperConsoleClient({
               <div>
                 <h3 className="text-xs font-extrabold uppercase text-[var(--brown-soft)] mb-5 tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5"><HardDrive size={14} /> Sauvegarde du Système</span>
-                  <span className="text-[9px] font-bold text-neutral-400 font-mono">BACKUPS / CLOUD S3</span>
+                  <span className="text-[9px] font-bold text-neutral-400 font-mono">BACKUPS / SIMULATION CLOUD</span>
                 </h3>
 
                 <div className="flex flex-col gap-4 mb-4">
@@ -1158,12 +1233,12 @@ export default function DeveloperConsoleClient({
                       <td className="p-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[3px] font-bold text-[9px] uppercase border ${
-                            b.location === "Local & Cloud S3"
+                            String(b.location).includes("simulation")
                               ? "bg-blue-50 text-blue-700 border-blue-200"
                               : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}
                         >
-                          {b.location === "Local & Cloud S3" ? (
+                          {String(b.location).includes("simulation") ? (
                             <><Cloud size={9} /> Local & S3</>
                           ) : (
                             <><HardDrive size={9} /> Local</>

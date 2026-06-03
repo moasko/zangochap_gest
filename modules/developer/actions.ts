@@ -5,6 +5,19 @@ import { ensureAuth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { createOrder } from "@/modules/orders/actions/order-actions";
 import { fixAllProductStocks } from "@/modules/products/actions/actions";
+import { recordDeveloperAudit } from "./audit";
+
+function maskPhone(value?: string | null) {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 4) return "****";
+  return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+}
+
+function maskText(value?: string | null) {
+  if (!value) return "";
+  return "[masque]";
+}
 
 /**
  * Recalculate and synchronize all product stocks based on warehouse values.
@@ -589,10 +602,11 @@ export async function exportDataAction(params: {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+  redactSensitive?: boolean;
 }) {
   await ensureAuth(["developer"]);
 
-  const { entity, format, dateFrom, dateTo, limit = 5000 } = params;
+  const { entity, format, dateFrom, dateTo, limit = 5000, redactSensitive = true } = params;
 
   try {
     const dateFilter: any = {};
@@ -636,9 +650,9 @@ export async function exportDataAction(params: {
           ref: o.ref || "",
           status: o.status,
           customerName: o.customerName,
-          customerPhone: o.customerPhone,
-          customerPhone2: o.customerPhone2 || "",
-          customerLocation: o.customerLocation || "",
+          customerPhone: redactSensitive ? maskPhone(o.customerPhone) : o.customerPhone,
+          customerPhone2: redactSensitive ? maskPhone(o.customerPhone2) : o.customerPhone2 || "",
+          customerLocation: redactSensitive ? maskText(o.customerLocation) : o.customerLocation || "",
           commune: o.commune || "",
           total: o.total,
           deliveryFee: o.deliveryFee,
@@ -650,7 +664,7 @@ export async function exportDataAction(params: {
           deliveryDate: o.deliveryDate?.toISOString() || "",
           paymentMethod: o.paymentMethod || "",
           amountReceived: o.amountReceived ?? "",
-          notes: o.notes || "",
+          notes: redactSensitive ? maskText(o.notes) : o.notes || "",
           itemsCount: o.items.length,
           itemsDetail: o.items.map((i) => `${i.qty}x ${i.name} (${i.size}/${i.color}) ${i.price}F`).join(" | "),
           packedByName: o.packedByName || "",
@@ -728,9 +742,9 @@ export async function exportDataAction(params: {
         data = customers.map((c) => ({
           id: c.id,
           name: c.name,
-          phone: c.phone,
-          phone2: c.phone2 || "",
-          location: c.location || "",
+          phone: redactSensitive ? maskPhone(c.phone) : c.phone,
+          phone2: redactSensitive ? maskPhone(c.phone2) : c.phone2 || "",
+          location: redactSensitive ? maskText(c.location) : c.location || "",
           commune: c.commune || "",
           totalOrders: c.totalOrders,
           totalSpent: c.totalSpent,
@@ -835,16 +849,31 @@ export async function exportDataAction(params: {
           prisma.settlement.findMany({ orderBy: { createdAt: "desc" }, take: 1000 })
         ]);
 
+        const safeOrders = orders.map((order) => ({
+          ...order,
+          customerPhone: redactSensitive ? maskPhone(order.customerPhone) : order.customerPhone,
+          customerPhone2: redactSensitive ? maskPhone(order.customerPhone2) : order.customerPhone2,
+          customerLocation: redactSensitive ? maskText(order.customerLocation) : order.customerLocation,
+          notes: redactSensitive ? maskText(order.notes) : order.notes,
+        }));
+        const safeCustomers = customers.map((customer) => ({
+          ...customer,
+          phone: redactSensitive ? maskPhone(customer.phone) : customer.phone,
+          phone2: redactSensitive ? maskPhone(customer.phone2) : customer.phone2,
+          location: redactSensitive ? maskText(customer.location) : customer.location,
+        }));
+
         data = [{
           metadata: {
             exportedAt: new Date().toISOString(),
             version: "1.0",
-            dbType: "postgresql"
+            dbType: "postgresql",
+            sensitiveDataRedacted: redactSensitive,
           },
           tables: {
-            orders,
+            orders: safeOrders,
             products,
-            customers,
+            customers: safeCustomers,
             stockMovements: movements,
             promos,
             categories,
@@ -871,6 +900,14 @@ export async function exportDataAction(params: {
     if (entity === "all") {
       const fileContent = JSON.stringify(data[0], null, 2);
       const fileName = `export_complet_${new Date().toISOString().slice(0, 10)}.json`;
+      await recordDeveloperAudit("data.export", "success", {
+        entity,
+        format: "json",
+        rowCount: 1,
+        redactSensitive,
+        dateFrom,
+        dateTo,
+      });
       return {
         success: true,
         message: "Export complet de la base de données généré avec succès.",
@@ -882,6 +919,14 @@ export async function exportDataAction(params: {
 
     const fileContent = format === "csv" ? toCsv(data) : JSON.stringify(data, null, 2);
     const fileName = `export_${entity}_${new Date().toISOString().slice(0, 10)}.${format}`;
+    await recordDeveloperAudit("data.export", "success", {
+      entity,
+      format,
+      rowCount: data.length,
+      redactSensitive,
+      dateFrom,
+      dateTo,
+    });
 
     return {
       success: true,
@@ -891,6 +936,13 @@ export async function exportDataAction(params: {
       rowCount: data.length,
     };
   } catch (e: any) {
+    await recordDeveloperAudit("data.export", "failure", {
+      entity,
+      format,
+      dateFrom,
+      dateTo,
+      error: e.message,
+    });
     return {
       success: false,
       error: e.message || "Erreur lors de l'exportation des données.",

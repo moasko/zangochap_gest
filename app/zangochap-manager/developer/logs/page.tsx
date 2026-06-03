@@ -8,6 +8,58 @@ import os from "os";
 
 export const dynamic = "force-dynamic";
 
+type DeveloperAuditLogRow = {
+  id: string;
+  action: string;
+  status: string;
+  actorId: string | null;
+  actorName: string | null;
+  actorEmail: string | null;
+  details: unknown;
+  createdAt: Date;
+};
+
+type OrderHistoryEntry = {
+  action?: string;
+  by?: string;
+  at?: string;
+};
+
+type OrderLogRow = {
+  orderRef: string;
+  customerName: string;
+  action: string;
+  by: string;
+  at: Date;
+};
+
+function isOrderHistoryEntry(value: unknown): value is OrderHistoryEntry {
+  return Boolean(value && typeof value === "object" && "action" in value);
+}
+
+async function getDeveloperAuditLogs(): Promise<DeveloperAuditLogRow[]> {
+  try {
+    const tableExists = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'DeveloperAuditLog'
+      ) AS "exists"
+    `;
+    if (!tableExists[0]?.exists) return [];
+
+    return await prisma.$queryRaw<DeveloperAuditLogRow[]>`
+      SELECT "id", "action", "status", "actorId", "actorName", "actorEmail", "details", "createdAt"
+      FROM "DeveloperAuditLog"
+      ORDER BY "createdAt" DESC
+      LIMIT 50
+    `;
+  } catch {
+    return [];
+  }
+}
+
 export default async function DeveloperLogsPage() {
   const session = await getSession();
   if (!session || session.role !== "developer") {
@@ -62,6 +114,8 @@ export default async function DeveloperLogsPage() {
     }
   });
 
+  const developerAuditLogs = await getDeveloperAuditLogs();
+
   // 3. Fetch recent orders with history logs
   const recentOrders = await prisma.order.findMany({
     take: 50,
@@ -77,14 +131,16 @@ export default async function DeveloperLogsPage() {
   });
 
   // 4. Extract list of history actions as order logs
-  const orderLogs: any[] = [];
+  const orderLogs: OrderLogRow[] = [];
   recentOrders.forEach((order) => {
     if (order.history && Array.isArray(order.history)) {
-      order.history.forEach((h: any) => {
+      order.history.forEach((value) => {
+        if (!isOrderHistoryEntry(value)) return;
+        const h = value;
         orderLogs.push({
           orderRef: order.ref || "En attente",
           customerName: order.customerName,
-          action: h.action,
+          action: h.action || "-",
           by: h.by || "Système",
           at: new Date(h.at || order.updatedAt)
         });
@@ -130,6 +186,7 @@ export default async function DeveloperLogsPage() {
         dbMetrics={dbMetrics}
         stockMovements={JSON.parse(JSON.stringify(stockMovements))}
         orderLogs={finalOrderLogs}
+        developerAuditLogs={JSON.parse(JSON.stringify(developerAuditLogs))}
       />
     </>
   );

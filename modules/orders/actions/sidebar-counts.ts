@@ -1,4 +1,4 @@
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, type Prisma, type Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 export type SidebarCounts = {
@@ -7,6 +7,7 @@ export type SidebarCounts = {
   collection: number;
   toProcess: number;
   myDeliveries: number;
+  chatUnread: number;
 };
 
 export type SidebarCountsUser = {
@@ -20,7 +21,10 @@ export const emptySidebarCounts: SidebarCounts = {
   collection: 0,
   toProcess: 0,
   myDeliveries: 0,
+  chatUnread: 0,
 };
+
+const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
 
 export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): Promise<SidebarCounts> {
   const today = new Date();
@@ -29,7 +33,7 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
   const activeOrderWhere = { deletedAt: null };
   const role = user?.role?.toLowerCase();
 
-  const toProcessWhere: any = {
+  const toProcessWhere: Prisma.OrderWhereInput = {
     ...activeOrderWhere,
     status: OrderStatus.TO_PROCESS,
   };
@@ -37,7 +41,29 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
     toProcessWhere.commercialId = user.id;
   }
 
-  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount] = await Promise.all([
+  const roleUpper = String(user?.role || "").toUpperCase() as Role;
+  const canUseChat = Boolean(user?.id) && STAFF_ROLES.includes(roleUpper as typeof STAFF_ROLES[number]);
+
+  const chatVisibleWhere: Prisma.ChatMessageWhereInput | undefined = canUseChat
+    ? {
+        deletedAt: null,
+        senderId: { not: user!.id! },
+        reads: { none: { userId: user!.id! } },
+        OR: [
+          { scope: "GENERAL" as const },
+          { scope: "ROLE" as const, targetRole: roleUpper },
+          {
+            scope: "DIRECT" as const,
+            OR: [
+              { senderId: user!.id! },
+              { recipientId: user!.id! },
+            ],
+          },
+        ],
+      }
+    : undefined;
+
+  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount, chatUnreadCount] = await Promise.all([
     prisma.order.count({
       where: {
         ...activeOrderWhere,
@@ -75,6 +101,9 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
           },
         })
       : Promise.resolve(0),
+    chatVisibleWhere
+      ? prisma.chatMessage.count({ where: chatVisibleWhere })
+      : Promise.resolve(0),
   ]);
 
   return {
@@ -83,5 +112,6 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
     collection: collectionCount,
     toProcess: toProcessCount,
     myDeliveries: deliveriesCount,
+    chatUnread: chatUnreadCount,
   };
 }

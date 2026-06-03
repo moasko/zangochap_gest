@@ -66,6 +66,12 @@ enum PromoRule {
   UNLIMITED
 }
 
+enum ChatMessageScope {
+  GENERAL
+  ROLE
+  DIRECT
+}
+
 model User {
   id           String       @id @default(cuid())
   email        String       @unique
@@ -79,7 +85,63 @@ model User {
   orders       Order[]      @relation("CommercialOrders")
   products     Product[]    @relation("CreatedProducts")
   settlements  Settlement[] @relation("DeliverySettlements")
+  sentChatMessages     ChatMessage[] @relation("ChatMessageSender")
+  receivedChatMessages ChatMessage[] @relation("ChatMessageRecipient")
+  chatReads            ChatRead[]
   createdAt    DateTime     @default(now())
+}
+
+model ChatMessage {
+  id           String           @id @default(cuid())
+  body         String           @db.Text
+  scope        ChatMessageScope @default(GENERAL)
+  targetRole   Role?
+  recipientId  String?
+  recipient    User?           @relation("ChatMessageRecipient", fields: [recipientId], references: [id])
+  senderId     String?
+  sender       User?            @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  senderName   String
+  senderRole   Role
+  isPinned     Boolean          @default(false)
+  deletedAt    DateTime?
+  editedAt     DateTime?
+  createdAt    DateTime         @default(now())
+  reads        ChatRead[]
+
+  @@index([scope])
+  @@index([targetRole])
+  @@index([recipientId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model ChatRead {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime    @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([readAt])
+}
+
+model DeveloperAuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  status    String
+  actorId   String?
+  actorName String?
+  actorEmail String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model StockMovement {
@@ -285,6 +347,11 @@ model Order {
   deliveryDate     DateTime?
   deliverymanId    String?
   deliverymanName  String?
+  lastDeliveryAttemptAt     DateTime?
+  lastDeliveryAttemptRiderId   String?
+  lastDeliveryAttemptRiderName String?
+  lastDeliveryAttemptStatus    String?
+  lastDeliveryAttemptReason    String?
   deliveredAt      String? // ISO string for simple display
   paymentMethod    String? // MTN, Orange, Wave, etc.
   amountReceived   Int?
@@ -307,6 +374,8 @@ model Order {
   @@index([status])
   @@index([customerPhone])
   @@index([commercialId])
+  @@index([lastDeliveryAttemptAt])
+  @@index([lastDeliveryAttemptRiderId])
   @@index([createdAt])
 }
 

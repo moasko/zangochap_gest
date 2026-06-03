@@ -56,6 +56,34 @@ function getDateRange(from?: string, to?: string) {
   return Object.keys(range).length > 0 ? range : undefined;
 }
 
+function getDeliveryIssueDateWhere(range?: { gte?: Date; lte?: Date }): Prisma.OrderWhereInput {
+  if (!range) return {};
+  return {
+    OR: [
+      { lastDeliveryAttemptAt: range },
+      { lastDeliveryAttemptAt: null, deliveryDate: range },
+    ],
+  };
+}
+
+function getDeliveryIssueRiderWhere(riderId?: string): Prisma.OrderWhereInput {
+  if (riderId) {
+    return {
+      OR: [
+        { lastDeliveryAttemptRiderId: riderId },
+        { lastDeliveryAttemptRiderId: null, deliverymanId: riderId },
+      ],
+    };
+  }
+
+  return {
+    OR: [
+      { lastDeliveryAttemptRiderId: { not: null } },
+      { lastDeliveryAttemptRiderId: null, deliverymanId: { not: null } },
+    ],
+  };
+}
+
 const deliverySettlementOrderSelect = {
   id: true,
   ref: true,
@@ -73,6 +101,11 @@ const deliverySettlementOrderSelect = {
   updatedAt: true,
   deliverymanId: true,
   deliverymanName: true,
+  lastDeliveryAttemptAt: true,
+  lastDeliveryAttemptRiderId: true,
+  lastDeliveryAttemptRiderName: true,
+  lastDeliveryAttemptStatus: true,
+  lastDeliveryAttemptReason: true,
   settlementId: true,
   status: true,
   returnReason: true,
@@ -133,6 +166,14 @@ function groupOrdersByRider(orders: ReturnType<typeof serializeSettlementOrder>[
   });
 
   return Array.from(riderMap.values()).sort((a, b) => b.totalGrandTotal - a.totalGrandTotal);
+}
+
+function getIssueRiderId(order: ReturnType<typeof serializeSettlementOrder>) {
+  return String(order.lastDeliveryAttemptRiderId || order.deliverymanId || "unknown");
+}
+
+function getIssueRiderName(order: ReturnType<typeof serializeSettlementOrder>) {
+  return String(order.lastDeliveryAttemptRiderName || order.deliverymanName || "Livreur inconnu");
 }
 
 function buildSummary(
@@ -323,6 +364,7 @@ export async function getDeliverySettlementDashboard(from?: string, to?: string,
 
   const deliveryDateRange = getDateRange(from, to);
   const riderFilter: Prisma.OrderWhereInput = riderId ? { deliverymanId: riderId } : { deliverymanId: { not: null } };
+  const issueRiderFilter = getDeliveryIssueRiderWhere(riderId);
   const settlementRiderFilter: Prisma.SettlementWhereInput = riderId ? { deliverymanId: riderId } : {};
 
   const [collectableRawOrders, returnRawOrders, settlements, deliverymen] = await Promise.all([
@@ -340,9 +382,11 @@ export async function getDeliverySettlementDashboard(from?: string, to?: string,
     prisma.order.findMany({
       where: {
         deletedAt: null,
-        ...riderFilter,
         status: { in: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'] },
-        ...(deliveryDateRange ? { deliveryDate: deliveryDateRange } : {}),
+        AND: [
+          issueRiderFilter,
+          getDeliveryIssueDateWhere(deliveryDateRange),
+        ],
       },
       select: deliverySettlementOrderSelect,
       orderBy: [{ isCommercialContacted: 'asc' }, { updatedAt: 'desc' }],
@@ -422,11 +466,11 @@ export async function getDeliverySettlementDashboard(from?: string, to?: string,
         orders: typeof returnOrders;
         uncontactedCount: number;
       }>>((acc, order) => {
-        const id = String(order.deliverymanId || "unknown");
+        const id = getIssueRiderId(order);
         if (!acc[id]) {
           acc[id] = {
             id,
-            name: String(order.deliverymanName || "Livreur inconnu"),
+            name: getIssueRiderName(order),
             orders: [],
             uncontactedCount: 0,
           };
@@ -447,24 +491,28 @@ export async function getRiderSettlementStats(from?: string, to?: string, riderI
   if (!session || !isRole(session, 'admin')) throw new Error("Accès refusé");
 
   const where: Prisma.OrderWhereInput = { deletedAt: null };
-  if (riderId) {
-    where.deliverymanId = riderId;
-  } else {
-    where.deliverymanId = { not: null };
-  }
   where.OR = [
-    { status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] }, settlementId: null },
-    { status: { in: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'] } },
+    {
+      ...(riderId ? { deliverymanId: riderId } : { deliverymanId: { not: null } }),
+      status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
+      settlementId: null,
+    },
+    {
+      ...getDeliveryIssueRiderWhere(riderId),
+      status: { in: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'] },
+    },
   ];
 
   if (from || to) {
-    where.deliveryDate = {};
-    if (from) where.deliveryDate.gte = new Date(from);
-    if (to) {
-      const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
-      where.deliveryDate.lte = toDate;
-    }
+    const deliveryDateRange = getDateRange(from, to);
+    where.AND = [
+      {
+        OR: [
+          { status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] }, deliveryDate: deliveryDateRange },
+          { status: { in: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'] }, ...getDeliveryIssueDateWhere(deliveryDateRange) },
+        ],
+      },
+    ];
   }
 
   const orders = await prisma.order.findMany({
@@ -481,6 +529,11 @@ export async function getRiderSettlementStats(from?: string, to?: string, riderI
       updatedAt: true,
       deliverymanId: true,
       deliverymanName: true,
+      lastDeliveryAttemptAt: true,
+      lastDeliveryAttemptRiderId: true,
+      lastDeliveryAttemptRiderName: true,
+      lastDeliveryAttemptStatus: true,
+      lastDeliveryAttemptReason: true,
       settlementId: true,
       status: true,
       returnReason: true,
@@ -503,11 +556,12 @@ export async function getRiderSettlementStats(from?: string, to?: string, riderI
   }> = {};
 
   orders.forEach((o) => {
-    const rId = String(o.deliverymanId || 'unknown');
+    const isIssue = ['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(o.status);
+    const rId = isIssue ? String(o.lastDeliveryAttemptRiderId || o.deliverymanId || 'unknown') : String(o.deliverymanId || 'unknown');
     if (!riderMap[rId]) {
       riderMap[rId] = {
         id: rId,
-        name: String(o.deliverymanName || 'Inconnu'),
+        name: isIssue ? String(o.lastDeliveryAttemptRiderName || o.deliverymanName || 'Inconnu') : String(o.deliverymanName || 'Inconnu'),
         orders: [],
         totalDeliveryFees: 0,
         totalProducts: 0,
@@ -534,7 +588,7 @@ export async function getRiderSettlementStats(from?: string, to?: string, riderI
       if (o.paymentMethod?.toLowerCase().includes('cash')) {
         rider.totalCashToCollect += collectedTotal;
       }
-    } else if (['RETURNED', 'CANCELLED'].includes(o.status)) {
+    } else if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(o.status)) {
       rider.returnedCount += 1;
     }
   });

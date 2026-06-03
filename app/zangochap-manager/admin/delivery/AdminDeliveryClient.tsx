@@ -59,6 +59,13 @@ const REPRO_DISPO_REASONS = [
   "Fin de tournee",
 ];
 
+const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY"]);
+const DELIVERY_ASSIGNABLE_STATUSES = new Set(["CONFIRMED", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+
+function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
+  return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
+}
+
 function matchesDateInput(value: unknown, dateInput: string) {
   return !dateInput || (typeof value === "string" && value.startsWith(dateInput));
 }
@@ -194,6 +201,9 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   };
 
   const toggleSelect = (id: string) => {
+    const order = activeOrders.find((o) => o.id === id);
+    if (order && !canAssignDeliveryOrder(order)) return;
+
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -201,8 +211,9 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   };
 
   const toggleAll = (filtered: DeliveryAdminOrder[]) => {
-    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map(o => o.id)));
+    const assignableIds = filtered.filter(canAssignDeliveryOrder).map(o => o.id);
+    if (selectedIds.size === assignableIds.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(assignableIds));
   };
 
   const filteredOrders = useMemo(() => {
@@ -308,7 +319,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     // Get assigned orders + any BJ orders (except Cocody) based on current filters
     const allRelevantOrders = filteredOrders.filter(o => {
       const isBJToBroadcast = o.ref?.toUpperCase().startsWith("BJ") && !o.commune?.toLowerCase().includes("cocody");
-      return o.deliverymanId || isBJToBroadcast;
+      return DELIVERY_SHEET_STATUSES.has(o.status) && (o.deliverymanId || isBJToBroadcast);
     });
 
     const bjOrders = allRelevantOrders.filter(o => o.ref?.toUpperCase().startsWith("BJ") && !o.commune?.toLowerCase().includes("cocody"));
@@ -683,12 +694,16 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map(order => (
+                  {filteredOrders.map(order => {
+                    const isAssignable = canAssignDeliveryOrder(order);
+
+                    return (
                     <tr key={order.id} className={selectedIds.has(order.id) ? 'row-selected' : ''}>
                       <td>
                         <input
                           type="checkbox"
                           checked={selectedIds.has(order.id)}
+                          disabled={!isAssignable}
                           onChange={() => toggleSelect(order.id)}
                         />
                       </td>
@@ -740,7 +755,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                             className="assign-select"
                             value={order.deliverymanId || ""}
                             onChange={(e) => handleAssign(order.id, e.target.value)}
-                            disabled={isPending}
+                            disabled={isPending || !isAssignable}
                           >
                             <option value="" disabled>Attribuer à...</option>
                             <option value="unassigned" style={{ color: 'var(--red)' }}>❌ Désattribuer</option>
@@ -753,7 +768,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -1166,6 +1181,8 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 }
 
 function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { order: DeliveryAdminOrder, deliverymen: Deliveryman[], onAssign: (oid: string, did: string) => void, riderLiveCounts: Record<string, number> }) {
+  const isAssignable = canAssignDeliveryOrder(order);
+
   return (
     <div className="order-mini-card">
       <div className="card-header">
@@ -1197,6 +1214,7 @@ function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { orde
           className="mini-assign-select"
           value={order.deliverymanId || ""}
           onChange={(e) => onAssign(order.id, e.target.value)}
+          disabled={!isAssignable}
         >
           <option value="" disabled>Attribuer à...</option>
           <option value="unassigned">❌ Désattribuer</option>

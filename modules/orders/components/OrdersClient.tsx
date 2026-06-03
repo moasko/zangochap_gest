@@ -471,7 +471,7 @@ export default function OrdersClient({
 
                 deliverymanName: deliveryman?.name || "Assigné",
 
-                status: "CONFIRMED", // Usually assignment confirms the order
+                status: o.status === "PACKED" ? "ON_DELIVERY" : o.status,
               }
               : o,
           ),

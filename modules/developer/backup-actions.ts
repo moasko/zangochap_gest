@@ -2,11 +2,10 @@
 
 import prisma from "@/lib/prisma";
 import { ensureAuth } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
 import * as fs from "fs";
 import * as path from "path";
+import { recordDeveloperAudit } from "./audit";
 
-// Define the backups folder inside the workspace
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 
 interface BackupMetadata {
@@ -14,7 +13,7 @@ interface BackupMetadata {
   timestamp: string;
   fileName: string;
   sizeKb: number;
-  location: "Local" | "Local & Cloud S3";
+  location: "Local" | "Local & Cloud S3 (simulation)";
   stats: {
     orders: number;
     products: number;
@@ -28,142 +27,167 @@ interface BackupMetadata {
   };
 }
 
-/**
- * Ensures the backups directory exists.
- */
 function ensureBackupDirectory() {
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
   }
 }
 
-/**
- * Create a full database JSON backup, optionally pushing it to external Cloud S3 storage (simulated).
- */
+function resolveBackupFile(fileName: string) {
+  const safeName = path.basename(fileName || "");
+  if (!/^backup_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.json$/.test(safeName)) {
+    throw new Error("Nom de sauvegarde invalide.");
+  }
+
+  const backupRoot = path.resolve(BACKUP_DIR);
+  const filePath = path.resolve(BACKUP_DIR, safeName);
+  if (!filePath.startsWith(backupRoot + path.sep)) {
+    throw new Error("Chemin de sauvegarde invalide.");
+  }
+
+  return { safeName, filePath };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Erreur inconnue.";
+}
+
+async function getBackupPayload(storeExternally: boolean, fileName: string) {
+  const [
+    orders,
+    products,
+    customers,
+    movements,
+    promos,
+    categories,
+    warehouses,
+    users,
+    settlements,
+  ] = await Promise.all([
+    prisma.order.findMany({ include: { items: true } }),
+    prisma.product.findMany({ include: { variants: true, images: true } }),
+    prisma.customer.findMany(),
+    prisma.stockMovement.findMany(),
+    prisma.promoCode.findMany(),
+    prisma.category.findMany(),
+    prisma.warehouse.findMany(),
+    prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        name: true,
+        role: true,
+        initials: true,
+        phone2: true,
+        serviceLabel: true,
+        createdAt: true,
+      },
+    }),
+    prisma.settlement.findMany(),
+  ]);
+
+  const stats = {
+    orders: orders.length,
+    products: products.length,
+    customers: customers.length,
+    stockMovements: movements.length,
+    promos: promos.length,
+    categories: categories.length,
+    warehouses: warehouses.length,
+    users: users.length,
+    settlements: settlements.length,
+  };
+
+  const location = storeExternally ? "Local & Cloud S3 (simulation)" : "Local";
+
+  return {
+    metadata: {
+      version: "1.0",
+      timestamp: new Date().toISOString(),
+      fileName,
+      location,
+      stats,
+      warning: "User password hashes are intentionally excluded from this backup.",
+    },
+    tables: {
+      orders,
+      products,
+      customers,
+      stockMovements: movements,
+      promos,
+      categories,
+      warehouses,
+      users,
+      settlements,
+    },
+  };
+}
+
 export async function createSystemBackupAction(storeExternally: boolean) {
   await ensureAuth(["developer"]);
   try {
     ensureBackupDirectory();
 
-    // 1. Fetch all database tables
-    const [
-      orders,
-      products,
-      customers,
-      movements,
-      promos,
-      categories,
-      warehouses,
-      users,
-      settlements
-    ] = await Promise.all([
-      prisma.order.findMany({ include: { items: true } }),
-      prisma.product.findMany({ include: { variants: true, images: true } }),
-      prisma.customer.findMany(),
-      prisma.stockMovement.findMany(),
-      prisma.promoCode.findMany(),
-      prisma.category.findMany(),
-      prisma.warehouse.findMany(),
-      prisma.user.findMany(),
-      prisma.settlement.findMany()
-    ]);
-
-    const timestamp = new Date().toISOString();
     const formattedDate = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const fileName = `backup_${formattedDate}.json`;
     const filePath = path.join(BACKUP_DIR, fileName);
+    const backupPayload = await getBackupPayload(storeExternally, fileName);
 
-    const stats = {
-      orders: orders.length,
-      products: products.length,
-      customers: customers.length,
-      stockMovements: movements.length,
-      promos: promos.length,
-      categories: categories.length,
-      warehouses: warehouses.length,
-      users: users.length,
-      settlements: settlements.length
-    };
+    fs.writeFileSync(filePath, JSON.stringify(backupPayload, null, 2), "utf-8");
 
-    const location = storeExternally ? "Local & Cloud S3" : "Local";
-
-    const backupPayload = {
-      metadata: {
-        version: "1.0",
-        timestamp,
-        fileName,
-        location,
-        stats
-      },
-      tables: {
-        orders,
-        products,
-        customers,
-        stockMovements: movements,
-        promos,
-        categories,
-        warehouses,
-        users,
-        settlements
-      }
-    };
-
-    // 2. Write file locally
-    const fileContent = JSON.stringify(backupPayload, null, 2);
-    fs.writeFileSync(filePath, fileContent, "utf-8");
-
-    // Calculate file size
     const statsObj = fs.statSync(filePath);
-    const sizeKb = Math.round(statsObj.size / 1024 * 10) / 10;
+    const sizeKb = Math.round((statsObj.size / 1024) * 10) / 10;
+    const externalLogs = storeExternally
+      ? [
+          "Simulation active : aucun fichier n'est envoye vers S3/R2.",
+          `Empreinte locale de demonstration : ${Math.random().toString(36).substring(7).toUpperCase()}`,
+          "La sauvegarde reste uniquement sur le serveur local.",
+        ]
+      : [];
 
-    // 3. Handle external storage simulation
-    let externalLogs: string[] = [];
-    if (storeExternally) {
-      externalLogs.push("Connexion au compartiment S3 'zangochap-backups-secure'...");
-      externalLogs.push(`Calcul de l'empreinte de sécurité MD5 : ${Math.random().toString(36).substring(7).toUpperCase()}`);
-      externalLogs.push("Transmission sécurisée des paquets réseau (Chiffrement AES-256)...");
-      externalLogs.push(`Sauvegarde répliquée dans la région AWS eu-west-3. Réf de transaction : S3-TX-${Math.floor(Math.random() * 90000) + 10000}`);
-      externalLogs.push("Vérification d'intégrité terminée. Fichier stocké avec redondance.");
-    }
+    await recordDeveloperAudit("backup.create", "success", {
+      fileName,
+      sizeKb,
+      location: backupPayload.metadata.location,
+      stats: backupPayload.metadata.stats,
+    });
 
     return {
       success: true,
-      message: storeExternally 
-        ? `Sauvegarde complète '${fileName}' (${sizeKb} Ko) créée et répliquée sur le Cloud S3.` 
-        : `Sauvegarde locale '${fileName}' (${sizeKb} Ko) créée avec succès.`,
+      message: storeExternally
+        ? `Sauvegarde locale '${fileName}' (${sizeKb} Ko) creee. Cloud S3: simulation seulement.`
+        : `Sauvegarde locale '${fileName}' (${sizeKb} Ko) creee avec succes.`,
       data: {
         fileName,
         sizeKb,
-        location,
-        stats,
+        location: backupPayload.metadata.location,
+        stats: backupPayload.metadata.stats,
         externalLogs,
-        timestamp
-      }
+        timestamp: backupPayload.metadata.timestamp,
+      },
     };
-  } catch (e: any) {
-    console.error("Error creating system backup:", e);
-    return { success: false, error: e.message || "Une erreur est survenue lors de la création de la sauvegarde." };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.error("Error creating system backup:", error);
+    await recordDeveloperAudit("backup.create", "failure", { error: message });
+    return { success: false, error: message || "Une erreur est survenue lors de la creation de la sauvegarde." };
   }
 }
 
-/**
- * Lists all existing system backups stored in the backups folder.
- */
 export async function listSystemBackupsAction() {
   await ensureAuth(["developer"]);
   try {
     ensureBackupDirectory();
 
-    const files = fs.readdirSync(BACKUP_DIR);
-    const backupFiles = files.filter(f => f.startsWith("backup_") && f.endsWith(".json"));
+    const backupFiles = fs.readdirSync(BACKUP_DIR)
+      .filter((file) => /^backup_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.json$/.test(file));
 
     const backups: BackupMetadata[] = [];
-
     for (const file of backupFiles) {
       try {
-        const filePath = path.join(BACKUP_DIR, file);
-        const fileContent = fs.readFileSync(filePath, "utf-8");
-        const parsed = JSON.parse(fileContent);
+        const { filePath } = resolveBackupFile(file);
+        const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
         const fileStats = fs.statSync(filePath);
 
         if (parsed.metadata) {
@@ -171,7 +195,7 @@ export async function listSystemBackupsAction() {
             version: parsed.metadata.version || "1.0",
             timestamp: parsed.metadata.timestamp || fileStats.birthtime.toISOString(),
             fileName: file,
-            sizeKb: Math.round(fileStats.size / 1024 * 10) / 10,
+            sizeKb: Math.round((fileStats.size / 1024) * 10) / 10,
             location: parsed.metadata.location || "Local",
             stats: parsed.metadata.stats || {
               orders: parsed.tables?.orders?.length || 0,
@@ -182,8 +206,8 @@ export async function listSystemBackupsAction() {
               categories: parsed.tables?.categories?.length || 0,
               warehouses: parsed.tables?.warehouses?.length || 0,
               users: parsed.tables?.users?.length || 0,
-              settlements: parsed.tables?.settlements?.length || 0
-            }
+              settlements: parsed.tables?.settlements?.length || 0,
+            },
           });
         }
       } catch (err) {
@@ -191,144 +215,128 @@ export async function listSystemBackupsAction() {
       }
     }
 
-    // Sort by date descending
     backups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    return {
-      success: true,
-      backups
-    };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Impossible de lister les sauvegardes." };
+    return { success: true, backups };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    return { success: false, error: message || "Impossible de lister les sauvegardes." };
   }
 }
 
-/**
- * Delete a specific backup file from the local server storage.
- */
 export async function deleteSystemBackupAction(fileName: string) {
   await ensureAuth(["developer"]);
   try {
     ensureBackupDirectory();
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const { safeName, filePath } = resolveBackupFile(fileName);
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      return { success: true, message: `Sauvegarde '${fileName}' supprimée définitivement du serveur.` };
-    } else {
-      return { success: false, error: "Le fichier de sauvegarde spécifié est introuvable." };
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: "Le fichier de sauvegarde specifie est introuvable." };
     }
-  } catch (e: any) {
-    return { success: false, error: e.message || "Erreur lors de la suppression de la sauvegarde." };
+
+    fs.unlinkSync(filePath);
+    await recordDeveloperAudit("backup.delete", "success", { fileName: safeName });
+    return { success: true, message: `Sauvegarde '${safeName}' supprimee definitivement du serveur.` };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.delete", "failure", { fileName, error: message });
+    return { success: false, error: message || "Erreur lors de la suppression de la sauvegarde." };
   }
 }
 
-/**
- * Pushes a locally created backup file onto AWS S3 Cloud (simulated).
- */
 export async function uploadBackupToCloudAction(fileName: string) {
   await ensureAuth(["developer"]);
   try {
     ensureBackupDirectory();
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const { safeName, filePath } = resolveBackupFile(fileName);
 
     if (!fs.existsSync(filePath)) {
       return { success: false, error: "Fichier de sauvegarde introuvable." };
     }
 
-    const fileContent = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(fileContent);
-
-    // Update location metadata
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     if (parsed.metadata) {
-      parsed.metadata.location = "Local & Cloud S3";
+      parsed.metadata.location = "Local & Cloud S3 (simulation)";
+      parsed.metadata.cloudSimulationOnly = true;
       fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), "utf-8");
     }
 
-    // Simulate logs for S3 transfer
-    const cloudLogs = [
-      "Initialisation de la connexion SSL vers S3 (AWS Gateway)...",
-      `Création de la signature de fichier SHA256 : ${Math.random().toString(36).substring(4).toUpperCase()}`,
-      "Allocation d'un tunnel de transport asynchrone (10 Gbps)...",
-      "Téléversement en cours : [████████████████████] 100% complété.",
-      `Succès. Sauvegarde synchronisée de manière redondante. ID : ${Math.random().toString(36).substring(6).toUpperCase()}`
+    const logs = [
+      "Simulation uniquement : aucun transfert cloud reel.",
+      `Controle local du fichier : ${Math.random().toString(36).substring(4).toUpperCase()}`,
+      "Pour activer un vrai cloud, connecter AWS S3 ou Cloudflare R2 dans cette action.",
     ];
 
+    await recordDeveloperAudit("backup.cloud_simulation", "success", { fileName: safeName });
     return {
       success: true,
-      message: `Sauvegarde '${fileName}' répliquée avec succès sur le Cloud Externe AWS S3.`,
-      logs: cloudLogs
+      message: `Sauvegarde '${safeName}' marquee comme simulation cloud. Aucun transfert externe reel.`,
+      logs,
     };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Impossible de pousser la sauvegarde sur le cloud." };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.cloud_simulation", "failure", { fileName, error: message });
+    return { success: false, error: message || "Impossible de simuler le transfert cloud." };
   }
 }
 
-/**
- * Safe Simulation of a restoration process: inspect backup structure,
- * validate relations and compile statistics without destructive writing.
- */
 export async function simulateRestoreBackupAction(fileName: string) {
   await ensureAuth(["developer"]);
   try {
     ensureBackupDirectory();
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const { safeName, filePath } = resolveBackupFile(fileName);
 
     if (!fs.existsSync(filePath)) {
       return { success: false, error: "Fichier de sauvegarde introuvable." };
     }
 
-    const fileContent = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(fileContent);
-
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     if (!parsed.metadata || !parsed.tables) {
-      return { 
-        success: false, 
-        error: "Structure de sauvegarde invalide ou corrompue : métadonnées ou tables absentes." 
-      };
+      return { success: false, error: "Structure de sauvegarde invalide ou corrompue." };
     }
 
     const { stats } = parsed.metadata;
     const { tables } = parsed;
-
     const validationReport = [
-      "1. Analyse de la signature du fichier : Schéma ZangoChap 1.0 validé.",
-      "2. Contrôle de l'intégrité relationnelle : Clés étrangères intègres.",
-      `3. Table des Produits : ${tables.products?.length || 0} fiches prêtes à la réécriture.`,
-      `4. Table des Commandes : ${tables.orders?.length || 0} commandes et factures analysées.`,
-      `5. Table des Clients : ${tables.customers?.length || 0} clients uniques identifiés.`,
-      "6. Dépendances des Tables : Ordre d'écriture optimal (Users → Category → Products → Customer → Orders) calculé.",
-      "✅ Le fichier est saine et entièrement compatible avec la structure actuelle de la base PostgreSQL."
+      "1. Structure JSON backup valide.",
+      "2. Simulation uniquement : aucune ecriture en base.",
+      `3. Produits detectes : ${tables.products?.length || 0}.`,
+      `4. Commandes detectees : ${tables.orders?.length || 0}.`,
+      `5. Clients detectes : ${tables.customers?.length || 0}.`,
+      "6. Les mots de passe utilisateurs ne sont pas inclus dans les backups recents.",
     ];
 
+    await recordDeveloperAudit("backup.restore_simulation", "success", { fileName: safeName });
     return {
       success: true,
-      message: "Simulation de restauration effectuée avec succès. La sauvegarde est valide.",
+      message: "Simulation de restauration effectuee avec succes. Aucune donnee n'a ete ecrite.",
       data: {
-        fileName,
+        fileName: safeName,
         timestamp: parsed.metadata.timestamp,
         stats,
-        report: validationReport
-      }
+        report: validationReport,
+      },
     };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Impossible de simuler la restauration." };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.restore_simulation", "failure", { fileName, error: message });
+    return { success: false, error: message || "Impossible de simuler la restauration." };
   }
 }
 
-/**
- * Reads a backup JSON file's content so the client can download it.
- */
 export async function downloadBackupAction(fileName: string) {
   await ensureAuth(["developer"]);
   try {
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const { safeName, filePath } = resolveBackupFile(fileName);
     if (!fs.existsSync(filePath)) {
-      return { success: false, error: "Le fichier de sauvegarde spécifié est introuvable." };
+      return { success: false, error: "Le fichier de sauvegarde specifie est introuvable." };
     }
+
     const fileContent = fs.readFileSync(filePath, "utf-8");
+    await recordDeveloperAudit("backup.download", "success", { fileName: safeName });
     return { success: true, fileContent };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Erreur de téléchargement du fichier." };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.download", "failure", { fileName, error: message });
+    return { success: false, error: message || "Erreur de telechargement du fichier." };
   }
 }

@@ -100,6 +100,14 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   let updatedOrder: any = null;
 
   await prisma.$transaction(async (tx) => {
+    if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
+      updateData.lastDeliveryAttemptAt = new Date();
+      updateData.lastDeliveryAttemptRiderId = order.deliverymanId;
+      updateData.lastDeliveryAttemptRiderName = order.deliverymanName;
+      updateData.lastDeliveryAttemptStatus = normalizedStatus;
+      updateData.lastDeliveryAttemptReason = note?.trim();
+    }
+
     if (normalizedStatus === 'REPRO_DISPO') {
       const nextDeliveryDate = reproDeliveryDate ? new Date(`${reproDeliveryDate}T00:00:00`) : null;
       if (!nextDeliveryDate || Number.isNaN(nextDeliveryDate.getTime())) {

@@ -28,6 +28,11 @@ export interface RiderOrder {
   deliveryNote?: string | null;
   notes?: string | null;
   deliveryDate?: string | null;
+  lastDeliveryAttemptAt?: string | null;
+  lastDeliveryAttemptRiderId?: string | null;
+  lastDeliveryAttemptRiderName?: string | null;
+  lastDeliveryAttemptStatus?: string | null;
+  lastDeliveryAttemptReason?: string | null;
   status: OrderStatus;
   items: RiderOrderItem[];
   discount: number;
