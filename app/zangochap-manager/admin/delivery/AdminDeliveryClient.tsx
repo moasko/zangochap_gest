@@ -4,8 +4,8 @@ import React, { useState, useTransition, useMemo } from "react";
 import { TableCard, EmptyState, StatCard, StatusBadge } from "@/components/UI";
 import Modal from "@/components/Modal";
 import { formatPrice, formatDate, COMMUNES } from "@/lib/constants";
-import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calendar, LayoutGrid, List, Archive, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2 } from "lucide-react";
-import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder } from "@/modules/orders/actions";
+import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calendar, LayoutGrid, List, Archive, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2, Route, Zap, AlertTriangle } from "lucide-react";
+import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder, autoAssignDeliveryOrders } from "@/modules/orders/actions";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import "./admin-delivery-client.css";
@@ -66,6 +66,22 @@ function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
   return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
 }
 
+function getOrderRisks(order: DeliveryAdminOrder) {
+  const risks: string[] = [];
+
+  if (!order.deliverymanId && canAssignDeliveryOrder(order)) risks.push("Non attribuee");
+  if (!order.customerPhone?.trim()) risks.push("Telephone");
+  if (!order.customerLocation?.trim()) risks.push("Adresse");
+  if (!order.commune?.trim()) risks.push("Commune");
+  if (!order.deliveryDate) risks.push("Date");
+  if (Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0) >= 100000) {
+    risks.push("Montant eleve");
+  }
+  if (order.status === "REPRO_DISPO") risks.push("Repro");
+
+  return risks;
+}
+
 function matchesDateInput(value: unknown, dateInput: string) {
   return !dateInput || (typeof value === "string" && value.startsWith(dateInput));
 }
@@ -98,7 +114,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   const [filterDeliveryman, setFilterDeliveryman] = useState("ALL");
   const [filterCommune, setFilterCommune] = useState("ALL");
   const [filterDate, setFilterDate] = useState(defaultDeliveryFilterValue); // YYYY-MM-DD
-  const [viewMode, setViewMode] = useState<"table" | "grid" | "history" | "sheet">("table");
+  const [viewMode, setViewMode] = useState<"table" | "grid" | "dispatch" | "history" | "sheet">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -156,6 +172,25 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         router.refresh();
       } catch (e: unknown) {
         showToast(e instanceof Error ? e.message : 'Erreur', 'error');
+      }
+    });
+  };
+
+  const handleAutoAssign = (ordersToAssign: DeliveryAdminOrder[]) => {
+    if (ordersToAssign.length === 0) return;
+
+    if (!confirm(`Repartir automatiquement ${ordersToAssign.length} commande(s) non attribuee(s) entre les livreurs ?`)) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await autoAssignDeliveryOrders(ordersToAssign.map((order) => order.id));
+        showToast(`${result.assignedCount} commande(s) repartie(s) automatiquement`, "success");
+        setSelectedIds(new Set());
+        router.refresh();
+      } catch (e: unknown) {
+        showToast(e instanceof Error ? e.message : "Erreur", "error");
       }
     });
   };
@@ -275,16 +310,18 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     };
   }, [filteredOrders, deliverymen]);
 
-  // Live count of orders per deliveryman (to keep UI sync after assignment)
+  // Count only the orders assigned for the selected delivery date, not the full active load.
   const riderLiveCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const countDate = filterDate || dateInputValue(new Date());
+
     activeOrders.forEach(o => {
-      if (o.deliverymanId) {
+      if (o.deliverymanId && matchesDateInput(o.deliveryDate, countDate)) {
         counts[o.deliverymanId] = (counts[o.deliverymanId] || 0) + 1;
       }
     });
     return counts;
-  }, [activeOrders]);
+  }, [activeOrders, filterDate]);
 
   // Group by deliveryman for the "grid" view (Rider Load)
   const groupedByDriver = useMemo(() => {
@@ -298,6 +335,38 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     });
     return groups;
   }, [filteredOrders, deliverymen]);
+
+  const autoAssignableOrders = useMemo(() => {
+    return filteredOrders.filter((order) => canAssignDeliveryOrder(order) && !order.deliverymanId);
+  }, [filteredOrders]);
+
+  const riskOrders = useMemo(() => {
+    return filteredOrders
+      .map((order) => ({ order, risks: getOrderRisks(order) }))
+      .filter((entry) => entry.risks.length > 0)
+      .sort((a, b) => b.risks.length - a.risks.length);
+  }, [filteredOrders]);
+
+  const dispatchSummary = useMemo(() => {
+    const zones = new Set(filteredOrders.map((order) => order.commune).filter(Boolean));
+    const cash = filteredOrders.reduce((sum, order) => {
+      return sum + Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0);
+    }, 0);
+
+    return {
+      zones: zones.size,
+      cash,
+      riskCount: riskOrders.length,
+      assigned: filteredOrders.filter((order) => Boolean(order.deliverymanId)).length,
+    };
+  }, [filteredOrders, riskOrders]);
+
+  const deliverymenByTodayLoad = useMemo(() => {
+    return [...deliverymen].sort((a, b) => {
+      const countDiff = (riderLiveCounts[b.id] || 0) - (riderLiveCounts[a.id] || 0);
+      return countDiff || a.name.localeCompare(b.name);
+    });
+  }, [deliverymen, riderLiveCounts]);
 
   // Group by date for the "history" view
   const groupedByDate = useMemo(() => {
@@ -491,17 +560,45 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         <StatCard label="Livreurs actifs" value={stats.deliverymen} icon={<User size={20} />} color="var(--blue)" />
       </div>
 
+      <div className="rider-day-strip">
+        <div className="rider-day-strip-head">
+          <div className="overview-kicker">Colis attribues ce jour</div>
+          <div className="rider-day-date">{filterDate ? formatDate(filterDate) : formatDate(new Date().toISOString())}</div>
+        </div>
+        <div className="rider-day-list">
+          {deliverymenByTodayLoad.map((driver) => (
+            <div key={driver.id} className="rider-day-pill">
+              <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+              <span>{driver.name}</span>
+              <strong>{riderLiveCounts[driver.id] || 0}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="delivery-overview">
         <div>
           <div className="overview-kicker">Pilotage livraison</div>
           <div className="overview-title">
-            {viewMode === "history" ? "Archives cloturees" : viewMode === "sheet" ? "Fiches du jour" : "Commandes actives"}
+            {viewMode === "history" ? "Archives cloturees" : viewMode === "sheet" ? "Fiches du jour" : viewMode === "dispatch" ? "Dispatch du jour" : "Commandes actives"}
           </div>
         </div>
-        <div className="overview-metrics">
-          <span>{activeOrders.length} actives</span>
-          <span>{archivedOrders.length} archives recentes</span>
-          <span>{todaySheets.reduce((sum, sheet) => sum + sheet.orders.length, 0)} sur les fiches</span>
+        <div className="overview-actions">
+          <div className="overview-metrics">
+            <span>{activeOrders.length} actives</span>
+            <span>{archivedOrders.length} archives recentes</span>
+            <span>{todaySheets.reduce((sum, sheet) => sum + sheet.orders.length, 0)} sur les fiches</span>
+          </div>
+          <button
+            type="button"
+            className="dispatch-auto-btn"
+            onClick={() => handleAutoAssign(autoAssignableOrders)}
+            disabled={isPending || autoAssignableOrders.length === 0}
+            title="Repartir les commandes non attribuees selon la charge et les communes"
+          >
+            <Zap size={15} />
+            Repartir auto ({autoAssignableOrders.length})
+          </button>
         </div>
       </div>
 
@@ -650,6 +747,13 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             title="Vue par livreur"
           >
             <LayoutGrid size={18} />
+          </button>
+          <button
+            className={`toggle-btn ${viewMode === 'dispatch' ? 'active' : ''}`}
+            onClick={() => setViewMode('dispatch')}
+            title="Vue dispatch"
+          >
+            <Route size={18} />
           </button>
           <button
             className={`toggle-btn ${viewMode === 'history' ? 'active' : ''}`}
@@ -817,6 +921,112 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* DISPATCH VIEW */}
+      {viewMode === "dispatch" && (
+        <div className="dispatch-layout">
+          <div className="dispatch-summary-grid">
+            <div className="dispatch-summary-card">
+              <span className="summary-label">A preparer</span>
+              <strong>{filteredOrders.length}</strong>
+              <small>{dispatchSummary.assigned} deja attribuee(s)</small>
+            </div>
+            <div className="dispatch-summary-card alert">
+              <span className="summary-label">Sans livreur</span>
+              <strong>{autoAssignableOrders.length}</strong>
+              <small>eligible(s) a la repartition auto</small>
+            </div>
+            <div className="dispatch-summary-card">
+              <span className="summary-label">Zones</span>
+              <strong>{dispatchSummary.zones}</strong>
+              <small>commune(s) dans le filtre</small>
+            </div>
+            <div className="dispatch-summary-card">
+              <span className="summary-label">A encaisser</span>
+              <strong>{formatPrice(dispatchSummary.cash)}</strong>
+              <small>produits + livraison</small>
+            </div>
+          </div>
+
+          <div className="dispatch-main">
+            <section className="dispatch-panel">
+              <div className="dispatch-panel-header">
+                <div>
+                  <h3>Points a verifier</h3>
+                  <p>{dispatchSummary.riskCount} commande(s) avec alerte</p>
+                </div>
+                <AlertTriangle size={18} />
+              </div>
+              <div className="risk-list">
+                {riskOrders.slice(0, 8).map(({ order, risks }) => (
+                  <div key={order.id} className="risk-item">
+                    <div>
+                      <span className="order-ref">{order.ref}</span>
+                      <strong>{order.customerName}</strong>
+                      <small>{order.commune || "Commune non definie"}</small>
+                    </div>
+                    <div className="risk-badges">
+                      {risks.map((risk) => <span key={risk} className="risk-badge">{risk}</span>)}
+                    </div>
+                  </div>
+                ))}
+                {riskOrders.length === 0 && (
+                  <div className="empty-col">Aucun point bloquant dans le filtre actuel</div>
+                )}
+              </div>
+            </section>
+
+            <section className="dispatch-board">
+              <div className="dispatch-board-header">
+                <div>
+                  <h3>Repartition par livreur</h3>
+                  <p>Les colonnes suivent les filtres actifs et la date prevue.</p>
+                </div>
+                <button
+                  type="button"
+                  className="dispatch-auto-btn"
+                  onClick={() => handleAutoAssign(autoAssignableOrders)}
+                  disabled={isPending || autoAssignableOrders.length === 0}
+                >
+                  <Zap size={15} /> Repartir auto
+                </button>
+              </div>
+
+              <div className="dispatch-columns">
+                <div className="dispatch-column unassigned-col">
+                  <div className="dispatch-column-title">
+                    <UserPlus size={16} />
+                    <span>Non attribuees</span>
+                    <b>{groupedByDriver["unassigned"].length}</b>
+                  </div>
+                  <div className="order-cards-list">
+                    {groupedByDriver["unassigned"].map(order => (
+                      <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
+                    ))}
+                    {groupedByDriver["unassigned"].length === 0 && <div className="empty-col">Tout est attribue</div>}
+                  </div>
+                </div>
+
+                {deliverymen.map(driver => (
+                  <div key={driver.id} className="dispatch-column">
+                    <div className="dispatch-column-title">
+                      <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+                      <span>{driver.name}</span>
+                      <b>{groupedByDriver[driver.id]?.length || 0}</b>
+                    </div>
+                    <div className="order-cards-list">
+                      {groupedByDriver[driver.id]?.map(order => (
+                        <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
+                      ))}
+                      {(groupedByDriver[driver.id]?.length || 0) === 0 && <div className="empty-col">Aucune livraison</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       )}
 
@@ -1182,6 +1392,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
 function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { order: DeliveryAdminOrder, deliverymen: Deliveryman[], onAssign: (oid: string, did: string) => void, riderLiveCounts: Record<string, number> }) {
   const isAssignable = canAssignDeliveryOrder(order);
+  const risks = getOrderRisks(order);
 
   return (
     <div className="order-mini-card">
@@ -1206,6 +1417,11 @@ function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { orde
           <div className="date-info">
             <Calendar size={12} />
             {formatDate(order.deliveryDate)}
+          </div>
+        )}
+        {risks.length > 0 && (
+          <div className="risk-badges compact">
+            {risks.slice(0, 3).map((risk) => <span key={risk} className="risk-badge">{risk}</span>)}
           </div>
         )}
       </div>

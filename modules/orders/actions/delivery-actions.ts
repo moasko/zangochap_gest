@@ -141,3 +141,100 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
   revalidateDeliveryAssignmentPaths();
   return { success: true };
 }
+
+// ============ AUTO ASSIGN ============
+export async function autoAssignDeliveryOrders(orderIds: string[]) {
+  const session = await getSession();
+  assertCanManageDeliveryAssignment(session);
+
+  const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+  if (uniqueIds.length === 0) throw new Error("Aucune commande eligible a repartir.");
+
+  const [orders, drivers, activeLoads] = await Promise.all([
+    prisma.order.findMany({
+      where: { id: { in: uniqueIds } },
+      orderBy: [{ commune: "asc" }, { updatedAt: "asc" }],
+    }),
+    prisma.user.findMany({
+      where: { role: "LIVREUR" },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.order.groupBy({
+      by: ["deliverymanId"],
+      where: {
+        deletedAt: null,
+        deliverymanId: { not: null },
+        status: { in: [...ASSIGNABLE_DELIVERY_STATUSES] },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  if (orders.length !== uniqueIds.length) {
+    throw new Error("Certaines commandes sont introuvables.");
+  }
+
+  if (drivers.length === 0) {
+    throw new Error("Aucun livreur actif disponible pour la repartition.");
+  }
+
+  orders.forEach(assertOrderCanBeAssigned);
+
+  const unassignedOrders = orders.filter((order) => !order.deliverymanId);
+  if (unassignedOrders.length === 0) {
+    return { success: true, assignedCount: 0, skippedCount: orders.length };
+  }
+
+  const loads = new Map(drivers.map((driver) => [driver.id, 0]));
+  activeLoads.forEach((load) => {
+    if (load.deliverymanId) loads.set(load.deliverymanId, load._count._all);
+  });
+
+  const communeDriver = new Map<string, string>();
+
+  await Promise.all(unassignedOrders.map((order) => {
+    const sortedDrivers = [...drivers].sort((a, b) => {
+      const loadDiff = (loads.get(a.id) || 0) - (loads.get(b.id) || 0);
+      return loadDiff || a.name.localeCompare(b.name);
+    });
+
+    const lightest = sortedDrivers[0];
+    const existingDriverId = order.commune ? communeDriver.get(order.commune) : null;
+    const existingDriver = existingDriverId ? drivers.find((driver) => driver.id === existingDriverId) : null;
+    const selectedDriver = existingDriver && (loads.get(existingDriver.id) || 0) <= (loads.get(lightest.id) || 0) + 2
+      ? existingDriver
+      : lightest;
+
+    if (order.commune && !communeDriver.has(order.commune)) {
+      communeDriver.set(order.commune, selectedDriver.id);
+    }
+
+    loads.set(selectedDriver.id, (loads.get(selectedDriver.id) || 0) + 1);
+
+    const history = Array.isArray(order.history) ? [...order.history] : [];
+    history.push({
+      at: new Date().toISOString(),
+      action: `Repartition automatique au livreur : ${selectedDriver.name}`,
+      by: session!.email,
+      byName: session!.name,
+    });
+
+    return prisma.order.update({
+      where: { id: order.id },
+      data: {
+        deliverymanId: selectedDriver.id,
+        deliverymanName: selectedDriver.name,
+        ...getAssignmentStatusUpdate(order, false),
+        history,
+      },
+    });
+  }));
+
+  revalidateDeliveryAssignmentPaths();
+  return {
+    success: true,
+    assignedCount: unassignedOrders.length,
+    skippedCount: orders.length - unassignedOrders.length,
+  };
+}

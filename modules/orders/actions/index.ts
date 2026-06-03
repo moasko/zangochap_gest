@@ -76,6 +76,10 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
   return actions.bulkAssignOrders(orderIds, deliverymanId);
 }
 
+export async function autoAssignDeliveryOrders(orderIds: string[]) {
+  return actions.autoAssignDeliveryOrders(orderIds);
+}
+
 export async function getPendingSettlements() {
   return actions.getPendingSettlements();
 }

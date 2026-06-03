@@ -59,6 +59,7 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
 // ── Delivery Assignments ──
 export async function assignOrderToDeliveryman(orderId: string, deliverymanId: string) { return deliveryActions.assignOrderToDeliveryman(orderId, deliverymanId); }
 export async function bulkAssignOrders(orderIds: string[], deliverymanId: string) { return deliveryActions.bulkAssignOrders(orderIds, deliverymanId); }
+export async function autoAssignDeliveryOrders(orderIds: string[]) { return deliveryActions.autoAssignDeliveryOrders(orderIds); }
 
 // ── Settlements ──
 export async function getPendingSettlements() { return settlementActions.getPendingSettlements(); }
