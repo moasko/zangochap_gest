@@ -124,6 +124,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   const [reproDate, setReproDate] = useState(() => dateInputValue(getNextDeliveryDate()));
   const [reopenOrder, setReopenOrder] = useState<DeliveryAdminOrder | null>(null);
   const [reopenNote, setReopenNote] = useState("");
+  const [autoAssignPreviewOrders, setAutoAssignPreviewOrders] = useState<DeliveryAdminOrder[]>([]);
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -178,16 +179,23 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   const handleAutoAssign = (ordersToAssign: DeliveryAdminOrder[]) => {
     if (ordersToAssign.length === 0) return;
-
-    if (!confirm(`Repartir automatiquement ${ordersToAssign.length} commande(s) non attribuee(s) entre les livreurs ?`)) {
+    if (deliverymen.length === 0) {
+      showToast("Aucun livreur disponible pour la repartition.", "error");
       return;
     }
 
+    setAutoAssignPreviewOrders(ordersToAssign);
+  };
+
+  const confirmAutoAssign = () => {
+    if (autoAssignPreviewOrders.length === 0) return;
+
     startTransition(async () => {
       try {
-        const result = await autoAssignDeliveryOrders(ordersToAssign.map((order) => order.id));
+        const result = await autoAssignDeliveryOrders(autoAssignPreviewOrders.map((order) => order.id));
         showToast(`${result.assignedCount} commande(s) repartie(s) automatiquement`, "success");
         setSelectedIds(new Set());
+        setAutoAssignPreviewOrders([]);
         router.refresh();
       } catch (e: unknown) {
         showToast(e instanceof Error ? e.message : "Erreur", "error");
@@ -361,12 +369,83 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     };
   }, [filteredOrders, riskOrders]);
 
+  const riderDayStats = useMemo(() => {
+    const countDate = filterDate || dateInputValue(new Date());
+    const statsByDriver: Record<string, { count: number; alerts: number }> = {};
+
+    deliverymen.forEach((driver) => {
+      statsByDriver[driver.id] = { count: 0, alerts: 0 };
+    });
+
+    activeOrders.forEach((order) => {
+      if (!order.deliverymanId || !matchesDateInput(order.deliveryDate, countDate)) return;
+
+      if (!statsByDriver[order.deliverymanId]) {
+        statsByDriver[order.deliverymanId] = { count: 0, alerts: 0 };
+      }
+
+      statsByDriver[order.deliverymanId].count += 1;
+      if (getOrderRisks(order).length > 0) {
+        statsByDriver[order.deliverymanId].alerts += 1;
+      }
+    });
+
+    return statsByDriver;
+  }, [activeOrders, deliverymen, filterDate]);
+
   const deliverymenByTodayLoad = useMemo(() => {
     return [...deliverymen].sort((a, b) => {
-      const countDiff = (riderLiveCounts[b.id] || 0) - (riderLiveCounts[a.id] || 0);
+      const countDiff = (riderDayStats[b.id]?.count || 0) - (riderDayStats[a.id]?.count || 0);
       return countDiff || a.name.localeCompare(b.name);
     });
-  }, [deliverymen, riderLiveCounts]);
+  }, [deliverymen, riderDayStats]);
+
+  const autoAssignPreviewGroups = useMemo(() => {
+    const groups: Record<string, { driver: Deliveryman; currentCount: number; orders: DeliveryAdminOrder[] }> = {};
+    const loads = new Map<string, number>();
+    const communeDriver = new Map<string, string>();
+    const countDate = filterDate || dateInputValue(new Date());
+
+    deliverymen.forEach((driver) => {
+      const currentCount = riderDayStats[driver.id]?.count || 0;
+      groups[driver.id] = { driver, currentCount, orders: [] };
+      loads.set(driver.id, currentCount);
+    });
+
+    activeOrders.forEach((order) => {
+      if (order.deliverymanId && order.commune && matchesDateInput(order.deliveryDate, countDate)) {
+        communeDriver.set(order.commune, order.deliverymanId);
+      }
+    });
+
+    [...autoAssignPreviewOrders]
+      .sort((a, b) => String(a.commune || "").localeCompare(String(b.commune || "")) || String(a.ref || "").localeCompare(String(b.ref || "")))
+      .forEach((order) => {
+        const sortedDrivers = [...deliverymen].sort((a, b) => {
+          const loadDiff = (loads.get(a.id) || 0) - (loads.get(b.id) || 0);
+          return loadDiff || a.name.localeCompare(b.name);
+        });
+        const lightest = sortedDrivers[0];
+        const existingDriverId = order.commune ? communeDriver.get(order.commune) : null;
+        const existingDriver = existingDriverId ? deliverymen.find((driver) => driver.id === existingDriverId) : null;
+        const selectedDriver = existingDriver && (loads.get(existingDriver.id) || 0) <= (loads.get(lightest.id) || 0) + 2
+          ? existingDriver
+          : lightest;
+
+        if (!selectedDriver) return;
+
+        if (order.commune && !communeDriver.has(order.commune)) {
+          communeDriver.set(order.commune, selectedDriver.id);
+        }
+
+        groups[selectedDriver.id].orders.push(order);
+        loads.set(selectedDriver.id, (loads.get(selectedDriver.id) || 0) + 1);
+      });
+
+    return Object.values(groups)
+      .filter((group) => group.orders.length > 0)
+      .sort((a, b) => b.orders.length - a.orders.length || a.driver.name.localeCompare(b.driver.name));
+  }, [activeOrders, autoAssignPreviewOrders, deliverymen, filterDate, riderDayStats]);
 
   // Group by date for the "history" view
   const groupedByDate = useMemo(() => {
@@ -566,13 +645,50 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
           <div className="rider-day-date">{filterDate ? formatDate(filterDate) : formatDate(new Date().toISOString())}</div>
         </div>
         <div className="rider-day-list">
-          {deliverymenByTodayLoad.map((driver) => (
-            <div key={driver.id} className="rider-day-pill">
-              <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-              <span>{driver.name}</span>
-              <strong>{riderLiveCounts[driver.id] || 0}</strong>
+          <button
+            type="button"
+            className={`rider-day-all ${filterDeliveryman === "ALL" ? "active" : ""}`}
+            onClick={() => {
+              setFilterDeliveryman("ALL");
+              setViewMode("table");
+            }}
+          >
+            Tous
+          </button>
+          {deliverymenByTodayLoad.map((driver) => {
+            const dayStats = riderDayStats[driver.id] || { count: 0, alerts: 0 };
+            const loadTone = dayStats.count === 0 ? "zero" : dayStats.count >= 10 ? "heavy" : dayStats.count >= 6 ? "medium" : "light";
+
+            return (
+            <div key={driver.id} className={`rider-day-pill ${loadTone} ${filterDeliveryman === driver.id ? "active" : ""}`}>
+              <button
+                type="button"
+                className="rider-day-main"
+                onClick={() => {
+                  setFilterDeliveryman(driver.id);
+                  setViewMode("table");
+                }}
+                title={`Afficher les colis de ${driver.name}`}
+              >
+                <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+                <span>{driver.name}</span>
+                {dayStats.alerts > 0 && <em>{dayStats.alerts} alerte(s)</em>}
+                <strong>{dayStats.count}</strong>
+              </button>
+              <button
+                type="button"
+                className="rider-day-sheet"
+                onClick={() => {
+                  setFilterDeliveryman(driver.id);
+                  setViewMode("sheet");
+                }}
+                disabled={dayStats.count === 0}
+                title={`Voir la fiche de ${driver.name}`}
+              >
+                <FileText size={13} />
+              </button>
             </div>
-          ))}
+          )})}
         </div>
       </div>
 
@@ -1267,6 +1383,68 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
           )}
         </div >
       )}
+
+{
+  autoAssignPreviewOrders.length > 0 && (
+    <Modal
+      isOpen
+      onClose={() => setAutoAssignPreviewOrders([])}
+      title="Apercu repartition automatique"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={() => setAutoAssignPreviewOrders([])} disabled={isPending}>
+            Annuler
+          </button>
+          <button className="btn-orange" onClick={confirmAutoAssign} disabled={isPending}>
+            <Zap size={14} /> Confirmer la repartition
+          </button>
+        </>
+      }
+    >
+      <div className="auto-preview">
+        <div className="auto-preview-head">
+          <div>
+            <span className="summary-label">Commandes a repartir</span>
+            <strong>{autoAssignPreviewOrders.length}</strong>
+          </div>
+          <div>
+            <span className="summary-label">Livreurs touches</span>
+            <strong>{autoAssignPreviewGroups.length}</strong>
+          </div>
+        </div>
+
+        <div className="auto-preview-list">
+          {autoAssignPreviewGroups.map(({ driver, currentCount, orders }) => {
+            const communes = Array.from(new Set(orders.map((order) => order.commune).filter(Boolean)));
+            return (
+              <div key={driver.id} className="auto-preview-group">
+                <div className="auto-preview-driver">
+                  <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+                  <div>
+                    <h4>{driver.name}</h4>
+                    <p>{currentCount} deja attribue(s) ce jour, {currentCount + orders.length} apres repartition</p>
+                  </div>
+                  <strong>+{orders.length}</strong>
+                </div>
+                <div className="auto-preview-communes">
+                  {communes.length > 0
+                    ? communes.map((commune) => <span key={commune}>{commune}</span>)
+                    : <span>Commune non definie</span>}
+                </div>
+                <div className="auto-preview-orders">
+                  {orders.slice(0, 5).map((order) => (
+                    <span key={order.id}>{order.ref}</span>
+                  ))}
+                  {orders.length > 5 && <span>+{orders.length - 5}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 {
   reopenOrder && (
