@@ -229,10 +229,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   const handleReopenDelivery = () => {
     if (!reopenOrder) return;
+    const note = reopenNote.trim();
+    if (!note) {
+      showToast("Ajoutez un motif de correction.", "error");
+      return;
+    }
 
     startTransition(async () => {
       try {
-        await reopenDeliveryOrder(reopenOrder.id, reopenNote);
+        await reopenDeliveryOrder(reopenOrder.id, note);
         showToast("Commande remise en livraison", "success");
         setReopenOrder(null);
         setReopenNote("");
@@ -1223,7 +1228,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                                   className="cell-btn-icon"
                                   onClick={() => setReopenOrder(o)}
                                   disabled={isPending || Boolean(o.settlementId)}
-                                  title={o.settlementId ? "Commande deja reglee" : "Remettre en livraison"}
+                                  title={o.settlementId ? "Commande deja reglee" : "Corriger une livraison"}
                                 >
                                   <Undo2 size={14} />
                                 </button>
@@ -1454,7 +1459,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setReopenOrder(null);
         setReopenNote("");
       }}
-      title={`Remettre en livraison ${reopenOrder.ref}`}
+      title={`Corriger la livraison ${reopenOrder.ref}`}
       footer={
         <>
           <button
@@ -1467,15 +1472,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
           >
             Annuler
           </button>
-          <button className="btn-orange" onClick={handleReopenDelivery} disabled={isPending}>
-            <Undo2 size={14} /> Remettre en livraison
+          <button className="btn-orange" onClick={handleReopenDelivery} disabled={isPending || !reopenNote.trim()}>
+            <Undo2 size={14} /> Corriger
           </button>
         </>
       }
     >
       <div className="repro-modal">
         <p>
-          Cette action remet la commande en statut En livraison pour permettre une correction.
+          Cette action remet la commande en statut En livraison pour corriger une erreur livreur.
           Elle est bloquee si la commande est deja rattachee a un reglement livreur.
         </p>
         {reopenOrder.status === "PARTIALLY_DELIVERED" && (
@@ -1483,7 +1488,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             Attention : pour une livraison partielle, les quantites modifiees ne sont pas restaurees automatiquement.
           </p>
         )}
-        <label className="field-label-sm" htmlFor="reopen-note">Motif de correction</label>
+        <label className="field-label-sm" htmlFor="reopen-note">Motif de correction obligatoire</label>
         <textarea
           id="reopen-note"
           className="field-input repro-note"

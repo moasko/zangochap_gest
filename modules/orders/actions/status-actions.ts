@@ -12,7 +12,7 @@ type UpdateOrderStatusResult = {
   order: any;
 };
 
-const CLOSED_DELIVERY_STATUSES = ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED'];
+const CLOSED_DELIVERY_STATUSES = ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED', 'REPRO_DISPO'];
 
 function normalizeAmountReceived(amountReceived?: number | null) {
   if (amountReceived === undefined || amountReceived === null) return undefined;
@@ -176,6 +176,7 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   revalidatePath("/zangochap-manager/logistics/labels");
   revalidatePath("/zangochap-manager/logistics/verification");
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/corrections");
   revalidatePath("/zangochap-manager/admin/delivery/settlement");
   revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/zangochap-rider");
@@ -187,6 +188,11 @@ export async function reopenDeliveryOrder(orderId: string, note?: string) {
   const session = await getSession();
   if (!session || !isRole(session, 'admin', 'developer')) {
     throw new Error("Action réservée aux administrateurs.");
+  }
+
+  const correctionNote = note?.trim();
+  if (!correctionNote) {
+    throw new Error("Un motif de correction est obligatoire.");
   }
 
   const order = await prisma.order.findUnique({
@@ -216,14 +222,12 @@ export async function reopenDeliveryOrder(orderId: string, note?: string) {
     by: session.email,
     byName: session.name,
   });
-  if (note?.trim()) {
-    history.push({
-      at: new Date().toISOString(),
-      action: `Motif correction admin: ${note.trim()}`,
-      by: session.email,
-      byName: session.name,
-    });
-  }
+  history.push({
+    at: new Date().toISOString(),
+    action: `Motif correction admin: ${correctionNote}`,
+    by: session.email,
+    byName: session.name,
+  });
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
@@ -238,8 +242,10 @@ export async function reopenDeliveryOrder(orderId: string, note?: string) {
   });
 
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/corrections");
   revalidatePath("/zangochap-manager/admin/delivery/settlement");
   revalidatePath("/zangochap-manager/orders");
+  revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/zangochap-rider");
 
   return { success: true, order: JSON.parse(JSON.stringify(updatedOrder)) };
@@ -389,5 +395,6 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
   revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/zangochap-rider");
   revalidatePath("/zangochap-manager/admin/delivery");
+  revalidatePath("/zangochap-manager/admin/delivery/corrections");
   return { success: true };
 }
