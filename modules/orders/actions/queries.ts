@@ -71,7 +71,7 @@ export function buildOrdersWhere(params: OrdersQueryParams, user: SessionUser | 
     where[dateField] = dateFilter;
   }
 
-  if (user?.role === "commercial") {
+  if (user?.role === "commercial" && params.scope !== "all") {
     const scopeFilter = { commercialId: user.id };
 
     if (where.OR) {

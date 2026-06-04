@@ -153,6 +153,25 @@
 .dashboard-product-info small { margin-top: 2px; color: var(--brown-soft); font-size: 10px; font-weight: 700; }
 .dashboard-product-item b { color: var(--orange); font-size: 14px; }
 .dashboard-empty-data { padding: 24px 16px; text-align: center; }
+.commercial-trend-chart { min-height: 280px; }
+.commercial-trend-chart .dashboard-trend-track { height: 178px; }
+.commercial-shortcuts { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.commercial-shortcut {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--cream);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 900;
+}
+.commercial-shortcut:hover { border-color: rgba(212,84,28,0.35); color: var(--orange); }
+.commercial-shortcut svg { color: var(--orange); flex: 0 0 auto; }
 
 @media (max-width: 1024px) {
   .dashboard-main-grid { grid-template-columns: 1fr; }

@@ -225,7 +225,7 @@ export default function OrdersClient({
     searchParams.get("commune") || "all",
   );
 
-  const [scope] = useState(
+  const [scope, setScope] = useState(
     searchParams.get("scope") || (user?.role === "commercial" ? "mine" : "all"),
   );
 
@@ -5825,6 +5825,17 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           ))}
         </select>
 
+        {user?.role === "commercial" && (
+          <select
+            className="filter-select"
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+          >
+            <option value="all">Toutes commandes</option>
+            <option value="mine">Mes commandes</option>
+          </select>
+        )}
+
         <div className="filter-spacer" />
 
         <div
@@ -5977,6 +5988,10 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
               <tbody>
                 {paginatedOrders.map((order: any) => {
                   const firstItem = order.items?.[0];
+                  const canManageOrder =
+                    user?.role === "admin" ||
+                    user?.role === "developer" ||
+                    (user?.role === "commercial" && order.commercialId === user?.id);
 
                   return (
                     <tr key={order.id}>
@@ -6110,10 +6125,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                             <Eye size={14} />
                           </button>
 
-                          {/* Commercials can only edit/dup/delete their own orders */}
-                          {(user?.role === "admin" ||
-                            user?.role === "commercial" ||
-                            user?.role === "developer") && (
+                          {canManageOrder && (
                               <>
                                 <button
                                   className="action-btn"
@@ -6148,9 +6160,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                               <MoreHorizontal size={14} />
                             </summary>
                             <div className="action-menu-panel">
-                              {(user?.role === "admin" ||
-                                user?.role === "commercial" ||
-                                user?.role === "developer") && (
+                              {canManageOrder && (
                                   <button
                                     type="button"
                                     className="action-menu-item"
@@ -6159,9 +6169,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                     <Copy size={14} /> Créer un échange
                                   </button>
                                 )}
-                              {(user?.role === "admin" ||
-                                user?.role === "commercial" ||
-                                user?.role === "developer") && (
+                              {canManageOrder && (
                                   <button
                                     type="button"
                                     className="action-menu-item"
@@ -6170,7 +6178,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                     <Calendar size={14} /> Reprogrammer
                                   </button>
                                 )}
-                              {![
+                              {canManageOrder && ![
                                 "DELIVERED",
                                 "CANCELLED",
                                 "REPRO_DISPO",
@@ -6190,9 +6198,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                               >
                                 <Printer size={14} /> Imprimer reçu
                               </button>
-                              {(user?.role === "admin" ||
-                                user?.role === "commercial" ||
-                                user?.role === "developer") && (
+                              {canManageOrder && (
                                   <button
                                     type="button"
                                     className="action-menu-item danger"

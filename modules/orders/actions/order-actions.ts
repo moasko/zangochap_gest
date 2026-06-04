@@ -328,6 +328,7 @@ export async function deleteOrder(orderId: string) {
   
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw new Error("Commande introuvable");
+  if (!checkOrderAccess(order, session)) throw new Error("Accès refusé");
 
   // Restore stock if it was already decremented
   if (order.stockDecremented) {
@@ -473,6 +474,7 @@ export async function addOrderHistoryEntry(orderId: string, action: string) {
   if (!session) return;
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return;
+  if (!checkOrderAccess(order, session)) return;
   const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
   history.push({ at: new Date().toISOString(), action, by: session.email, byName: session.name });
   await prisma.order.update({ where: { id: orderId }, data: { history } });
