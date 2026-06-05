@@ -60,7 +60,7 @@ const REPRO_DISPO_REASONS = [
 ];
 
 const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY"]);
-const DELIVERY_ASSIGNABLE_STATUSES = new Set(["CONFIRMED", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
   return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
@@ -281,6 +281,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       const matchesStatus = filterStatus === "ALL" ||
         (filterStatus === "UNASSIGNED" && !o.deliverymanId) ||
         (filterStatus === "ASSIGNED" && o.deliverymanId) ||
+        (filterStatus === "UNPACKED" && ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING"].includes(o.status)) ||
         (o.status === filterStatus);
 
       const matchesDriver = filterDeliveryman === "ALL" || o.deliverymanId === filterDeliveryman;
@@ -469,8 +470,34 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   // Today's assigned orders grouped by deliveryman for delivery sheets
   const todaySheets = useMemo(() => {
+    const safeSearchTerm = (searchTerm || "").toLowerCase();
+    const sheetBaseOrders = activeOrders.filter(o => {
+      const refText = String(o.ref || "").toLowerCase();
+      const customerText = String(o.customerName || "").toLowerCase();
+      const driverText = String(o.deliverymanName || "").toLowerCase();
+      const communeText = String(o.commune || "").toLowerCase();
+
+      const matchesSearch =
+        refText.includes(safeSearchTerm) ||
+        customerText.includes(safeSearchTerm) ||
+        driverText.includes(safeSearchTerm) ||
+        communeText.includes(safeSearchTerm);
+
+      const matchesStatus = filterStatus === "ALL" ||
+        (filterStatus === "UNASSIGNED" && !o.deliverymanId) ||
+        (filterStatus === "ASSIGNED" && o.deliverymanId) ||
+        (filterStatus === "UNPACKED" && ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING"].includes(o.status)) ||
+        (o.status === filterStatus);
+
+      const matchesDriver = filterDeliveryman === "ALL" || o.deliverymanId === filterDeliveryman;
+      const matchesCommune = filterCommune === "ALL" || o.commune === filterCommune;
+      const matchesDate = matchesDateInput(o.deliveryDate, filterDate) || (Boolean(o.deliverymanId) && !o.deliveryDate);
+
+      return matchesSearch && matchesStatus && matchesDriver && matchesCommune && matchesDate;
+    });
+
     // Get assigned orders + any BJ orders (except Cocody) based on current filters
-    const allRelevantOrders = filteredOrders.filter(o => {
+    const allRelevantOrders = sheetBaseOrders.filter(o => {
       const isBJToBroadcast = o.ref?.toUpperCase().startsWith("BJ") && !o.commune?.toLowerCase().includes("cocody");
       return DELIVERY_SHEET_STATUSES.has(o.status) && (o.deliverymanId || isBJToBroadcast);
     });
@@ -503,7 +530,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     });
 
     return Object.values(sheets);
-  }, [filteredOrders, deliverymen]);
+  }, [activeOrders, searchTerm, filterStatus, filterDeliveryman, filterCommune, filterDate, deliverymen]);
 
   const handleExportWord = (driverId?: string) => {
     const sheetsToExport = driverId
@@ -632,6 +659,33 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     URL.revokeObjectURL(url);
 
     showToast("Fiche exportée en Word ✓", "success");
+  };
+
+  const handlePrintSheet = (driverId?: string) => {
+    const sheets = Array.from(document.querySelectorAll(".delivery-sheet"));
+    if (sheets.length === 0) {
+      showToast("Aucune fiche a imprimer", "error");
+      return;
+    }
+
+    document.body.classList.add("delivery-print-mode");
+
+    if (driverId) {
+      sheets.forEach((sheet) => sheet.classList.add("print-hidden"));
+      document.getElementById(`sheet-${driverId}`)?.classList.remove("print-hidden");
+    } else {
+      sheets.forEach((sheet) => sheet.classList.remove("print-hidden"));
+    }
+
+    const cleanup = () => {
+      document.body.classList.remove("delivery-print-mode");
+      sheets.forEach((sheet) => sheet.classList.remove("print-hidden"));
+      window.removeEventListener("afterprint", cleanup);
+    };
+
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    window.setTimeout(cleanup, 1500);
   };
 
   return (
@@ -840,6 +894,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             { key: "ALL", label: "Toutes" },
             { key: "UNASSIGNED", label: "Non attribuées" },
             { key: "ASSIGNED", label: "Attribuées" },
+            { key: "UNPACKED", label: "Non emballees" },
             { key: "ON_DELIVERY", label: "En route" },
             { key: "PENDING", label: "En attente" },
           ].map(f => (
@@ -1261,7 +1316,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
               <button className="btn-secondary" onClick={() => handleExportWord()} style={{ gap: 8, borderColor: 'var(--blue)', color: 'var(--blue)' }}>
                 <Download size={14} /> Tout exporter Word
               </button>
-              <button className="btn-orange" onClick={() => window.print()} style={{ gap: 8 }}>
+              <button className="btn-orange" onClick={() => handlePrintSheet()} style={{ gap: 8 }}>
                 <Printer size={14} /> Tout imprimer
               </button>
             </div>
@@ -1300,12 +1355,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                         <button className="btn-print-single" onClick={() => handleExportWord(driver.id)} style={{ background: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }}>
                           <Download size={13} /> Word
                         </button>
-                        <button className="btn-print-single" onClick={() => {
-                          document.querySelectorAll('.delivery-sheet').forEach(el => el.classList.add('print-hidden'));
-                          document.getElementById(`sheet-${driver.id}`)?.classList.remove('print-hidden');
-                          window.print();
-                          document.querySelectorAll('.delivery-sheet').forEach(el => el.classList.remove('print-hidden'));
-                        }}>
+                        <button className="btn-print-single" onClick={() => handlePrintSheet(driver.id)}>
                           <Printer size={13} /> Imprimer
                         </button>
                       </div>

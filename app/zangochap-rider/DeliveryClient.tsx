@@ -21,6 +21,7 @@ import { calculateOrderCollectionTotal, calculatePartialSummary } from "./utils"
 // Actions
 import { updateOrderStatus, markPartialDelivery } from "@/modules/orders/actions";
 import { logoutAction } from "@/modules/auth/actions";
+import { sendOrderSupportAlert } from "@/modules/chat/actions";
 
 type AppTab = "missions" | "history" | "wallet" | "profile";
 type MissionFilter = "pending" | "current";
@@ -413,6 +414,18 @@ export default function DeliveryClient({
     });
   }, [selectedOrder, deliveredQuantities, returnReasons, includeDeliveryFee, router, showToast, orders]);
 
+  const handleSupportAlert = useCallback((orderId: string, reason: string, details?: string) => {
+    startTransition(async () => {
+      try {
+        const result = await sendOrderSupportAlert({ orderId, reason, details });
+        showToast(`Alerte envoyee a ${result.target}`, "success");
+        router.refresh();
+      } catch (error: unknown) {
+        showToast(error instanceof Error ? error.message : "Alerte impossible", "error");
+      }
+    });
+  }, [router, showToast]);
+
   return (
     <div className="h-[100dvh] overflow-hidden flex flex-col">
       <RiderGlobalStyles />
@@ -733,6 +746,7 @@ export default function DeliveryClient({
             partialSummary={partialSummary}
             onStatusUpdate={(id, status, amountReceived) => executeStatusUpdate(id, status, undefined, amountReceived)}
             onPartialConfirm={handlePartialConfirm}
+            onSupportAlert={handleSupportAlert}
             isPending={isPending}
           />
         )}

@@ -438,10 +438,16 @@
 
 /* ========== PRINT ========== */
 @media print {
-  @page { margin: 8mm 6mm; size: A4 landscape; }
+  @page { margin: 4mm 5mm; size: A4 landscape; }
 
   .no-print, .stats-grid, .filter-container, .toolbar, .bulk-bar,
-  nav, aside, header, .topbar, .lg\:hidden { display: none !important; }
+  .delivery-overview, .rider-day-strip, nav, aside, header, .topbar, .lg\:hidden {
+    display: none !important;
+  }
+
+  body.delivery-print-mode .content > :not(.delivery-sheets-container) {
+    display: none !important;
+  }
 
   /* Unlock ALL scroll containers */
   html, body {
@@ -458,7 +464,12 @@
     height: auto !important; width: 100% !important;
     position: static !important;
   }
-  .delivery-sheets-container { gap: 0 !important; }
+  .delivery-sheets-container {
+    display: block !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
 
   .delivery-sheet {
     border: none !important; border-radius: 0 !important;

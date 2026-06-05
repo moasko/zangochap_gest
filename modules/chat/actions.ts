@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { ChatMessageScope, Role } from "@prisma/client";
+import type { ChatMessageScope, Prisma, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/modules/auth/actions";
 
@@ -213,6 +213,106 @@ export async function sendChatMessage(data: {
 
   revalidatePath("/zangochap-manager/chat");
   return { success: true };
+}
+
+export async function sendOrderSupportAlert(data: {
+  orderId: string;
+  reason: string;
+  details?: string;
+}) {
+  const user = await requireChatSession();
+  if (user.role !== "LIVREUR" && user.role !== "ADMIN" && user.role !== "DEVELOPER") {
+    throw new Error("Action reservee aux livreurs.");
+  }
+
+  const reason = data.reason.trim();
+  const details = data.details?.trim();
+  if (!reason) throw new Error("Choisissez un motif.");
+  if (reason.length > 120) throw new Error("Motif trop long.");
+  if (details && details.length > 500) throw new Error("Message trop long.");
+
+  const order = await prisma.order.findUnique({
+    where: { id: data.orderId },
+    select: {
+      id: true,
+      ref: true,
+      customerName: true,
+      customerPhone: true,
+      customerLocation: true,
+      commune: true,
+      deliverymanId: true,
+      deliverymanName: true,
+      commercialId: true,
+      commercialName: true,
+      status: true,
+      total: true,
+      deliveryFee: true,
+      discount: true,
+      history: true,
+    },
+  });
+  if (!order) throw new Error("Commande introuvable.");
+
+  const canAlert =
+    user.role === "ADMIN" ||
+    user.role === "DEVELOPER" ||
+    order.deliverymanId === user.id;
+  if (!canAlert) throw new Error("Acces refuse pour cette commande.");
+
+  const amount = Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0);
+  const body = [
+    `[ALERTE LIVREUR] Commande ${order.ref || order.id}`,
+    `Motif: ${reason}`,
+    `Livreur: ${order.deliverymanName || user.name}`,
+    `Client: ${order.customerName} - ${order.customerPhone}`,
+    `Commune: ${order.commune || "Non definie"}`,
+    `Adresse: ${order.customerLocation || "Non renseignee"}`,
+    `Statut: ${order.status}`,
+    `Montant: ${amount} F`,
+    details ? `Message: ${details}` : null,
+  ].filter(Boolean).join("\n");
+
+  await prisma.chatMessage.create({
+    data: {
+      body,
+      scope: order.commercialId ? "DIRECT" : "ROLE",
+      targetRole: order.commercialId ? null : "COMMERCIAL",
+      recipientId: order.commercialId || null,
+      senderId: user.id,
+      senderName: user.name,
+      senderRole: user.role,
+      reads: {
+        create: { userId: user.id },
+      },
+    },
+  });
+
+  const history: Prisma.InputJsonValue[] = Array.isArray(order.history)
+    ? [...(order.history as Prisma.InputJsonValue[])]
+    : [];
+  const nextHistory = [
+    ...history,
+    {
+      at: new Date().toISOString(),
+      action: `Alerte call center: ${reason}${order.commercialName ? ` (${order.commercialName})` : ""}`,
+      by: user.email,
+      byName: user.name,
+    },
+  ] as Prisma.InputJsonValue;
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      history: nextHistory,
+    },
+  });
+
+  revalidatePath("/zangochap-manager/chat");
+  revalidatePath("/zangochap-rider");
+  return {
+    success: true,
+    target: order.commercialName || "Call center",
+  };
 }
 
 export async function markChatMessagesRead(messageIds: string[]) {

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   X, Phone, MessageCircle, Package,
   Check, RotateCcw, ChevronRight, MapPin, Banknote, CheckCircle2,
-  AlertCircle, Users, CheckSquare, Square, Navigation, Send, CalendarClock, StickyNote
+  AlertCircle, Users, CheckSquare, Square, Send, CalendarClock, StickyNote, Headset
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatPrice } from "@/lib/constants";
@@ -29,6 +29,15 @@ const PARTIAL_REASONS = [
 ];
 
 // ── Types ────────────────────────────────────────────────────
+const SUPPORT_REASONS = [
+  "Client ne repond pas",
+  "Adresse confuse",
+  "Client demande confirmation",
+  "Montant conteste",
+  "Besoin d'aide urgent",
+  "Autre",
+];
+
 interface OrderDetailsSheetProps {
   order: RiderOrder;
   onClose: () => void;
@@ -43,6 +52,7 @@ interface OrderDetailsSheetProps {
   partialSummary: { subtotal: number; total: number; fee: number };
   onStatusUpdate: (id: string, status: string, amountReceived?: number) => void;
   onPartialConfirm: (amountReceived?: number) => void;
+  onSupportAlert: (orderId: string, reason: string, details?: string) => void;
   isPending: boolean;
 }
 
@@ -61,9 +71,13 @@ export function OrderDetailsSheet({
   partialSummary,
   onStatusUpdate,
   onPartialConfirm,
+  onSupportAlert,
   isPending,
 }: OrderDetailsSheetProps) {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportReason, setSupportReason] = useState("");
+  const [supportDetails, setSupportDetails] = useState("");
   
   useEffect(() => {
     setCheckedItems({});
@@ -104,12 +118,12 @@ export function OrderDetailsSheet({
     window.open(`https://wa.me/${p}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const openMaps = () => {
-    if (!order.customerLocation) return;
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      order.customerLocation + (order.commune ? `, ${order.commune}` : "") + ", Ivory Coast"
-    )}`;
-    window.open(url, "_blank");
+  const handleSupportSubmit = () => {
+    if (!supportReason) return;
+    onSupportAlert(order.id, supportReason, supportDetails);
+    setSupportOpen(false);
+    setSupportReason("");
+    setSupportDetails("");
   };
 
   return (
@@ -219,6 +233,33 @@ export function OrderDetailsSheet({
                 ))}
               </div>
 
+            </div>
+
+            <div className="bg-[#0F172A] rounded-sm p-3 border border-[#1E293B] text-white space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-[#FDBA74]">
+                    <Headset size={14} />
+                    Call center
+                  </div>
+                  <p className="mt-1 text-[12px] font-semibold leading-relaxed text-white/70">
+                    Alertez le bureau sans appel telephonique.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSupportOpen(true)}
+                  disabled={isPending}
+                  className="shrink-0 rounded-sm bg-[#FF6B2C] px-3 py-2 text-[12px] font-black text-white active:scale-95 disabled:opacity-50"
+                >
+                  Alerter
+                </button>
+              </div>
+              {order.commercial && (
+                <div className="rounded-sm border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-bold text-white/75">
+                  Destinataire: {order.commercial.name}
+                </div>
+              )}
             </div>
 
             {/* Checklist Info Banner */}
@@ -464,6 +505,77 @@ export function OrderDetailsSheet({
             </button>
           )}
         </div>
+
+        {supportOpen && (
+          <div className="absolute inset-0 z-[160] flex items-end justify-center">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setSupportOpen(false)}
+              aria-label="Fermer"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              className="relative z-10 w-full rounded-t-sm bg-white p-4 border-t border-[#E5E7EB]"
+            >
+              <div className="mx-auto mb-4 h-1 w-10 rounded-sm bg-[#E5E7EB]" />
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-[#0F172A] text-white">
+                  <Headset size={19} />
+                </div>
+                <div>
+                  <h3 className="text-[18px] font-black text-[#111827]">Alerter le call center</h3>
+                  <p className="mt-1 text-[12px] font-semibold leading-relaxed text-[#64748B]">
+                    Le message part dans le chat interne avec les infos de cette commande.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                {SUPPORT_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setSupportReason(reason)}
+                    className={`min-h-10 rounded-sm border px-2.5 py-2 text-left text-[11px] font-black transition-colors ${
+                      supportReason === reason
+                        ? "border-[#0F172A] bg-[#0F172A] text-white"
+                        : "border-[#E5E7EB] bg-[#F8FAFC] text-[#334155]"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={supportDetails}
+                onChange={(event) => setSupportDetails(event.target.value)}
+                maxLength={500}
+                placeholder="Detail utile pour le bureau..."
+                className="min-h-20 w-full resize-none rounded-sm border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-3 text-[13px] font-semibold text-[#111827] outline-none focus:border-[#334155]"
+              />
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSupportOpen(false)}
+                  className="flex-1 rounded-sm bg-[#F3F4F6] py-2.5 text-[13px] font-bold text-[#374151]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSupportSubmit}
+                  disabled={!supportReason || isPending}
+                  className="flex-[1.4] rounded-sm bg-[#FF6B2C] py-2.5 text-[13px] font-black text-white disabled:opacity-50"
+                >
+                  Envoyer l&apos;alerte
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

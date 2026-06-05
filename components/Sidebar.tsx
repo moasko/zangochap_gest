@@ -143,8 +143,8 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
       return (await res.json()) as SidebarCounts;
     },
     initialData: initialCounts || defaultCounts,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 8_000,
+    staleTime: 5_000,
     refetchOnWindowFocus: false,
   });
 

@@ -2,14 +2,23 @@
 
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { getSession } from "@/modules/auth/actions";
 import { isRole } from "../helpers";
+import { decrementStockForOrder } from "./stock";
 
-const ASSIGNABLE_DELIVERY_STATUSES = ["CONFIRMED", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
+const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
 
 type DeliveryAssignmentOrder = {
   status: string;
   settlementId: string | null;
+};
+
+type DeliveryAssignmentOrderWithItems = DeliveryAssignmentOrder & {
+  id: string;
+  ref: string | null;
+  stockDecremented: boolean;
+  items: unknown[];
 };
 
 function assertCanManageDeliveryAssignment(session: Awaited<ReturnType<typeof getSession>>) {
@@ -30,9 +39,12 @@ function assertOrderCanBeAssigned(order: DeliveryAssignmentOrder) {
 
 function getAssignmentStatusUpdate(order: DeliveryAssignmentOrder, isUnassigning: boolean) {
   if (isUnassigning) return {};
-  return ["PACKED", "REPRO_DISPO"].includes(order.status)
-    ? { status: "ON_DELIVERY" as const }
-    : {};
+  return order.status === "ON_DELIVERY" ? {} : { status: "ON_DELIVERY" as const };
+}
+
+async function ensureDeliveryStock(order: DeliveryAssignmentOrderWithItems, session: NonNullable<Awaited<ReturnType<typeof getSession>>>, tx: Prisma.TransactionClient) {
+  if (order.status === "ON_DELIVERY" || order.stockDecremented) return;
+  await decrementStockForOrder(order, session, tx);
 }
 
 function revalidateDeliveryAssignmentPaths() {
@@ -48,7 +60,10 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
   const session = await getSession();
   assertCanManageDeliveryAssignment(session);
 
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
   if (!order) throw new Error("Commande introuvable");
 
   assertOrderCanBeAssigned(order);
@@ -74,14 +89,20 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
     byName: session!.name,
   });
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      deliverymanId: isUnassigning ? null : deliverymanId,
-      deliverymanName: isUnassigning ? null : driver?.name,
-      ...getAssignmentStatusUpdate(order, isUnassigning),
-      history,
-    },
+  await prisma.$transaction(async (tx) => {
+    if (!isUnassigning) {
+      await ensureDeliveryStock(order, session!, tx);
+    }
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        deliverymanId: isUnassigning ? null : deliverymanId,
+        deliverymanName: isUnassigning ? null : driver?.name,
+        ...getAssignmentStatusUpdate(order, isUnassigning),
+        history,
+      },
+    });
   });
 
   revalidateDeliveryAssignmentPaths();
@@ -106,6 +127,7 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
 
   const orders = await prisma.order.findMany({
     where: { id: { in: orderIds } },
+    include: { items: true },
   });
 
   if (orders.length !== orderIds.length) {
@@ -127,14 +149,20 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
       byName: session!.name,
     });
 
-    return prisma.order.update({
-      where: { id: order.id },
-      data: {
-        deliverymanId: isUnassigning ? null : deliverymanId,
-        deliverymanName: isUnassigning ? null : driver?.name,
-        ...getAssignmentStatusUpdate(order, isUnassigning),
-        history,
-      },
+    return prisma.$transaction(async (tx) => {
+      if (!isUnassigning) {
+        await ensureDeliveryStock(order, session!, tx);
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          deliverymanId: isUnassigning ? null : deliverymanId,
+          deliverymanName: isUnassigning ? null : driver?.name,
+          ...getAssignmentStatusUpdate(order, isUnassigning),
+          history,
+        },
+      });
     });
   }));
 
@@ -154,6 +182,7 @@ export async function autoAssignDeliveryOrders(orderIds: string[]) {
     prisma.order.findMany({
       where: { id: { in: uniqueIds } },
       orderBy: [{ commune: "asc" }, { updatedAt: "asc" }],
+      include: { items: true },
     }),
     prisma.user.findMany({
       where: { role: "LIVREUR" },
@@ -220,14 +249,18 @@ export async function autoAssignDeliveryOrders(orderIds: string[]) {
       byName: session!.name,
     });
 
-    return prisma.order.update({
-      where: { id: order.id },
-      data: {
-        deliverymanId: selectedDriver.id,
-        deliverymanName: selectedDriver.name,
-        ...getAssignmentStatusUpdate(order, false),
-        history,
-      },
+    return prisma.$transaction(async (tx) => {
+      await ensureDeliveryStock(order, session!, tx);
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          deliverymanId: selectedDriver.id,
+          deliverymanName: selectedDriver.name,
+          ...getAssignmentStatusUpdate(order, false),
+          history,
+        },
+      });
     });
   }));
 
