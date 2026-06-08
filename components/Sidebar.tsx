@@ -9,6 +9,8 @@ import { logoutAction } from "@/modules/auth/actions";
 import { ROLE_LABELS } from "@/lib/constants";
 import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 import { useToast } from "@/components/Toast";
+import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
+import { getLatestUnreadRiderMessage } from "@/modules/chat/actions";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
 import {
@@ -133,6 +135,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [isNarrowDesktop, setIsNarrowDesktop] = useState(false);
+  const [riderAlert, setRiderAlert] = useState<RiderMessageAlert | null>(null);
   const { showToast } = useToast();
 
   const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0, riderChatUnread: 0 };
@@ -180,6 +183,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
 
   // Counts tracking
   const prevCounts = useRef<SidebarCounts | null>(null);
+  const prevRiderAlertCount = useRef<number | null>(null);
   useEffect(() => {
     if (!prevCounts.current) {
       prevCounts.current = counts;
@@ -201,12 +205,53 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   }, [counts, pathname, showToast]);
 
   useEffect(() => {
+    if (pathname === "/zangochap-manager/chat") {
+      prevRiderAlertCount.current = counts.riderChatUnread || 0;
+      return;
+    }
+
+    if (prevRiderAlertCount.current === null) {
+      prevRiderAlertCount.current = counts.riderChatUnread || 0;
+      return;
+    }
+
+    const hasNewRiderAlert = (counts.riderChatUnread || 0) > prevRiderAlertCount.current;
+    prevRiderAlertCount.current = counts.riderChatUnread || 0;
+    if (!hasNewRiderAlert) return;
+
+    getLatestUnreadRiderMessage()
+      .then((message) => {
+        setRiderAlert(message || {
+          id: `rider-alert-${Date.now()}`,
+          senderName: "Livreur",
+          body: "Un livreur a envoye une alerte dans le chat interne.",
+        });
+      })
+      .catch(() => {
+        setRiderAlert({
+          id: `rider-alert-${Date.now()}`,
+          senderName: "Livreur",
+          body: "Un livreur a envoye une alerte dans le chat interne.",
+        });
+      });
+  }, [counts.riderChatUnread, pathname]);
+
+  useEffect(() => {
     setIsMobileOpen(false);
     setShowNotifications(false);
   }, [pathname]);
 
   return (
     <>
+      <AnimatePresence>
+        {riderAlert && (
+          <RiderMessageAlertOverlay
+            alert={riderAlert}
+            onClose={() => setRiderAlert(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* MOBILE TOP BAR */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-[60px] bg-white border-b border-[#E5E5EA] flex items-center justify-between px-4 z-[9999] text-[#1C1C1E]">
         <button className="bg-transparent border-none p-2 relative" onClick={() => setIsMobileOpen(true)}><Menu size={24} /></button>

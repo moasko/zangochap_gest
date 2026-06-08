@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Bell, Hash, Lock, MessageCircle, Pin, RefreshCw, Search, Send, Shield, Trash2, Users } from "lucide-react";
 import { ROLE_LABELS } from "@/lib/constants";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/modules/chat/actions";
 import { useToast } from "@/components/Toast";
 import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
+import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 
 const STAFF_ROLES = ["ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR", "DEVELOPER"] as const;
 
@@ -47,6 +49,7 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [isPinned, setIsPinned] = useState(false);
+  const [riderAlert, setRiderAlert] = useState<RiderMessageAlert | null>(null);
   const [isPending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
   const notifiedRiderMessagesRef = useRef(new Set(initialSnapshot.messages.map((item) => item.id)));
@@ -151,6 +154,12 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
     playRiderMessageSound();
     showToast(`Message livreur - ${message}`, "success");
     showBrowserNotification("Message livreur ZangoChap", message);
+    setRiderAlert({
+      id: latest.id,
+      senderName: latest.senderName,
+      body: latest.body,
+      createdAt: latest.createdAt,
+    });
   }, [snapshot.messages, currentUser.id, showToast]);
 
   const handleSend = () => {
@@ -192,6 +201,15 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
 
   return (
     <div className="chat-shell">
+      <AnimatePresence>
+        {riderAlert && (
+          <RiderMessageAlertOverlay
+            alert={riderAlert}
+            onClose={() => setRiderAlert(null)}
+          />
+        )}
+      </AnimatePresence>
+
       <aside className="chat-sidebar">
         <div className="chat-side-header">
           <div>

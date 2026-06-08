@@ -43,6 +43,13 @@ export type ChatSnapshot = {
   unreadCount: number;
 };
 
+export type RiderMessageAlertView = {
+  id: string;
+  body: string;
+  senderName: string;
+  createdAt: string;
+};
+
 function normalizeRole(role?: string | null) {
   return String(role || "").toUpperCase() as Role;
 }
@@ -155,6 +162,35 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
       readByMe: message.senderId === user.id || message.reads.length > 0,
     })),
     unreadCount,
+  };
+}
+
+export async function getLatestUnreadRiderMessage(): Promise<RiderMessageAlertView | null> {
+  const user = await requireChatSession();
+
+  const message = await prisma.chatMessage.findFirst({
+    where: {
+      ...visibleMessageWhere(user.id, user.role),
+      senderRole: "LIVREUR",
+      senderId: { not: user.id },
+      reads: { none: { userId: user.id } },
+    },
+    select: {
+      id: true,
+      body: true,
+      senderName: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!message) return null;
+
+  return {
+    id: message.id,
+    body: message.body,
+    senderName: message.senderName,
+    createdAt: message.createdAt.toISOString(),
   };
 }
 
