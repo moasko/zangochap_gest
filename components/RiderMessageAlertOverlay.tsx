@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, MessageCircle, X } from "lucide-react";
+import { AlertTriangle, Clock, MapPin, MessageCircle, Phone, UserRound, X } from "lucide-react";
 import { motion } from "framer-motion";
 
 export type RiderMessageAlert = {
@@ -16,76 +16,121 @@ type RiderMessageAlertOverlayProps = {
   onClose: () => void;
 };
 
+function parseAlertBody(body: string) {
+  return body.split("\n").reduce<Record<string, string>>((acc, line) => {
+    const [label, ...rest] = line.split(":");
+    if (rest.length > 0) acc[label.trim().toLowerCase()] = rest.join(":").trim();
+    return acc;
+  }, {});
+}
+
 export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessageAlertOverlayProps) {
   if (!alert) return null;
+
+  const details = parseAlertBody(alert.body);
+  const title = alert.body.split("\n")[0]?.replace("[ALERTE LIVREUR]", "").trim() || "Alerte livreur";
+  const message = details.message || details.motif || alert.body;
+  const client = details.client || "Client non precise";
+  const commune = details.commune || "Commune non precisee";
+  const address = details.adresse || "Adresse non renseignee";
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-[#07111F] px-4 py-6 text-white"
+      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-[#07111F] px-3 py-4 text-white sm:px-6"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="rider-alert-title"
     >
       <div className="absolute inset-x-0 top-0 h-2 bg-[#FF6B2C]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#FF6B2C33,transparent_34%),linear-gradient(135deg,#07111F_0%,#0F172A_60%,#111827_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#FF6B2C40,transparent_30%),radial-gradient(circle_at_bottom_right,#1E40AF33,transparent_30%),linear-gradient(135deg,#07111F_0%,#0F172A_56%,#111827_100%)]" />
 
       <motion.div
         initial={{ scale: 0.96, y: 18 }}
         animate={{ scale: 1, y: 0 }}
         transition={{ type: "spring", damping: 20, stiffness: 180 }}
-        className="relative z-10 w-full max-w-4xl border border-white/12 bg-white/8 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:p-8"
+        className="relative z-10 w-full max-w-5xl overflow-hidden rounded-lg border border-white/12 bg-[#0B1220]/92 shadow-[0_28px_90px_rgba(0,0,0,0.5)] backdrop-blur-xl"
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/15"
+          className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/15"
           aria-label="Fermer l'alerte"
         >
           <X size={22} />
         </button>
 
-        <div className="mb-8 flex items-center gap-4 pr-14">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-[#FF6B2C] text-white shadow-[0_0_0_10px_rgba(255,107,44,0.14)]">
-            <AlertTriangle size={34} strokeWidth={2.6} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-black uppercase tracking-[0.2em] text-[#FDBA74]">
-              Alerte livreur
-            </p>
-            <h2 id="rider-alert-title" className="mt-2 text-[32px] font-black leading-tight tracking-normal text-white sm:text-[46px]">
-              Message urgent pour le call center
-            </h2>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-          <div className="rounded-md border border-white/10 bg-white/10 p-4">
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-white/45">Livreur</p>
-            <p className="mt-2 break-words text-[24px] font-black leading-tight text-white">{alert.senderName}</p>
-            {alert.createdAt && (
-              <p className="mt-3 text-[12px] font-bold text-white/55">
-                {new Intl.DateTimeFormat("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  day: "2-digit",
-                  month: "short",
-                }).format(new Date(alert.createdAt))}
+        <div className="border-b border-white/10 bg-white/[0.04] px-5 pb-5 pt-6 sm:px-8 sm:pb-7 sm:pt-8">
+          <div className="flex items-start gap-4 pr-14">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#FF6B2C] text-white shadow-[0_0_0_10px_rgba(255,107,44,0.15)]">
+              <AlertTriangle size={34} strokeWidth={2.7} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[12px] font-black uppercase tracking-[0.24em] text-[#FDBA74]">
+                Assistance livreur
               </p>
-            )}
-          </div>
-
-          <div className="min-h-48 rounded-md border border-[#FF6B2C]/35 bg-[#FF6B2C]/12 p-4 sm:p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#FDBA74]">Message</p>
-            <p className="mt-3 max-h-[42dvh] overflow-y-auto whitespace-pre-wrap break-words text-[18px] font-bold leading-relaxed text-white sm:text-[22px]">
-              {alert.body}
-            </p>
+              <h2 id="rider-alert-title" className="mt-2 text-[30px] font-black leading-tight tracking-normal text-white sm:text-[44px]">
+                {title}
+              </h2>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] font-black uppercase tracking-[0.12em] text-white/70">
+                <span className="rounded-md bg-[#FF6B2C]/18 px-3 py-1.5 text-[#FDBA74]">Urgent</span>
+                <span className="rounded-md bg-white/8 px-3 py-1.5">Call center</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="min-w-0">
+            <div className="rounded-lg border border-[#FF6B2C]/35 bg-[#FF6B2C]/12 p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-2 text-[#FDBA74]">
+                <MessageCircle size={20} />
+                <p className="text-[12px] font-black uppercase tracking-[0.18em]">Message a traiter</p>
+              </div>
+              <p className="max-h-[42dvh] overflow-y-auto whitespace-pre-wrap break-words text-[22px] font-black leading-snug text-white sm:text-[30px]">
+                {message}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <InfoTile icon={<Phone size={18} />} label="Client" value={client} />
+              <InfoTile icon={<MapPin size={18} />} label="Commune" value={commune} />
+              <InfoTile icon={<MapPin size={18} />} label="Adresse" value={address} wide />
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="rounded-lg border border-white/10 bg-white/8 p-5">
+              <div className="mb-3 flex items-center gap-2 text-white/55">
+                <UserRound size={18} />
+                <p className="text-[11px] font-black uppercase tracking-[0.18em]">Livreur</p>
+              </div>
+              <p className="break-words text-[28px] font-black leading-tight text-white">{alert.senderName}</p>
+              {alert.createdAt && (
+                <div className="mt-4 flex items-center gap-2 text-[13px] font-bold text-white/60">
+                  <Clock size={15} />
+                  {new Intl.DateTimeFormat("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    day: "2-digit",
+                    month: "short",
+                  }).format(new Date(alert.createdAt))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/6 p-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/45">Resume brut</p>
+              <p className="mt-3 max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-[13px] font-bold leading-relaxed text-white/70">
+                {alert.body}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.035] p-5 sm:flex-row sm:justify-end sm:px-8">
           <button
             type="button"
             onClick={onClose}
@@ -104,5 +149,27 @@ export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessag
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function InfoTile({
+  icon,
+  label,
+  value,
+  wide = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border border-white/10 bg-white/8 p-4 ${wide ? "sm:col-span-2" : ""}`}>
+      <div className="mb-2 flex items-center gap-2 text-white/50">
+        {icon}
+        <p className="text-[11px] font-black uppercase tracking-[0.16em]">{label}</p>
+      </div>
+      <p className="break-words text-[15px] font-black leading-snug text-white">{value}</p>
+    </div>
   );
 }
