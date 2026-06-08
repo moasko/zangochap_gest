@@ -47,3 +47,13 @@ export function showBrowserNotification(title: string, body: string) {
     // The in-app toast remains the reliable on-screen notification.
   }
 }
+
+export function hasSeenRiderAlert(id: string) {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(`zangochap:rider-alert:${id}`) === "1";
+}
+
+export function markRiderAlertSeen(id: string) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(`zangochap:rider-alert:${id}`, "1");
+}

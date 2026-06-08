@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { logoutAction } from "@/modules/auth/actions";
 import { ROLE_LABELS } from "@/lib/constants";
-import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
+import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 import { useToast } from "@/components/Toast";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 import { getLatestUnreadRiderMessage } from "@/modules/chat/actions";
@@ -158,6 +158,16 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const sections = useMemo(() => (NAV_FOR_ROLE[roleKey] || NAV_FOR_ROLE.admin)(counts), [roleKey, counts]);
   const roleLabel = ROLE_LABELS[user.role] || user.role;
   const effectiveCollapsed = isCollapsed || isNarrowDesktop;
+  const showRiderAlert = useCallback((alert: RiderMessageAlert) => {
+    if (hasSeenRiderAlert(alert.id)) return;
+
+    markRiderAlertSeen(alert.id);
+    setHasNewNotifications(true);
+    playRiderMessageSound();
+    showToast("Nouveau message d'un livreur", "success");
+    showBrowserNotification("Message livreur ZangoChap", `${alert.senderName}: ${alert.body.slice(0, 140)}`);
+    setRiderAlert(alert);
+  }, [showToast]);
 
   // Track Online/Offline Status
   useEffect(() => {
@@ -181,6 +191,20 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const source = new EventSource("/api/chat/rider-alerts/stream");
+
+    source.addEventListener("rider-alert", (event) => {
+      try {
+        showRiderAlert(JSON.parse((event as MessageEvent).data) as RiderMessageAlert);
+      } catch {
+        // Keep the fallback polling path alive if an event is malformed.
+      }
+    });
+
+    return () => source.close();
+  }, [showRiderAlert]);
+
   // Counts tracking
   const prevCounts = useRef<SidebarCounts | null>(null);
   const prevRiderAlertCount = useRef<number | null>(null);
@@ -195,7 +219,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     const newRiderMessage = (counts.riderChatUnread || 0) > (prevCounts.current.riderChatUnread || 0);
 
     if (newPacking || newOrders || newRiderMessage) setHasNewNotifications(true);
-    if (newRiderMessage && pathname !== "/zangochap-manager/chat") {
+    if (newRiderMessage && pathname === "__polling_rider_alert_disabled__") {
       playRiderMessageSound();
       showToast("Nouveau message d'un livreur", "success");
       showBrowserNotification("Message livreur ZangoChap", "Un livreur a envoyé une alerte dans le chat interne.");
@@ -221,20 +245,20 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
 
     getLatestUnreadRiderMessage()
       .then((message) => {
-        setRiderAlert(message || {
+        showRiderAlert(message || {
           id: `rider-alert-${Date.now()}`,
           senderName: "Livreur",
           body: "Un livreur a envoye une alerte dans le chat interne.",
         });
       })
       .catch(() => {
-        setRiderAlert({
+        showRiderAlert({
           id: `rider-alert-${Date.now()}`,
           senderName: "Livreur",
           body: "Un livreur a envoye une alerte dans le chat interne.",
         });
       });
-  }, [counts.riderChatUnread, pathname]);
+  }, [counts.riderChatUnread, pathname, showRiderAlert]);
 
   useEffect(() => {
     setIsMobileOpen(false);

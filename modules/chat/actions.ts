@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ChatMessageScope, Prisma, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/modules/auth/actions";
+import { emitRiderAlert } from "@/lib/rider-alert-events";
 
 const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
 
@@ -308,12 +309,16 @@ export async function sendOrderSupportAlert(data: {
     details ? `Message: ${details}` : null,
   ].filter(Boolean).join("\n");
 
-  await prisma.chatMessage.create({
+  const alertScope = order.commercialId ? "DIRECT" : "ROLE";
+  const alertTargetRole = order.commercialId ? null : "COMMERCIAL";
+  const alertRecipientId = order.commercialId || null;
+
+  const chatMessage = await prisma.chatMessage.create({
     data: {
       body,
-      scope: order.commercialId ? "DIRECT" : "ROLE",
-      targetRole: order.commercialId ? null : "COMMERCIAL",
-      recipientId: order.commercialId || null,
+      scope: alertScope,
+      targetRole: alertTargetRole,
+      recipientId: alertRecipientId,
       senderId: user.id,
       senderName: user.name,
       senderRole: user.role,
@@ -321,6 +326,16 @@ export async function sendOrderSupportAlert(data: {
         create: { userId: user.id },
       },
     },
+  });
+
+  emitRiderAlert({
+    id: chatMessage.id,
+    body,
+    senderName: user.name,
+    createdAt: chatMessage.createdAt.toISOString(),
+    scope: alertScope,
+    targetRole: alertTargetRole,
+    recipientId: alertRecipientId,
   });
 
   const history: Prisma.InputJsonValue[] = Array.isArray(order.history)

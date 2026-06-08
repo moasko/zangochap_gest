@@ -15,7 +15,7 @@ import {
   type ChatUserView,
 } from "@/modules/chat/actions";
 import { useToast } from "@/components/Toast";
-import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
+import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 
 const STAFF_ROLES = ["ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR", "DEVELOPER"] as const;
@@ -148,6 +148,9 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
     if (newRiderMessages.length === 0) return;
 
     const latest = newRiderMessages[newRiderMessages.length - 1];
+    if (hasSeenRiderAlert(latest.id)) return;
+
+    markRiderAlertSeen(latest.id);
     const preview = latest.body.replace(/\s+/g, " ").trim().slice(0, 90);
     const message = `${latest.senderName}: ${preview}`;
 
