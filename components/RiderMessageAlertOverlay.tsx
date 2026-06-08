@@ -7,12 +7,14 @@ import { motion } from "framer-motion";
 export type RiderMessageAlert = {
   id: string;
   senderName: string;
+  senderPhone?: string | null;
   body: string;
   createdAt?: string;
 };
 
 type RiderMessageAlertOverlayProps = {
   alert: RiderMessageAlert | null;
+  pendingCount?: number;
   onClose: () => void;
 };
 
@@ -24,7 +26,7 @@ function parseAlertBody(body: string) {
   }, {});
 }
 
-export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessageAlertOverlayProps) {
+export default function RiderMessageAlertOverlay({ alert, pendingCount = 0, onClose }: RiderMessageAlertOverlayProps) {
   if (!alert) return null;
 
   const details = parseAlertBody(alert.body);
@@ -33,6 +35,7 @@ export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessag
   const client = details.client || "Client non precise";
   const commune = details.commune || "Commune non precisee";
   const address = details.adresse || "Adresse non renseignee";
+  const riderPhone = alert.senderPhone || details["telephone livreur"] || details["tel livreur"] || "Numero non renseigne";
 
   return (
     <motion.div
@@ -77,6 +80,11 @@ export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessag
               <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] font-black uppercase tracking-[0.12em] text-white/70">
                 <span className="rounded-md bg-[#FF6B2C]/18 px-3 py-1.5 text-[#FDBA74]">Urgent</span>
                 <span className="rounded-md bg-white/8 px-3 py-1.5">Call center</span>
+                {pendingCount > 0 && (
+                  <span className="rounded-md bg-[#1E40AF]/35 px-3 py-1.5 text-[#BFDBFE]">
+                    {pendingCount} en attente
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -108,6 +116,13 @@ export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessag
                 <p className="text-[11px] font-black uppercase tracking-[0.18em]">Livreur</p>
               </div>
               <p className="break-words text-[28px] font-black leading-tight text-white">{alert.senderName}</p>
+              <div className="mt-4 rounded-md border border-white/10 bg-white/8 p-3">
+                <div className="mb-1 flex items-center gap-2 text-white/50">
+                  <Phone size={15} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em]">Numero livreur</p>
+                </div>
+                <p className="break-words text-[18px] font-black text-white">{riderPhone}</p>
+              </div>
               {alert.createdAt && (
                 <div className="mt-4 flex items-center gap-2 text-[13px] font-bold text-white/60">
                   <Clock size={15} />
@@ -136,7 +151,7 @@ export default function RiderMessageAlertOverlay({ alert, onClose }: RiderMessag
             onClick={onClose}
             className="min-h-12 rounded-md border border-white/10 bg-white/10 px-5 text-[14px] font-black text-white transition-colors hover:bg-white/15"
           >
-            Fermer
+            {pendingCount > 0 ? "Alerte suivante" : "Fermer"}
           </button>
           <Link
             href="/zangochap-manager/chat"

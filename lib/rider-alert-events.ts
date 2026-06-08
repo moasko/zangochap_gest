@@ -4,6 +4,7 @@ type RiderMessageAlertPayload = {
   id: string;
   body: string;
   senderName: string;
+  senderPhone: string | null;
   createdAt: string;
 };
 

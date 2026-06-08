@@ -11,6 +11,7 @@ import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrows
 import { useToast } from "@/components/Toast";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 import { getLatestUnreadRiderMessage } from "@/modules/chat/actions";
+import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
 import {
@@ -135,7 +136,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [isNarrowDesktop, setIsNarrowDesktop] = useState(false);
-  const [riderAlert, setRiderAlert] = useState<RiderMessageAlert | null>(null);
+  const { activeAlert, pendingCount, enqueueAlert, closeActiveAlert } = useRiderAlertQueue();
   const { showToast } = useToast();
 
   const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0, riderChatUnread: 0 };
@@ -166,8 +167,8 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     playRiderMessageSound();
     showToast("Nouveau message d'un livreur", "success");
     showBrowserNotification("Message livreur ZangoChap", `${alert.senderName}: ${alert.body.slice(0, 140)}`);
-    setRiderAlert(alert);
-  }, [showToast]);
+    enqueueAlert(alert);
+  }, [enqueueAlert, showToast]);
 
   // Track Online/Offline Status
   useEffect(() => {
@@ -248,6 +249,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
         showRiderAlert(message || {
           id: `rider-alert-${Date.now()}`,
           senderName: "Livreur",
+          senderPhone: null,
           body: "Un livreur a envoye une alerte dans le chat interne.",
         });
       })
@@ -255,6 +257,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
         showRiderAlert({
           id: `rider-alert-${Date.now()}`,
           senderName: "Livreur",
+          senderPhone: null,
           body: "Un livreur a envoye une alerte dans le chat interne.",
         });
       });
@@ -268,10 +271,11 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   return (
     <>
       <AnimatePresence>
-        {riderAlert && (
+        {activeAlert && (
           <RiderMessageAlertOverlay
-            alert={riderAlert}
-            onClose={() => setRiderAlert(null)}
+            alert={activeAlert}
+            pendingCount={pendingCount}
+            onClose={closeActiveAlert}
           />
         )}
       </AnimatePresence>

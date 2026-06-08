@@ -16,7 +16,8 @@ import {
 } from "@/modules/chat/actions";
 import { useToast } from "@/components/Toast";
 import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
-import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
+import RiderMessageAlertOverlay from "@/components/RiderMessageAlertOverlay";
+import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
 
 const STAFF_ROLES = ["ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR", "DEVELOPER"] as const;
 
@@ -49,7 +50,7 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [isPinned, setIsPinned] = useState(false);
-  const [riderAlert, setRiderAlert] = useState<RiderMessageAlert | null>(null);
+  const { activeAlert, pendingCount, enqueueAlert, closeActiveAlert } = useRiderAlertQueue();
   const [isPending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
   const notifiedRiderMessagesRef = useRef(new Set(initialSnapshot.messages.map((item) => item.id)));
@@ -157,13 +158,14 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
     playRiderMessageSound();
     showToast(`Message livreur - ${message}`, "success");
     showBrowserNotification("Message livreur ZangoChap", message);
-    setRiderAlert({
+    enqueueAlert({
       id: latest.id,
       senderName: latest.senderName,
+      senderPhone: latest.senderPhone,
       body: latest.body,
       createdAt: latest.createdAt,
     });
-  }, [snapshot.messages, currentUser.id, showToast]);
+  }, [snapshot.messages, currentUser.id, enqueueAlert, showToast]);
 
   const handleSend = () => {
     const body = message.trim();
@@ -205,10 +207,11 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   return (
     <div className="chat-shell">
       <AnimatePresence>
-        {riderAlert && (
+        {activeAlert && (
           <RiderMessageAlertOverlay
-            alert={riderAlert}
-            onClose={() => setRiderAlert(null)}
+            alert={activeAlert}
+            pendingCount={pendingCount}
+            onClose={closeActiveAlert}
           />
         )}
       </AnimatePresence>

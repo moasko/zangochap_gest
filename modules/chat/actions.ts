@@ -18,6 +18,7 @@ export type ChatMessageView = {
   recipientId: string | null;
   senderId: string | null;
   senderName: string;
+  senderPhone: string | null;
   senderRole: Role;
   isPinned: boolean;
   createdAt: string;
@@ -48,6 +49,7 @@ export type RiderMessageAlertView = {
   id: string;
   body: string;
   senderName: string;
+  senderPhone: string | null;
   createdAt: string;
 };
 
@@ -123,6 +125,9 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
         recipientId: true,
         senderId: true,
         senderName: true,
+        sender: {
+          select: { phone: true },
+        },
         senderRole: true,
         isPinned: true,
         createdAt: true,
@@ -157,6 +162,7 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
       recipientId: message.recipientId,
       senderId: message.senderId,
       senderName: message.senderName,
+      senderPhone: message.sender?.phone || null,
       senderRole: message.senderRole,
       isPinned: message.isPinned,
       createdAt: message.createdAt.toISOString(),
@@ -180,6 +186,9 @@ export async function getLatestUnreadRiderMessage(): Promise<RiderMessageAlertVi
       id: true,
       body: true,
       senderName: true,
+      sender: {
+        select: { phone: true },
+      },
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
@@ -191,6 +200,7 @@ export async function getLatestUnreadRiderMessage(): Promise<RiderMessageAlertVi
     id: message.id,
     body: message.body,
     senderName: message.senderName,
+    senderPhone: message.sender?.phone || null,
     createdAt: message.createdAt.toISOString(),
   };
 }
@@ -296,11 +306,17 @@ export async function sendOrderSupportAlert(data: {
     order.deliverymanId === user.id;
   if (!canAlert) throw new Error("Acces refuse pour cette commande.");
 
+  const sender = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { phone: true },
+  });
+  const riderPhone = sender?.phone || null;
   const amount = Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0);
   const body = [
     `[ALERTE LIVREUR] Commande ${order.ref || order.id}`,
     `Motif: ${reason}`,
     `Livreur: ${order.deliverymanName || user.name}`,
+    riderPhone ? `Telephone livreur: ${riderPhone}` : null,
     `Client: ${order.customerName} - ${order.customerPhone}`,
     `Commune: ${order.commune || "Non definie"}`,
     `Adresse: ${order.customerLocation || "Non renseignee"}`,
@@ -332,6 +348,7 @@ export async function sendOrderSupportAlert(data: {
     id: chatMessage.id,
     body,
     senderName: user.name,
+    senderPhone: riderPhone,
     createdAt: chatMessage.createdAt.toISOString(),
     scope: alertScope,
     targetRole: alertTargetRole,
