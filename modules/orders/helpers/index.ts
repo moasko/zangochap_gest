@@ -31,6 +31,7 @@ export function checkOrderAccess(order: any, session: any) {
 // ============ REF GENERATOR ============
 export async function generateUniqueRef(commune?: string, typePrefix?: string) {
   const communePrefix = (commune && COMMUNES[commune]) || 'BJ';
+  const suffixMinLength = 5;
 
   // Better normalization: NFD + strip non-alphanumeric
   const normalize = (text: string) => text
@@ -43,49 +44,36 @@ export async function generateUniqueRef(commune?: string, typePrefix?: string) {
     ? `${normalize(typePrefix)}${communePrefix}`
     : communePrefix;
 
-  // Find the highest existing sequence globally so an exchange created from
-  // PL0588 becomes ECHANGEPL0589, not ECHANGEPL0588.
+  // Keep the numeric part unique globally, including older refs that were
+  // generated before this counter format existed.
   const existingRefs = await prisma.order.findMany({
     select: { ref: true },
   });
 
-  let maxSequence = 0;
+  const usedSequences = new Set<number>();
   for (const o of existingRefs) {
-    const match = o.ref?.match(/(\d{4})$/);
+    if (!o.ref) continue;
+
+    const match = o.ref.match(/(\d+)$/);
     if (match) {
       const num = parseInt(match[1], 10);
-      if (num > maxSequence) maxSequence = num;
+      if (Number.isSafeInteger(num) && num > 0) {
+        usedSequences.add(num);
+      }
     }
   }
 
-  let nextSequence = maxSequence + 1;
-  if (nextSequence < 1) nextSequence = 1;
+  // Keep refs readable: prefix + zero-padded counter, then keep counting after 99999.
+  for (let sequence = 1; sequence <= Number.MAX_SAFE_INTEGER; sequence++) {
+    if (usedSequences.has(sequence)) continue;
 
-  // Try up to 10 times to find a truly unique candidate globally
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const sequenceStr = (nextSequence + attempt).toString().padStart(4, '0');
+    const sequenceStr = sequence.toString().padStart(suffixMinLength, '0');
     const candidate = `${basePrefix}${sequenceStr}`;
-    
-    // Check if THIS EXACT candidate exists
     const existing = await prisma.order.findUnique({ where: { ref: candidate }, select: { id: true } });
-    
-    // ALSO check if ANY reference ends with this sequence (optional but safer for strict uniqueness)
-    // For now, checking findUnique is enough to prevent exact duplicates. 
-    // If we want to prevent AB0287 if CD0287 exists, we should check with endsWith.
-    
-    const globalCheck = await prisma.order.findFirst({
-      where: { ref: { endsWith: sequenceStr } },
-      select: { id: true }
-    });
-
-    if (!existing && !globalCheck) return candidate;
-    
-    // If globalCheck found something, it means this number is already taken by another prefix
-    // So we continue the loop with the next number
+    if (!existing) return candidate;
   }
 
-  // Fallback: Use timestamp if we can't find a sequential one
-  return `${basePrefix}${Date.now().toString().slice(-6)}`;
+  throw new Error("Impossible de générer une référence courte disponible.");
 }
 
 // ============ CUSTOMER UPSERT ============

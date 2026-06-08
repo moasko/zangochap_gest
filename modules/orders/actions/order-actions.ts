@@ -509,20 +509,32 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
     byName: session.name,
   });
 
-  const ref = order.ref || await generateUniqueRef(order.commune || undefined, order.type || undefined);
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      ref,
-      status: 'CONFIRMED',
-      commercialId: assignee.id,
-      commercialName: assignee.name,
-      confirmedAt: new Date(),
-      confirmedByName: assignee.name,
-      history,
-    },
-    include: { items: true },
-  });
+  let updatedOrder: any = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const ref = order.ref || await generateUniqueRef(order.commune || undefined, order.type || undefined);
+    try {
+      updatedOrder = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          ref,
+          status: 'CONFIRMED',
+          commercialId: assignee.id,
+          commercialName: assignee.name,
+          confirmedAt: new Date(),
+          confirmedByName: assignee.name,
+          history,
+        },
+        include: { items: true },
+      });
+      break;
+    } catch (e: any) {
+      const isRefCollision = e.code === 'P2002' && e.meta?.target?.includes('ref');
+      if (isRefCollision && !order.ref && attempt < 9) continue;
+      throw e;
+    }
+  }
+
+  if (!updatedOrder) throw new Error("Impossible de générer une référence unique pour cette commande.");
 
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/orders/to-process");
