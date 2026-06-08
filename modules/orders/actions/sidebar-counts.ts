@@ -8,6 +8,7 @@ export type SidebarCounts = {
   toProcess: number;
   myDeliveries: number;
   chatUnread: number;
+  riderChatUnread: number;
 };
 
 export type SidebarCountsUser = {
@@ -22,6 +23,7 @@ export const emptySidebarCounts: SidebarCounts = {
   toProcess: 0,
   myDeliveries: 0,
   chatUnread: 0,
+  riderChatUnread: 0,
 };
 
 const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
@@ -63,7 +65,7 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
       }
     : undefined;
 
-  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount, chatUnreadCount] = await Promise.all([
+  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount, chatUnreadCount, riderChatUnreadCount] = await Promise.all([
     prisma.order.count({
       where: {
         ...activeOrderWhere,
@@ -104,6 +106,14 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
     chatVisibleWhere
       ? prisma.chatMessage.count({ where: chatVisibleWhere })
       : Promise.resolve(0),
+    chatVisibleWhere
+      ? prisma.chatMessage.count({
+          where: {
+            ...chatVisibleWhere,
+            senderRole: "LIVREUR",
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   return {
@@ -113,5 +123,6 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
     toProcess: toProcessCount,
     myDeliveries: deliveriesCount,
     chatUnread: chatUnreadCount,
+    riderChatUnread: riderChatUnreadCount,
   };
 }

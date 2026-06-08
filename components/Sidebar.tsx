@@ -7,6 +7,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { logoutAction } from "@/modules/auth/actions";
 import { ROLE_LABELS } from "@/lib/constants";
+import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
+import { useToast } from "@/components/Toast";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
 import {
@@ -131,8 +133,9 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [isNarrowDesktop, setIsNarrowDesktop] = useState(false);
+  const { showToast } = useToast();
 
-  const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0 };
+  const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0, riderChatUnread: 0 };
 
   // Fetch counts via a lightweight API. The API derives the user from the session.
   const { data: counts = defaultCounts } = useQuery<SidebarCounts>({
@@ -175,14 +178,27 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     };
   }, []);
 
-  // Counts tracking (badge dot only, no toasts/sounds/notifications)
-  const prevCounts = useRef(counts);
+  // Counts tracking
+  const prevCounts = useRef<SidebarCounts | null>(null);
   useEffect(() => {
-    const newPacking = (counts?.packing || 0) > (prevCounts.current?.packing || 0);
-    const newOrders = (counts?.orders || 0) > (prevCounts.current?.orders || 0);
-    if (newPacking || newOrders) setHasNewNotifications(true);
+    if (!prevCounts.current) {
+      prevCounts.current = counts;
+      return;
+    }
+
+    const newPacking = (counts.packing || 0) > (prevCounts.current.packing || 0);
+    const newOrders = (counts.orders || 0) > (prevCounts.current.orders || 0);
+    const newRiderMessage = (counts.riderChatUnread || 0) > (prevCounts.current.riderChatUnread || 0);
+
+    if (newPacking || newOrders || newRiderMessage) setHasNewNotifications(true);
+    if (newRiderMessage && pathname !== "/zangochap-manager/chat") {
+      playRiderMessageSound();
+      showToast("Nouveau message d'un livreur", "success");
+      showBrowserNotification("Message livreur ZangoChap", "Un livreur a envoyé une alerte dans le chat interne.");
+    }
+
     prevCounts.current = counts;
-  }, [counts]);
+  }, [counts, pathname, showToast]);
 
   useEffect(() => {
     setIsMobileOpen(false);

@@ -14,6 +14,7 @@ import {
   type ChatUserView,
 } from "@/modules/chat/actions";
 import { useToast } from "@/components/Toast";
+import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 
 const STAFF_ROLES = ["ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR", "DEVELOPER"] as const;
 
@@ -48,6 +49,7 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   const [isPinned, setIsPinned] = useState(false);
   const [isPending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
+  const notifiedRiderMessagesRef = useRef(new Set(initialSnapshot.messages.map((item) => item.id)));
   const { showToast } = useToast();
 
   const currentUser = snapshot.currentUser;
@@ -130,6 +132,26 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
 
     return () => window.clearTimeout(timeout);
   }, [roomMessages, currentUser.id]);
+
+  useEffect(() => {
+    const newRiderMessages = snapshot.messages.filter((item) => (
+      item.senderRole === "LIVREUR"
+      && item.senderId !== currentUser.id
+      && !item.readByMe
+      && !notifiedRiderMessagesRef.current.has(item.id)
+    ));
+
+    snapshot.messages.forEach((item) => notifiedRiderMessagesRef.current.add(item.id));
+    if (newRiderMessages.length === 0) return;
+
+    const latest = newRiderMessages[newRiderMessages.length - 1];
+    const preview = latest.body.replace(/\s+/g, " ").trim().slice(0, 90);
+    const message = `${latest.senderName}: ${preview}`;
+
+    playRiderMessageSound();
+    showToast(`Message livreur - ${message}`, "success");
+    showBrowserNotification("Message livreur ZangoChap", message);
+  }, [snapshot.messages, currentUser.id, showToast]);
 
   const handleSend = () => {
     const body = message.trim();
