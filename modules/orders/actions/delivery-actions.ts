@@ -8,6 +8,7 @@ import { isRole } from "../helpers";
 import { decrementStockForOrder } from "./stock";
 
 const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
+const READY_FOR_DELIVERY_STATUSES = ["PACKED", "REPRO_DISPO"] as const;
 
 type DeliveryAssignmentOrder = {
   status: string;
@@ -39,11 +40,14 @@ function assertOrderCanBeAssigned(order: DeliveryAssignmentOrder) {
 
 function getAssignmentStatusUpdate(order: DeliveryAssignmentOrder, isUnassigning: boolean) {
   if (isUnassigning) return {};
-  return order.status === "ON_DELIVERY" ? {} : { status: "ON_DELIVERY" as const };
+  return READY_FOR_DELIVERY_STATUSES.includes(order.status as typeof READY_FOR_DELIVERY_STATUSES[number])
+    ? { status: "ON_DELIVERY" as const }
+    : {};
 }
 
 async function ensureDeliveryStock(order: DeliveryAssignmentOrderWithItems, session: NonNullable<Awaited<ReturnType<typeof getSession>>>, tx: Prisma.TransactionClient) {
-  if (order.status === "ON_DELIVERY" || order.stockDecremented) return;
+  if (order.stockDecremented) return;
+  if (!READY_FOR_DELIVERY_STATUSES.includes(order.status as typeof READY_FOR_DELIVERY_STATUSES[number])) return;
   await decrementStockForOrder(order, session, tx);
 }
 
