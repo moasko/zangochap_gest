@@ -11,7 +11,7 @@ import "./team-client.css";
 import {
   Plus, Edit3, Trash2, Mail, Phone, Shield,
   ShoppingBag, Package, Truck, Box, User,
-  MoreVertical, Search, Filter,
+  MoreVertical, Search, Filter, PauseCircle, Clock,
   X
 } from "lucide-react";
 
@@ -34,6 +34,18 @@ const ROLE_COLORS: Record<string, string> = {
   stock: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
   livreur: 'linear-gradient(135deg, #D97706 0%, #92400E 100%)',
 };
+
+function formatPauseDuration(value?: string | null) {
+  if (!value) return "depuis peu";
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
+  if (minutes < 1) return "a l'instant";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return `${hours}h${remainingMinutes ? ` ${remainingMinutes}min` : ""}`;
+  const days = Math.floor(hours / 24);
+  return `${days}j`;
+}
 
 export default function TeamClient({ accounts, currentUser }: { accounts: any[]; currentUser: any }) {
   const [showNew, setShowNew] = useState(false);
@@ -59,6 +71,10 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
       map[role].push(a);
     });
     return map;
+  }, [accounts]);
+
+  const pausedCommercials = useMemo(() => {
+    return accounts.filter((account) => account.role?.toLowerCase() === "commercial" && account.isPaused);
   }, [accounts]);
 
   const filteredRoles = useMemo(() => {
@@ -107,6 +123,12 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
           value={(byRole['commercial'] || []).length + (byRole['livreur'] || []).length}
           icon={<Truck size={20} />}
           color="var(--orange)"
+        />
+        <StatCard
+          label="Commerciaux en pause"
+          value={pausedCommercials.length}
+          icon={<PauseCircle size={20} />}
+          color="#C2410C"
         />
         <StatCard
           label="Logistique"
@@ -183,6 +205,12 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
                             <div className="member-phone">
                               <Phone size={12} />
                               <span>{member.phone}</span>
+                            </div>
+                          )}
+                          {role === "commercial" && member.isPaused && (
+                            <div className="member-phone" style={{ color: "#C2410C", background: "#FFF7ED", borderColor: "#FED7AA" }}>
+                              <Clock size={12} />
+                              <span>Pause {formatPauseDuration(member.pausedAt)}{member.pauseReason ? ` - ${member.pauseReason}` : ""}</span>
                             </div>
                           )}
                         </div>

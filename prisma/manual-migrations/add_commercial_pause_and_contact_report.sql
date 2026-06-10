@@ -1,0 +1,10 @@
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "isPaused" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "pausedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "pauseReason" TEXT;
+
+ALTER TABLE "Order"
+  ADD COLUMN IF NOT EXISTS "commercialContactedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "commercialContactedByName" TEXT,
+  ADD COLUMN IF NOT EXISTS "commercialContactOutcome" TEXT,
+  ADD COLUMN IF NOT EXISTS "commercialContactReport" TEXT;

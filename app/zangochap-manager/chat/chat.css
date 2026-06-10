@@ -30,7 +30,8 @@
 .chat-person,
 .chat-room-btn,
 .chat-pin,
-.chat-meta {
+.chat-meta,
+.chat-message-actions {
   display: flex;
   align-items: center;
 }
@@ -369,21 +370,121 @@
   font-weight: 650;
 }
 
-.chat-delete {
+.chat-message-actions {
   position: absolute;
   top: 7px;
   right: 7px;
+  gap: 4px;
+  opacity: 0;
+}
+
+.chat-message-actions button,
+.chat-delete {
   width: 24px;
   height: 24px;
   border: 0;
   background: transparent;
   color: inherit;
-  opacity: 0;
   cursor: pointer;
 }
 
+.chat-bubble:hover .chat-message-actions,
 .chat-bubble:hover .chat-delete {
   opacity: 0.55;
+}
+
+.chat-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.chat-report-modal {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+}
+
+.chat-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-report-head span,
+.chat-report-modal label {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.chat-report-head strong {
+  display: block;
+  margin-top: 2px;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.chat-report-head button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: #f1f5f9;
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.chat-report-modal select,
+.chat-report-modal textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #111827;
+  padding: 10px;
+  outline: 0;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.chat-report-modal textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.chat-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-report-actions button {
+  min-height: 38px;
+  border: 0;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.chat-report-actions button:first-child {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.chat-report-actions button:last-child {
+  background: #d4541c;
+  color: #ffffff;
 }
 
 .chat-composer {

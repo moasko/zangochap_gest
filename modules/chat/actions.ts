@@ -31,6 +31,8 @@ export type ChatUserView = {
   email: string;
   role: Role;
   initials: string | null;
+  isPaused: boolean;
+  pauseReason: string | null;
 };
 
 export type ChatSnapshot = {
@@ -39,6 +41,8 @@ export type ChatSnapshot = {
     name: string;
     email: string;
     role: Role;
+    isPaused: boolean;
+    pauseReason: string | null;
   };
   users: ChatUserView[];
   messages: ChatMessageView[];
@@ -98,7 +102,14 @@ function visibleMessageWhere(userId: string, role: Role) {
 export async function getChatSnapshot(): Promise<ChatSnapshot> {
   const user = await requireChatSession();
 
-  const [users, messages, unreadCount] = await Promise.all([
+  const [currentUserRecord, users, messages, unreadCount] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        isPaused: true,
+        pauseReason: true,
+      },
+    }),
     prisma.user.findMany({
       where: {
         role: { in: [...STAFF_ROLES] },
@@ -109,6 +120,8 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
         email: true,
         role: true,
         initials: true,
+        isPaused: true,
+        pauseReason: true,
       },
       orderBy: [
         { role: "asc" },
@@ -152,7 +165,11 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
   ]);
 
   return {
-    currentUser: user,
+    currentUser: {
+      ...user,
+      isPaused: Boolean(currentUserRecord?.isPaused),
+      pauseReason: currentUserRecord?.pauseReason || null,
+    },
     users,
     messages: messages.reverse().map((message) => ({
       id: message.id,
@@ -262,6 +279,116 @@ export async function sendChatMessage(data: {
   return { success: true };
 }
 
+export async function toggleCommercialPause(isPaused: boolean, reason?: string) {
+  const user = await requireChatSession();
+  if (user.role !== "COMMERCIAL" && user.role !== "ADMIN" && user.role !== "DEVELOPER") {
+    throw new Error("Action reservee aux commerciaux.");
+  }
+
+  const pauseReason = reason?.trim().slice(0, 160) || null;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      isPaused,
+      pausedAt: isPaused ? new Date() : null,
+      pauseReason: isPaused ? pauseReason : null,
+    },
+  });
+
+  revalidatePath("/zangochap-manager/chat");
+  return { success: true, isPaused, pauseReason: isPaused ? pauseReason : null };
+}
+
+export async function getCurrentCommercialPauseStatus() {
+  const user = await requireChatSession();
+  if (user.role !== "COMMERCIAL") {
+    return { canPause: false, isPaused: false, pauseReason: null };
+  }
+
+  const record = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      isPaused: true,
+      pauseReason: true,
+    },
+  });
+
+  return {
+    canPause: true,
+    isPaused: Boolean(record?.isPaused),
+    pauseReason: record?.pauseReason || null,
+  };
+}
+
+export async function recordCommercialContactReport(data: {
+  orderRef?: string;
+  orderId?: string;
+  outcome: string;
+  report: string;
+}) {
+  const user = await requireChatSession();
+  if (user.role !== "COMMERCIAL" && user.role !== "ADMIN" && user.role !== "DEVELOPER") {
+    throw new Error("Action reservee au call center.");
+  }
+
+  const outcome = data.outcome.trim();
+  const report = data.report.trim();
+  if (!outcome) throw new Error("Choisissez un resultat.");
+  if (!report) throw new Error("Ajoutez un mini rapport.");
+  if (report.length > 800) throw new Error("Rapport trop long.");
+
+  const orderWhere = data.orderId
+    ? { id: data.orderId }
+    : data.orderRef
+      ? { ref: data.orderRef }
+      : null;
+  if (!orderWhere) throw new Error("Commande introuvable dans l'alerte.");
+
+  const order = await prisma.order.findUnique({
+    where: orderWhere as Prisma.OrderWhereUniqueInput,
+    select: {
+      id: true,
+      ref: true,
+      history: true,
+      commercialId: true,
+    },
+  });
+  if (!order) throw new Error("Commande introuvable.");
+  if (user.role === "COMMERCIAL" && order.commercialId && order.commercialId !== user.id) {
+    throw new Error("Cette commande appartient a un autre commercial.");
+  }
+
+  const history: Prisma.InputJsonValue[] = Array.isArray(order.history)
+    ? [...(order.history as Prisma.InputJsonValue[])]
+    : [];
+  const nextHistory = [
+    ...history,
+    {
+      at: new Date().toISOString(),
+      action: `Retour call center: ${outcome} - ${report}`,
+      by: user.email,
+      byName: user.name,
+    },
+  ] as Prisma.InputJsonValue;
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      isCommercialContacted: true,
+      commercialContactedAt: new Date(),
+      commercialContactedByName: user.name,
+      commercialContactOutcome: outcome,
+      commercialContactReport: report,
+      history: nextHistory,
+    },
+  });
+
+  revalidatePath("/zangochap-manager/chat");
+  revalidatePath("/zangochap-manager/orders");
+  revalidatePath("/zangochap-manager/admin/delivery/settlement");
+  return { success: true };
+}
+
 export async function sendOrderSupportAlert(data: {
   orderId: string;
   reason: string;
@@ -325,13 +452,30 @@ export async function sendOrderSupportAlert(data: {
     details ? `Message: ${details}` : null,
   ].filter(Boolean).join("\n");
 
-  const alertScope = order.commercialId ? "DIRECT" : "ROLE";
-  const alertTargetRole = order.commercialId ? null : "COMMERCIAL";
-  const alertRecipientId = order.commercialId || null;
+  const commercial = order.commercialId
+    ? await prisma.user.findUnique({
+      where: { id: order.commercialId },
+      select: {
+        id: true,
+        name: true,
+        isPaused: true,
+        pauseReason: true,
+      },
+    })
+    : null;
+  const isDirectCommercialPaused = Boolean(commercial?.isPaused);
+  const alertScope = order.commercialId && !isDirectCommercialPaused ? "DIRECT" : "ROLE";
+  const alertTargetRole = alertScope === "ROLE" ? "COMMERCIAL" : null;
+  const alertRecipientId = alertScope === "DIRECT" ? order.commercialId : null;
+  const excludedRecipientIds = isDirectCommercialPaused && commercial?.id ? [commercial.id] : [];
+  const pauseNotice = isDirectCommercialPaused
+    ? `\n\n[INFO] ${commercial?.name || order.commercialName || "Le commercial"} est en pause${commercial?.pauseReason ? ` (${commercial.pauseReason})` : ""}. Alerte relayee au call center actif.`
+    : "";
+  const finalBody = `${body}${pauseNotice}`;
 
   const chatMessage = await prisma.chatMessage.create({
     data: {
-      body,
+      body: finalBody,
       scope: alertScope,
       targetRole: alertTargetRole,
       recipientId: alertRecipientId,
@@ -346,13 +490,14 @@ export async function sendOrderSupportAlert(data: {
 
   emitRiderAlert({
     id: chatMessage.id,
-    body,
+    body: finalBody,
     senderName: user.name,
     senderPhone: riderPhone,
     createdAt: chatMessage.createdAt.toISOString(),
     scope: alertScope,
     targetRole: alertTargetRole,
     recipientId: alertRecipientId,
+    excludedRecipientIds,
   });
 
   const history: Prisma.InputJsonValue[] = Array.isArray(order.history)
@@ -362,7 +507,7 @@ export async function sendOrderSupportAlert(data: {
     ...history,
     {
       at: new Date().toISOString(),
-      action: `Alerte call center: ${reason}${order.commercialName ? ` (${order.commercialName})` : ""}`,
+      action: `Alerte call center: ${reason}${order.commercialName ? ` (${order.commercialName})` : ""}${isDirectCommercialPaused ? " - commercial en pause, relais groupe" : ""}`,
       by: user.email,
       byName: user.name,
     },
@@ -379,7 +524,9 @@ export async function sendOrderSupportAlert(data: {
   revalidatePath("/zangochap-rider");
   return {
     success: true,
-    target: order.commercialName || "Call center",
+    target: isDirectCommercialPaused
+      ? `Call center actif (${commercial?.name || order.commercialName || "commercial"} en pause)`
+      : order.commercialName || "Call center",
   };
 }
 

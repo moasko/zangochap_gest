@@ -82,6 +82,9 @@ model User {
   initials     String?
   phone2       String? // Second numéro
   serviceLabel String? // Libellé si numéro de service
+  isPaused     Boolean      @default(false)
+  pausedAt     DateTime?
+  pauseReason  String?
   orders       Order[]      @relation("CommercialOrders")
   products     Product[]    @relation("CreatedProducts")
   settlements  Settlement[] @relation("DeliverySettlements")
@@ -360,6 +363,10 @@ model Order {
   settlementId String?
 
   isCommercialContacted Boolean @default(false)
+  commercialContactedAt DateTime?
+  commercialContactedByName String?
+  commercialContactOutcome String?
+  commercialContactReport String? @db.Text
   returnReason          String?
   hasIssue              Boolean @default(false)
   issueType             String?

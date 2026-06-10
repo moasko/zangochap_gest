@@ -8,6 +8,7 @@ import {
   deleteChatMessage,
   getChatSnapshot,
   markChatMessagesRead,
+  recordCommercialContactReport,
   sendChatMessage,
   type ChatMessageView,
   type ChatRoomKey,
@@ -50,6 +51,9 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [isPinned, setIsPinned] = useState(false);
+  const [reportingAlert, setReportingAlert] = useState<ChatMessageView | null>(null);
+  const [contactOutcome, setContactOutcome] = useState("Client contacte");
+  const [contactReport, setContactReport] = useState("");
   const { activeAlert, pendingCount, enqueueAlert, closeActiveAlert } = useRiderAlertQueue();
   const [isPending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
@@ -200,6 +204,32 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
     });
   };
 
+  const extractOrderRef = (body: string) => {
+    const match = body.match(/\[ALERTE LIVREUR\]\s+Commande\s+([^\s\n]+)/i);
+    return match?.[1]?.trim();
+  };
+
+  const handleSubmitContactReport = () => {
+    if (!reportingAlert) return;
+    const orderRef = extractOrderRef(reportingAlert.body);
+    startTransition(async () => {
+      try {
+        await recordCommercialContactReport({
+          orderRef,
+          outcome: contactOutcome,
+          report: contactReport,
+        });
+        showToast("Rapport client enregistre", "success");
+        setReportingAlert(null);
+        setContactReport("");
+        setContactOutcome("Client contacte");
+        await refresh();
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Rapport impossible", "error");
+      }
+    });
+  };
+
   const canDeleteMessage = (item: ChatMessageView) => (
     item.senderId === currentUser.id || currentUser.role === "ADMIN" || currentUser.role === "DEVELOPER"
   );
@@ -263,7 +293,10 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
               <span className="chat-avatar">{getInitials(user)}</span>
               <span>
                 <strong>{user.name}</strong>
-                <small>{ROLE_LABELS[user.role] || user.role}</small>
+                <small>
+                  {ROLE_LABELS[user.role] || user.role}
+                  {user.isPaused ? " · En pause" : ""}
+                </small>
               </span>
             </button>
           ))}
@@ -319,11 +352,18 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
                       {item.isPinned && <Pin size={12} />}
                     </div>
                     <p>{item.body}</p>
-                    {canDeleteMessage(item) && (
-                      <button className="chat-delete" onClick={() => handleDelete(item.id)} title="Supprimer">
-                        <Trash2 size={13} />
-                      </button>
-                    )}
+                    <div className="chat-message-actions">
+                      {item.senderRole === "LIVREUR" && item.body.includes("[ALERTE LIVREUR]") && ["COMMERCIAL", "ADMIN", "DEVELOPER"].includes(currentUser.role) && (
+                        <button onClick={() => setReportingAlert(item)} title="Rapport client">
+                          <MessageCircle size={13} />
+                        </button>
+                      )}
+                      {canDeleteMessage(item) && (
+                        <button onClick={() => handleDelete(item.id)} title="Supprimer">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -361,6 +401,42 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
           </div>
         </footer>
       </section>
+
+      {reportingAlert && (
+        <div className="chat-report-backdrop">
+          <div className="chat-report-modal">
+            <div className="chat-report-head">
+              <div>
+                <span>Retour client</span>
+                <strong>{extractOrderRef(reportingAlert.body) || "Commande"}</strong>
+              </div>
+              <button type="button" onClick={() => setReportingAlert(null)}>x</button>
+            </div>
+            <label>Resultat</label>
+            <select value={contactOutcome} onChange={(event) => setContactOutcome(event.target.value)}>
+              <option>Client contacte</option>
+              <option>Client injoignable</option>
+              <option>Refuse les frais livraison</option>
+              <option>Demande report</option>
+              <option>Commande annulee</option>
+              <option>Autre</option>
+            </select>
+            <label>Mini rapport</label>
+            <textarea
+              value={contactReport}
+              onChange={(event) => setContactReport(event.target.value)}
+              maxLength={800}
+              placeholder="Ex: Le client refuse de payer la livraison, demande un geste commercial..."
+            />
+            <div className="chat-report-actions">
+              <button type="button" onClick={() => setReportingAlert(null)}>Annuler</button>
+              <button type="button" onClick={handleSubmitContactReport} disabled={isPending || !contactReport.trim()}>
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

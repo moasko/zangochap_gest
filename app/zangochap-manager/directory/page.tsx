@@ -31,7 +31,10 @@ export default async function DirectoryPage() {
       phone2: true,
       serviceLabel: true,
       role: true,
-      email: true
+      email: true,
+      isPaused: true,
+      pausedAt: true,
+      pauseReason: true
     },
     orderBy: {
       name: 'asc'
@@ -41,7 +44,7 @@ export default async function DirectoryPage() {
   return (
     <>
       <Topbar title="Répertoire" subtitle="Équipe Zangochap" />
-      <DirectoryClient users={JSON.parse(JSON.stringify(users))} />
+      <DirectoryClient users={JSON.parse(JSON.stringify(users))} canViewPauses={["admin", "developer"].includes(session.role)} />
     </>
   );
 }

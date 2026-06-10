@@ -1,7 +1,9 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { PauseCircle, PlayCircle, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { getCurrentCommercialPauseStatus, toggleCommercialPause } from "@/modules/chat/actions";
 import "./topbar.css";
 
 interface TopbarProps {
@@ -12,12 +14,41 @@ interface TopbarProps {
 
 export default function Topbar({ title, subtitle, actions }: TopbarProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [pauseState, setPauseState] = useState({
+    canPause: false,
+    isPaused: false,
+    pauseReason: null as string | null,
+  });
+  const [pauseReason, setPauseReason] = useState("");
+
+  useEffect(() => {
+    getCurrentCommercialPauseStatus()
+      .then((status) => {
+        setPauseState(status);
+        setPauseReason(status.pauseReason || "");
+      })
+      .catch(() => undefined);
+  }, []);
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const q = (e.target as HTMLInputElement).value;
       if (q) router.push(`/orders?q=${encodeURIComponent(q)}`);
     }
+  };
+
+  const handlePauseToggle = () => {
+    const nextPaused = !pauseState.isPaused;
+    startTransition(async () => {
+      const result = await toggleCommercialPause(nextPaused, pauseReason);
+      setPauseState({
+        canPause: true,
+        isPaused: result.isPaused,
+        pauseReason: result.pauseReason,
+      });
+      if (!result.isPaused) setPauseReason("");
+    });
   };
 
   return (
@@ -37,6 +68,27 @@ export default function Topbar({ title, subtitle, actions }: TopbarProps) {
             onKeyDown={handleSearch}
           />
         </div>
+        {pauseState.canPause && (
+          <div className={`topbar-pause ${pauseState.isPaused ? "active" : ""}`}>
+            {!pauseState.isPaused && (
+              <input
+                value={pauseReason}
+                onChange={(event) => setPauseReason(event.target.value)}
+                placeholder="Motif pause"
+                maxLength={160}
+              />
+            )}
+            <button
+              type="button"
+              onClick={handlePauseToggle}
+              disabled={isPending}
+              title={pauseState.isPaused ? "Revenir disponible" : "Se mettre en pause"}
+            >
+              {pauseState.isPaused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
+              <span>{pauseState.isPaused ? "Revenir" : "Pause"}</span>
+            </button>
+          </div>
+        )}
         {actions}
       </div>
 

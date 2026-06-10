@@ -34,6 +34,49 @@
 }
 .topbar-search:focus-within { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(212,84,28,0.08); }
 .topbar-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13px; }
+.topbar-pause {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 4px;
+  border: 1px solid #D1FAE5;
+  background: #ECFDF5;
+}
+.topbar-pause.active {
+  border-color: #FED7AA;
+  background: #FFF7ED;
+}
+.topbar-pause input {
+  width: 130px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.topbar-pause button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: #047857;
+  color: white;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+.topbar-pause.active button {
+  background: var(--orange);
+}
+.topbar-pause button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
 
 @media (max-width: 900px) {
   .topbar {
@@ -61,4 +104,6 @@
   .topbar-search input { display: none; }
   .topbar-search:focus-within { width: 180px; }
   .topbar-search:focus-within input { display: block; }
+  .topbar-pause input { width: 92px; }
+  .topbar-pause button span { display: none; }
 }

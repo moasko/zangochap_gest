@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { TableCard, EmptyState } from "@/components/UI";
-import { Phone, Search, User as UserIcon, Shield, Briefcase, Truck, Package, Hammer, Copy, Mail, Check, X } from "lucide-react";
+import { Phone, Search, User as UserIcon, Shield, Briefcase, Truck, Package, Hammer, Copy, Mail, Check, X, PauseCircle } from "lucide-react";
 import { ROLE_LABELS, getInitials } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 
@@ -14,9 +14,24 @@ interface DirectoryUser {
   serviceLabel: string | null;
   role: string;
   email: string;
+  isPaused?: boolean;
+  pausedAt?: string | null;
+  pauseReason?: string | null;
 }
 
-export default function DirectoryClient({ users }: { users: DirectoryUser[] }) {
+function formatPauseDuration(value?: string | null) {
+  if (!value) return "depuis peu";
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
+  if (minutes < 1) return "a l'instant";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return `${hours}h${remainingMinutes ? ` ${remainingMinutes}min` : ""}`;
+  const days = Math.floor(hours / 24);
+  return `${days}j`;
+}
+
+export default function DirectoryClient({ users, canViewPauses = false }: { users: DirectoryUser[]; canViewPauses?: boolean }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const { showToast } = useToast();
@@ -196,10 +211,21 @@ export default function DirectoryClient({ users }: { users: DirectoryUser[] }) {
                           {ROLE_LABELS[u.role.toLowerCase()] || u.role}
                         </span>
                       </div>
+                      {canViewPauses && u.role.toUpperCase() === "COMMERCIAL" && u.isPaused && (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-[3px] border border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]" title={u.pauseReason || "Commercial en pause"}>
+                          <PauseCircle size={11} />
+                          <span>Pause {formatPauseDuration(u.pausedAt)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
+                    {canViewPauses && u.role.toUpperCase() === "COMMERCIAL" && u.isPaused && u.pauseReason && (
+                      <div className="text-[11px] font-semibold text-[#9A3412] bg-[#FFF7ED] border border-[#FED7AA] rounded-sm px-2 py-1">
+                        Motif pause: {u.pauseReason}
+                      </div>
+                    )}
                     {/* Principal Phone */}
                     <div className="flex items-center gap-1.5 w-full">
                       {u.phone ? (

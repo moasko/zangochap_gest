@@ -12,6 +12,7 @@ type RiderAlertTarget = {
   scope: "DIRECT" | "ROLE";
   recipientId: string | null;
   targetRole: Role | null;
+  excludedRecipientIds?: string[];
 };
 
 export type RiderAlertEvent = RiderMessageAlertPayload & RiderAlertTarget;
@@ -35,6 +36,7 @@ export function canReceiveRiderAlert(
   event: RiderAlertTarget,
   user: { id: string; role: Role },
 ) {
+  if (event.excludedRecipientIds?.includes(user.id)) return false;
   if (event.scope === "DIRECT") return event.recipientId === user.id;
   return event.targetRole === user.role;
 }
