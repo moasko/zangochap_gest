@@ -59,7 +59,7 @@ const REPRO_DISPO_REASONS = [
   "Fin de tournee",
 ];
 
-const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY"]);
+const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO", "REPROGRAMMED"]);
 const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
@@ -271,7 +271,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       const customerText = String(o.customerName || "").toLowerCase();
       const driverText = String(o.deliverymanName || "").toLowerCase();
       const communeText = String(o.commune || "").toLowerCase();
-      
+
       const matchesSearch =
         refText.includes(safeSearchTerm) ||
         customerText.includes(safeSearchTerm) ||
@@ -300,7 +300,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       const customerText = String(o.customerName || "").toLowerCase();
       const driverText = String(o.deliverymanName || "").toLowerCase();
       const communeText = String(o.commune || "").toLowerCase();
-      
+
       const matchesSearch =
         refText.includes(safeSearchTerm) ||
         customerText.includes(safeSearchTerm) ||
@@ -719,35 +719,36 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             const loadTone = dayStats.count === 0 ? "zero" : dayStats.count >= 10 ? "heavy" : dayStats.count >= 6 ? "medium" : "light";
 
             return (
-            <div key={driver.id} className={`rider-day-pill ${loadTone} ${filterDeliveryman === driver.id ? "active" : ""}`}>
-              <button
-                type="button"
-                className="rider-day-main"
-                onClick={() => {
-                  setFilterDeliveryman(driver.id);
-                  setViewMode("table");
-                }}
-                title={`Afficher les colis de ${driver.name}`}
-              >
-                <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-                <span>{driver.name}</span>
-                {dayStats.alerts > 0 && <em>{dayStats.alerts} alerte(s)</em>}
-                <strong>{dayStats.count}</strong>
-              </button>
-              <button
-                type="button"
-                className="rider-day-sheet"
-                onClick={() => {
-                  setFilterDeliveryman(driver.id);
-                  setViewMode("sheet");
-                }}
-                disabled={dayStats.count === 0}
-                title={`Voir la fiche de ${driver.name}`}
-              >
-                <FileText size={13} />
-              </button>
-            </div>
-          )})}
+              <div key={driver.id} className={`rider-day-pill ${loadTone} ${filterDeliveryman === driver.id ? "active" : ""}`}>
+                <button
+                  type="button"
+                  className="rider-day-main"
+                  onClick={() => {
+                    setFilterDeliveryman(driver.id);
+                    setViewMode("table");
+                  }}
+                  title={`Afficher les colis de ${driver.name}`}
+                >
+                  <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+                  <span>{driver.name}</span>
+                  {dayStats.alerts > 0 && <em>{dayStats.alerts} alerte(s)</em>}
+                  <strong>{dayStats.count}</strong>
+                </button>
+                <button
+                  type="button"
+                  className="rider-day-sheet"
+                  onClick={() => {
+                    setFilterDeliveryman(driver.id);
+                    setViewMode("sheet");
+                  }}
+                  disabled={dayStats.count === 0}
+                  title={`Voir la fiche de ${driver.name}`}
+                >
+                  <FileText size={13} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -978,77 +979,78 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                     const isAssignable = canAssignDeliveryOrder(order);
 
                     return (
-                    <tr key={order.id} className={selectedIds.has(order.id) ? 'row-selected' : ''}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(order.id)}
-                          disabled={!isAssignable}
-                          onChange={() => toggleSelect(order.id)}
-                        />
-                      </td>
-                      <td><span className="cell-mono">{order.ref}</span></td>
-                      <td>
-                        <div className="cell-strong">{order.customerName}</div>
-                        <div className="cell-commune">
-                          <MapPin size={10} style={{ marginRight: 4, display: 'inline' }} />
-                          {order.commune || "N/A"}
-                        </div>
-                        {order.customerLocation && (
-                          <div className="cell-location" title={order.customerLocation}>
-                            {order.customerLocation}
+                      <tr key={order.id} className={selectedIds.has(order.id) ? 'row-selected' : ''}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(order.id)}
+                            disabled={!isAssignable}
+                            onChange={() => toggleSelect(order.id)}
+                          />
+                        </td>
+                        <td><span className="cell-mono">{order.ref}</span></td>
+                        <td>
+                          <div className="cell-strong">{order.customerName}</div>
+                          <div className="cell-commune">
+                            <MapPin size={10} style={{ marginRight: 4, display: 'inline' }} />
+                            {order.commune || "N/A"}
                           </div>
-                        )}
-                      </td>
-                      <td>
-                        <div className="cell-date">
-                          <Calendar size={12} />
-                          {order.deliveryDate ? formatDate(order.deliveryDate) : 'Non définie'}
-                        </div>
-                      </td>
-                      <td>
-                        {order.deliverymanId ? (
-                          <div className="assigned-driver">
-                            <div className="driver-avatar">{order.deliverymanName?.charAt(0)}</div>
-                            <div className="driver-info">
-                              <span className="driver-name-text">{order.deliverymanName}</span>
-                              {order.updatedAt && <span className="driver-time-text">Assigné le {formatDate(order.updatedAt)}</span>}
+                          {order.customerLocation && (
+                            <div className="cell-location" title={order.customerLocation}>
+                              {order.customerLocation}
                             </div>
+                          )}
+                        </td>
+                        <td>
+                          <div className="cell-date">
+                            <Calendar size={12} />
+                            {order.deliveryDate ? formatDate(order.deliveryDate) : 'Non définie'}
                           </div>
-                        ) : (
-                          <span className="unassigned-badge">Non attribuée</span>
-                        )}
-                      </td>
-                      <td><StatusBadge status={order.status} /></td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <button
-                            type="button"
-                            className="cell-btn-icon"
-                            onClick={() => setReproOrder(order)}
-                            disabled={isPending || order.status === "REPRO_DISPO"}
-                            title="Repro-dispo demain"
-                          >
-                            <CalendarClock size={14} />
-                          </button>
-                          <select
-                            className="assign-select"
-                            value={order.deliverymanId || ""}
-                            onChange={(e) => handleAssign(order.id, e.target.value)}
-                            disabled={isPending || !isAssignable}
-                          >
-                            <option value="" disabled>Attribuer à...</option>
-                            <option value="unassigned" style={{ color: 'var(--red)' }}>❌ Désattribuer</option>
-                            {deliverymen.map(d => (
-                              <option key={d.id} value={d.id}>
-                                {d.name} ({riderLiveCounts[d.id] || 0})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </td>
-                    </tr>
-                  )})}
+                        </td>
+                        <td>
+                          {order.deliverymanId ? (
+                            <div className="assigned-driver">
+                              <div className="driver-avatar">{order.deliverymanName?.charAt(0)}</div>
+                              <div className="driver-info">
+                                <span className="driver-name-text">{order.deliverymanName}</span>
+                                {order.updatedAt && <span className="driver-time-text">Assigné le {formatDate(order.updatedAt)}</span>}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="unassigned-badge">Non attribuée</span>
+                          )}
+                        </td>
+                        <td><StatusBadge status={order.status} /></td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="cell-btn-icon"
+                              onClick={() => setReproOrder(order)}
+                              disabled={isPending || order.status === "REPRO_DISPO"}
+                              title="Repro-dispo demain"
+                            >
+                              <CalendarClock size={14} />
+                            </button>
+                            <select
+                              className="assign-select"
+                              value={order.deliverymanId || ""}
+                              onChange={(e) => handleAssign(order.id, e.target.value)}
+                              disabled={isPending || !isAssignable}
+                            >
+                              <option value="" disabled>Attribuer à...</option>
+                              <option value="unassigned" style={{ color: 'var(--red)' }}>❌ Désattribuer</option>
+                              {deliverymen.map(d => (
+                                <option key={d.id} value={d.id}>
+                                  {d.name} ({riderLiveCounts[d.id] || 0})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1423,15 +1425,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                         </tbody>
                       </table>
                     </div>
-  ))
-}
+                  ))
+                  }
 
-<div className="sheet-footer">
-  <div className="sheet-footer-item"><span className="label">Colis</span><span className="val">{driverOrders.length}</span></div>
-  <div className="sheet-footer-item"><span className="label">Total Produits</span><span className="val">{formatPrice(totalProducts)}</span></div>
-  <div className="sheet-footer-item"><span className="label">Total Livraison</span><span className="val">{formatPrice(totalDeliveryFee)}</span></div>
-  <div className="sheet-footer-item total"><span className="label">TOTAL À ENCAISSER</span><span className="val">{formatPrice(totalAmount)}</span></div>
-</div>
+                  <div className="sheet-footer">
+                    <div className="sheet-footer-item"><span className="label">Colis</span><span className="val">{driverOrders.length}</span></div>
+                    <div className="sheet-footer-item"><span className="label">Total Produits</span><span className="val">{formatPrice(totalProducts)}</span></div>
+                    <div className="sheet-footer-item"><span className="label">Total Livraison</span><span className="val">{formatPrice(totalDeliveryFee)}</span></div>
+                    <div className="sheet-footer-item total"><span className="label">TOTAL À ENCAISSER</span><span className="val">{formatPrice(totalAmount)}</span></div>
+                  </div>
                 </div >
               );
             })
@@ -1439,185 +1441,185 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         </div >
       )}
 
-{
-  autoAssignPreviewOrders.length > 0 && (
-    <Modal
-      isOpen
-      onClose={() => setAutoAssignPreviewOrders([])}
-      title="Apercu repartition automatique"
-      footer={
-        <>
-          <button className="btn-secondary" onClick={() => setAutoAssignPreviewOrders([])} disabled={isPending}>
-            Annuler
-          </button>
-          <button className="btn-orange" onClick={confirmAutoAssign} disabled={isPending}>
-            <Zap size={14} /> Confirmer la repartition
-          </button>
-        </>
-      }
-    >
-      <div className="auto-preview">
-        <div className="auto-preview-head">
-          <div>
-            <span className="summary-label">Commandes a repartir</span>
-            <strong>{autoAssignPreviewOrders.length}</strong>
-          </div>
-          <div>
-            <span className="summary-label">Livreurs touches</span>
-            <strong>{autoAssignPreviewGroups.length}</strong>
-          </div>
-        </div>
-
-        <div className="auto-preview-list">
-          {autoAssignPreviewGroups.map(({ driver, currentCount, orders }) => {
-            const communes = Array.from(new Set(orders.map((order) => order.commune).filter(Boolean)));
-            return (
-              <div key={driver.id} className="auto-preview-group">
-                <div className="auto-preview-driver">
-                  <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-                  <div>
-                    <h4>{driver.name}</h4>
-                    <p>{currentCount} deja attribue(s) ce jour, {currentCount + orders.length} apres repartition</p>
-                  </div>
-                  <strong>+{orders.length}</strong>
+      {
+        autoAssignPreviewOrders.length > 0 && (
+          <Modal
+            isOpen
+            onClose={() => setAutoAssignPreviewOrders([])}
+            title="Apercu repartition automatique"
+            footer={
+              <>
+                <button className="btn-secondary" onClick={() => setAutoAssignPreviewOrders([])} disabled={isPending}>
+                  Annuler
+                </button>
+                <button className="btn-orange" onClick={confirmAutoAssign} disabled={isPending}>
+                  <Zap size={14} /> Confirmer la repartition
+                </button>
+              </>
+            }
+          >
+            <div className="auto-preview">
+              <div className="auto-preview-head">
+                <div>
+                  <span className="summary-label">Commandes a repartir</span>
+                  <strong>{autoAssignPreviewOrders.length}</strong>
                 </div>
-                <div className="auto-preview-communes">
-                  {communes.length > 0
-                    ? communes.map((commune) => <span key={commune}>{commune}</span>)
-                    : <span>Commune non definie</span>}
-                </div>
-                <div className="auto-preview-orders">
-                  {orders.slice(0, 5).map((order) => (
-                    <span key={order.id}>{order.ref}</span>
-                  ))}
-                  {orders.length > 5 && <span>+{orders.length - 5}</span>}
+                <div>
+                  <span className="summary-label">Livreurs touches</span>
+                  <strong>{autoAssignPreviewGroups.length}</strong>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
-    </Modal>
-  )
-}
 
-{
-  reopenOrder && (
-    <Modal
-      isOpen
-      onClose={() => {
-        setReopenOrder(null);
-        setReopenNote("");
-      }}
-      title={`Corriger la livraison ${reopenOrder.ref}`}
-      footer={
-        <>
-          <button
-            className="btn-secondary"
-            onClick={() => {
+              <div className="auto-preview-list">
+                {autoAssignPreviewGroups.map(({ driver, currentCount, orders }) => {
+                  const communes = Array.from(new Set(orders.map((order) => order.commune).filter(Boolean)));
+                  return (
+                    <div key={driver.id} className="auto-preview-group">
+                      <div className="auto-preview-driver">
+                        <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
+                        <div>
+                          <h4>{driver.name}</h4>
+                          <p>{currentCount} deja attribue(s) ce jour, {currentCount + orders.length} apres repartition</p>
+                        </div>
+                        <strong>+{orders.length}</strong>
+                      </div>
+                      <div className="auto-preview-communes">
+                        {communes.length > 0
+                          ? communes.map((commune) => <span key={commune}>{commune}</span>)
+                          : <span>Commune non definie</span>}
+                      </div>
+                      <div className="auto-preview-orders">
+                        {orders.slice(0, 5).map((order) => (
+                          <span key={order.id}>{order.ref}</span>
+                        ))}
+                        {orders.length > 5 && <span>+{orders.length - 5}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Modal>
+        )
+      }
+
+      {
+        reopenOrder && (
+          <Modal
+            isOpen
+            onClose={() => {
               setReopenOrder(null);
               setReopenNote("");
             }}
-            disabled={isPending}
+            title={`Corriger la livraison ${reopenOrder.ref}`}
+            footer={
+              <>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setReopenOrder(null);
+                    setReopenNote("");
+                  }}
+                  disabled={isPending}
+                >
+                  Annuler
+                </button>
+                <button className="btn-orange" onClick={handleReopenDelivery} disabled={isPending || !reopenNote.trim()}>
+                  <Undo2 size={14} /> Corriger
+                </button>
+              </>
+            }
           >
-            Annuler
-          </button>
-          <button className="btn-orange" onClick={handleReopenDelivery} disabled={isPending || !reopenNote.trim()}>
-            <Undo2 size={14} /> Corriger
-          </button>
-        </>
+            <div className="repro-modal">
+              <p>
+                Cette action remet la commande en statut En livraison pour corriger une erreur livreur.
+                Elle est bloquee si la commande est deja rattachee a un reglement livreur.
+              </p>
+              {reopenOrder.status === "PARTIALLY_DELIVERED" && (
+                <p className="text-[12px] font-bold text-[#B91C1C]">
+                  Attention : pour une livraison partielle, les quantites modifiees ne sont pas restaurees automatiquement.
+                </p>
+              )}
+              <label className="field-label-sm" htmlFor="reopen-note">Motif de correction obligatoire</label>
+              <textarea
+                id="reopen-note"
+                className="field-input repro-note"
+                value={reopenNote}
+                onChange={(event) => setReopenNote(event.target.value)}
+                placeholder="Ex: livreur s'est trompe de statut, client finalement disponible..."
+              />
+            </div>
+          </Modal>
+        )
       }
-    >
-      <div className="repro-modal">
-        <p>
-          Cette action remet la commande en statut En livraison pour corriger une erreur livreur.
-          Elle est bloquee si la commande est deja rattachee a un reglement livreur.
-        </p>
-        {reopenOrder.status === "PARTIALLY_DELIVERED" && (
-          <p className="text-[12px] font-bold text-[#B91C1C]">
-            Attention : pour une livraison partielle, les quantites modifiees ne sont pas restaurees automatiquement.
-          </p>
-        )}
-        <label className="field-label-sm" htmlFor="reopen-note">Motif de correction obligatoire</label>
-        <textarea
-          id="reopen-note"
-          className="field-input repro-note"
-          value={reopenNote}
-          onChange={(event) => setReopenNote(event.target.value)}
-          placeholder="Ex: livreur s'est trompe de statut, client finalement disponible..."
-        />
-      </div>
-    </Modal>
-  )
-}
 
-{
-  reproOrder && (
-    <Modal
-      isOpen
-      onClose={() => {
-        setReproOrder(null);
-        setReproReason("");
-        setReproDetails("");
-        setReproDate(dateInputValue(getNextDeliveryDate()));
-      }}
-      title={`Repro-dispo ${reproOrder.ref}`}
-      footer={
-        <>
-          <button
-            className="btn-secondary"
-            onClick={() => {
+      {
+        reproOrder && (
+          <Modal
+            isOpen
+            onClose={() => {
               setReproOrder(null);
               setReproReason("");
               setReproDetails("");
               setReproDate(dateInputValue(getNextDeliveryDate()));
             }}
-            disabled={isPending}
+            title={`Repro-dispo ${reproOrder.ref}`}
+            footer={
+              <>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setReproOrder(null);
+                    setReproReason("");
+                    setReproDetails("");
+                    setReproDate(dateInputValue(getNextDeliveryDate()));
+                  }}
+                  disabled={isPending}
+                >
+                  Annuler
+                </button>
+                <button className="btn-orange" onClick={handleReproDispo} disabled={isPending || !reproDate || (!reproReason && !reproDetails.trim())}>
+                  <CalendarClock size={14} /> Confirmer le report
+                </button>
+              </>
+            }
           >
-            Annuler
-          </button>
-          <button className="btn-orange" onClick={handleReproDispo} disabled={isPending || !reproDate || (!reproReason && !reproDetails.trim())}>
-            <CalendarClock size={14} /> Confirmer le report
-          </button>
-        </>
+            <div className="repro-modal">
+              <p>
+                Le colis reste emballe et collecte. Choisissez la nouvelle date demandee par le client.
+              </p>
+              <label className="field-label-sm" htmlFor="repro-date">Nouvelle date de livraison</label>
+              <input
+                id="repro-date"
+                type="date"
+                className="field-input"
+                value={reproDate}
+                onChange={(event) => setReproDate(event.target.value)}
+              />
+              <div className="repro-reasons">
+                {REPRO_DISPO_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    className={`repro-reason ${reproReason === reason ? "active" : ""}`}
+                    onClick={() => setReproReason(reason)}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              <label className="field-label-sm" htmlFor="repro-details">Detail utile</label>
+              <textarea
+                id="repro-details"
+                className="field-input repro-note"
+                value={reproDetails}
+                onChange={(event) => setReproDetails(event.target.value)}
+                placeholder="Precision pour le bureau ou le prochain livreur..."
+              />
+            </div>
+          </Modal>
+        )
       }
-    >
-      <div className="repro-modal">
-        <p>
-          Le colis reste emballe et collecte. Choisissez la nouvelle date demandee par le client.
-        </p>
-        <label className="field-label-sm" htmlFor="repro-date">Nouvelle date de livraison</label>
-        <input
-          id="repro-date"
-          type="date"
-          className="field-input"
-          value={reproDate}
-          onChange={(event) => setReproDate(event.target.value)}
-        />
-        <div className="repro-reasons">
-          {REPRO_DISPO_REASONS.map((reason) => (
-            <button
-              key={reason}
-              type="button"
-              className={`repro-reason ${reproReason === reason ? "active" : ""}`}
-              onClick={() => setReproReason(reason)}
-            >
-              {reason}
-            </button>
-          ))}
-        </div>
-        <label className="field-label-sm" htmlFor="repro-details">Detail utile</label>
-        <textarea
-          id="repro-details"
-          className="field-input repro-note"
-          value={reproDetails}
-          onChange={(event) => setReproDetails(event.target.value)}
-          placeholder="Precision pour le bureau ou le prochain livreur..."
-        />
-      </div>
-    </Modal>
-  )
-}
 
     </div >
   );
