@@ -18,7 +18,7 @@ import {
   LayoutDashboard, ShoppingBag, Package, Truck, Box, Users, BarChart3,
   Upload, FileText, LogOut, ClipboardList,
   AlertTriangle, Settings, ChevronRight, ChevronLeft, History, Wallet, Warehouse,
-  Image as ImageIcon, Menu, X, Bell, WifiOff,
+  Image as ImageIcon, Menu, X, Bell, WifiOff, Landmark,
   CheckCircle, Plus, Tag, MessageCircle, Undo2
 } from "lucide-react";
 
@@ -66,6 +66,10 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
     { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Répertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
     { title: 'Inventaire', items: [{ label: 'Tous les produits', href: '/zangochap-manager/products', icon: <Box size={18} /> }, { label: 'Ruptures de stock', href: '/zangochap-manager/products/shortages', icon: <AlertTriangle size={18} /> }, { label: 'Historique stock', href: '/zangochap-manager/inventory/history', icon: <History size={18} /> }, { label: 'Entrepôts', href: '/zangochap-manager/logistics/warehouses', icon: <Warehouse size={18} /> }] },
   ],
+  comptable: () => [
+    { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Repertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
+    { title: 'Comptabilite', items: [{ label: 'Sessions comptables', href: '/zangochap-manager/accounting', icon: <Landmark size={18} /> }, { label: 'Reglements', href: '/zangochap-manager/admin/settlements', icon: <Wallet size={18} /> }] },
+  ],
   admin: (counts) => [
     { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Répertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
     {
@@ -105,6 +109,7 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
         { label: 'Top Produits', href: '/zangochap-manager/admin/top-products', icon: <BarChart3 size={18} /> },
         { label: 'Performance Équipe', href: '/zangochap-manager/admin/performance', icon: <BarChart3 size={18} /> },
         { label: 'Importation', href: '/zangochap-manager/admin/import', icon: <Upload size={18} /> },
+        { label: 'Comptabilite', href: '/zangochap-manager/accounting', icon: <Landmark size={18} /> },
         { label: 'Règlements', href: '/zangochap-manager/admin/settlements', icon: <Wallet size={18} /> },
         { label: 'Settings', href: '/zangochap-manager/admin/settings', icon: <Settings size={18} /> }
       ]

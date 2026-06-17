@@ -26,7 +26,7 @@ export const emptySidebarCounts: SidebarCounts = {
   riderChatUnread: 0,
 };
 
-const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
+const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMPTABLE", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
 
 export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): Promise<SidebarCounts> {
   const today = new Date();

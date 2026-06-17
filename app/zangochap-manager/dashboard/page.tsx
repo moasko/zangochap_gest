@@ -35,6 +35,11 @@ export default async function DashboardPage() {
     redirect("/zangochap-rider");
   }
 
+  if (user?.role?.toUpperCase() === 'COMPTABLE') {
+    const { redirect } = await import("next/navigation");
+    redirect("/zangochap-manager/accounting");
+  }
+
   const DashboardView = dashboards[user?.role] || AdminDashboard;
 
   const serializedUser = JSON.parse(JSON.stringify(user));

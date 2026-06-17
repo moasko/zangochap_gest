@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { getSession } from "@/modules/auth/actions";
 import { emitRiderAlert } from "@/lib/rider-alert-events";
 
-const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
+const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMPTABLE", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
 
 export type ChatRoomKey = "GENERAL" | "ROLE" | "DIRECT";
 
@@ -112,7 +112,7 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: [...STAFF_ROLES] },
+        role: { in: [...STAFF_ROLES] as unknown as Role[] },
       },
       select: {
         id: true,

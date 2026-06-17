@@ -9,6 +9,7 @@ datasource db {
 enum Role {
   DEVELOPER
   ADMIN
+  COMPTABLE
   COMMERCIAL
   PACKING
   COLLECTION
@@ -70,6 +71,29 @@ enum ChatMessageScope {
   GENERAL
   ROLE
   DIRECT
+}
+
+enum AccountingOperationType {
+  INCOME
+  EXPENSE
+  CORRECTION
+}
+
+enum AccountingOperationSource {
+  DELIVERY
+  CUSTOMER
+  MANUAL
+  OTHER
+}
+
+enum AccountingCategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum AccountingSessionStatus {
+  OPEN
+  CLOSED
 }
 
 model User {
@@ -144,6 +168,123 @@ model DeveloperAuditLog {
 
   @@index([action])
   @@index([status])
+  @@index([createdAt])
+}
+
+model AccountingSession {
+  id          String                  @id @default(cuid())
+  date        DateTime                @unique
+  status      AccountingSessionStatus @default(OPEN)
+  notes       String?                 @db.Text
+  operations  AccountingOperation[]
+  audits      AccountingAuditLog[]
+  reports     AccountingReport[]      @relation("AccountingReportSessions")
+  createdById String?
+  createdByName String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([date])
+  @@index([status])
+}
+
+model AccountingCategory {
+  id         String                  @id @default(cuid())
+  name       String
+  slug       String
+  type       AccountingCategoryType
+  isDefault  Boolean                 @default(false)
+  operations AccountingOperation[]
+  reports    AccountingReport[]      @relation("AccountingReportCategories")
+  createdById String?
+  createdByName String?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  @@unique([slug, type])
+  @@index([type])
+}
+
+model AccountingOperation {
+  id             String                    @id @default(cuid())
+  type           AccountingOperationType
+  source         AccountingOperationSource @default(MANUAL)
+  amount         Int
+  originalAmount Int?
+  description    String?                   @db.Text
+  proofUrl       String?                   @db.Text
+  reason         String?                   @db.Text
+  sessionId      String
+  session        AccountingSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       AccountingCategory        @relation(fields: [categoryId], references: [id])
+  deliveryOrderId String?
+  deliveryOrderRef String?
+  customerId     String?
+  clientName     String?
+  riderId        String?
+  riderName      String?
+  createdById    String?
+  createdByName  String?
+  updatedById    String?
+  updatedByName  String?
+  audits         AccountingAuditLog[]
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@unique([source, deliveryOrderId])
+  @@index([sessionId])
+  @@index([categoryId])
+  @@index([type])
+  @@index([source])
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+model AccountingAuditLog {
+  id          String               @id @default(cuid())
+  action      String
+  entityType  String
+  entityId    String?
+  sessionId   String?
+  session     AccountingSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  operationId String?
+  operation   AccountingOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  actorId     String?
+  actorName   String?
+  actorEmail  String?
+  previousAmount Int?
+  newAmount      Int?
+  reason      String?              @db.Text
+  details     Json?
+  createdAt   DateTime             @default(now())
+
+  @@index([entityType, entityId])
+  @@index([sessionId])
+  @@index([operationId])
+  @@index([createdAt])
+}
+
+model AccountingReport {
+  id          String                 @id @default(cuid())
+  name        String
+  description String?                @db.Text
+  dateFrom    DateTime
+  dateTo      DateTime
+  operationTypes String[]
+  filters     Json?
+  totalIncome  Int                   @default(0)
+  totalExpense Int                   @default(0)
+  balance      Int                   @default(0)
+  operationsCount Int                @default(0)
+  sessions    AccountingSession[]    @relation("AccountingReportSessions")
+  categories  AccountingCategory[]   @relation("AccountingReportCategories")
+  createdById String?
+  createdByName String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([dateFrom, dateTo])
   @@index([createdAt])
 }
 

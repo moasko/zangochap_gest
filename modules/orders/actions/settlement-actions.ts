@@ -303,6 +303,9 @@ export async function createSettlement(deliverymanId: string, orderIds: string[]
 // ============ SETTLEMENT STATS BY PAYMENT METHOD ============
 export async function getSettlementStats(from?: string, to?: string, commercialId?: string, method?: string) {
   const session = await getSession();
+  if (session && isRole(session, 'comptable')) {
+    // Comptable can inspect payment-method settlements without admin account-management access.
+  } else
   if (!session || !isRole(session, 'admin')) throw new Error("Accès refusé");
 
   const where: Prisma.OrderWhereInput = {
@@ -360,7 +363,7 @@ export async function getSettlementStats(from?: string, to?: string, commercialI
 
 export async function getDeliverySettlementDashboard(from?: string, to?: string, riderId?: string) {
   const session = await getSession();
-  if (!session || !isRole(session, 'admin')) throw new Error("AccÃ¨s refusÃ©");
+  if (!session || !isRole(session, 'admin', 'comptable')) throw new Error("AccÃ¨s refusÃ©");
 
   const deliveryDateRange = getDateRange(from, to);
   const riderFilter: Prisma.OrderWhereInput = riderId ? { deliverymanId: riderId } : { deliverymanId: { not: null } };

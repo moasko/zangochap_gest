@@ -57,6 +57,8 @@ export async function loginAction(formData: FormData) {
 
   if (user.role.toUpperCase() === 'LIVREUR') {
     redirect("/zangochap-rider");
+  } else if (user.role.toUpperCase() === 'COMPTABLE') {
+    redirect("/zangochap-manager/accounting");
   } else {
     redirect("/zangochap-manager/dashboard");
   }

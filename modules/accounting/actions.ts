@@ -1,0 +1,551 @@
+"use server";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { revalidatePath } from "next/cache";
+import prisma from "@/lib/prisma";
+import { ensureAuth } from "@/lib/auth";
+
+type AccountingType = "INCOME" | "EXPENSE" | "CORRECTION";
+type AccountingSource = "DELIVERY" | "CUSTOMER" | "MANUAL" | "OTHER";
+type CategoryType = "INCOME" | "EXPENSE";
+
+const db = prisma as any;
+const ACCOUNTING_PATH = "/zangochap-manager/accounting";
+
+const DEFAULT_CATEGORIES: Array<{ name: string; slug: string; type: CategoryType }> = [
+  { name: "Paiement livraison", slug: "paiement-livraison", type: "INCOME" },
+  { name: "Reglement client", slug: "reglement-client", type: "INCOME" },
+  { name: "Avance client", slug: "avance-client", type: "INCOME" },
+  { name: "Vente directe", slug: "vente-directe", type: "INCOME" },
+  { name: "Autre entree", slug: "autre-entree", type: "INCOME" },
+  { name: "Transport", slug: "transport", type: "EXPENSE" },
+  { name: "Carburant", slug: "carburant", type: "EXPENSE" },
+  { name: "Achat materiel", slug: "achat-materiel", type: "EXPENSE" },
+  { name: "Salaire", slug: "salaire", type: "EXPENSE" },
+  { name: "Commission livreur", slug: "commission-livreur", type: "EXPENSE" },
+  { name: "Depense diverse", slug: "depense-diverse", type: "EXPENSE" },
+];
+
+function startOfLocalDay(value: string | Date) {
+  const date = typeof value === "string" ? new Date(`${value}T00:00:00`) : new Date(value);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function endOfLocalDay(value: string | Date) {
+  const date = startOfLocalDay(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+function dateInputValue(date = new Date()) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function positiveAmount(value: unknown) {
+  const amount = Math.round(Number(value));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Le montant doit etre superieur a 0.");
+  }
+  return amount;
+}
+
+async function requireAccountingUser() {
+  return ensureAuth(["admin", "developer", "comptable"]);
+}
+
+async function audit(tx: any, data: {
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  sessionId?: string | null;
+  operationId?: string | null;
+  previousAmount?: number | null;
+  newAmount?: number | null;
+  reason?: string | null;
+  details?: unknown;
+  actor: any;
+}) {
+  await tx.accountingAuditLog.create({
+    data: {
+      action: data.action,
+      entityType: data.entityType,
+      entityId: data.entityId || null,
+      sessionId: data.sessionId || null,
+      operationId: data.operationId || null,
+      previousAmount: data.previousAmount ?? null,
+      newAmount: data.newAmount ?? null,
+      reason: data.reason || null,
+      details: data.details || undefined,
+      actorId: data.actor.id,
+      actorName: data.actor.name,
+      actorEmail: data.actor.email,
+    },
+  });
+}
+
+async function ensureDefaultCategories(tx = db) {
+  await Promise.all(DEFAULT_CATEGORIES.map((category) => (
+    tx.accountingCategory.upsert({
+      where: { slug_type: { slug: category.slug, type: category.type } },
+      update: { name: category.name, isDefault: true },
+      create: { ...category, isDefault: true },
+    })
+  )));
+}
+
+async function getDeliveryIncomeCategory(tx = db) {
+  await ensureDefaultCategories(tx);
+  return tx.accountingCategory.findUnique({
+    where: { slug_type: { slug: "paiement-livraison", type: "INCOME" } },
+  });
+}
+
+async function ensureSessionForDate(tx: any, date: string | Date, actor: any) {
+  const day = startOfLocalDay(date);
+  return tx.accountingSession.upsert({
+    where: { date: day },
+    update: {},
+    create: {
+      date: day,
+      createdById: actor?.id,
+      createdByName: actor?.name,
+    },
+  });
+}
+
+async function syncDeliveryOperations(session: any, actor: any) {
+  const deliveryCategory = await getDeliveryIncomeCategory();
+  const orders = await db.order.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] },
+      OR: [
+        { deliveryDate: { gte: session.date, lte: endOfLocalDay(session.date) } },
+        { deliveryDate: null, updatedAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
+      ],
+    },
+    select: {
+      id: true,
+      ref: true,
+      customerName: true,
+      total: true,
+      deliveryFee: true,
+      discount: true,
+      deliverymanId: true,
+      deliverymanName: true,
+      customerId: true,
+    },
+  });
+
+  if (!orders.length) return;
+
+  // Single query: find which orders already have accounting operations
+  const existingOps = await db.accountingOperation.findMany({
+    where: {
+      source: "DELIVERY",
+      deliveryOrderId: { in: orders.map((o: any) => o.id) },
+    },
+    select: { deliveryOrderId: true },
+  });
+  const syncedOrderIds = new Set(existingOps.map((op: any) => op.deliveryOrderId));
+
+  // Build batch of only the missing operations
+  const newOperations = orders
+    .filter((order: any) => !syncedOrderIds.has(order.id))
+    .map((order: any) => {
+      const amount = Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0));
+      return { amount, order };
+    })
+    .filter(({ amount }) => amount > 0)
+    .map(({ amount, order }) => ({
+      type: "INCOME",
+      source: "DELIVERY",
+      amount,
+      originalAmount: amount,
+      description: `Livraison ${order.ref || order.id}`,
+      sessionId: session.id,
+      categoryId: deliveryCategory.id,
+      deliveryOrderId: order.id,
+      deliveryOrderRef: order.ref,
+      customerId: order.customerId,
+      clientName: order.customerName,
+      riderId: order.deliverymanId,
+      riderName: order.deliverymanName,
+      createdById: actor?.id,
+      createdByName: actor?.name || "Synchronisation",
+    }));
+
+  if (newOperations.length) {
+    await db.accountingOperation.createMany({
+      data: newOperations,
+      skipDuplicates: true,
+    });
+  }
+}
+
+export async function getAccountingWorkspace(date = dateInputValue()) {
+  const actor = await requireAccountingUser();
+
+  // All three operations are idempotent — no interactive transaction needed
+  await ensureDefaultCategories();
+  const session = await ensureSessionForDate(db, date, actor);
+  await syncDeliveryOperations(session, actor);
+
+  const [sessions, categories, operations, audits, reports, riders, customers] = await Promise.all([
+    db.accountingSession.findMany({
+      orderBy: { date: "desc" },
+      take: 30,
+      include: { operations: { select: { type: true, amount: true } } },
+    }),
+    db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    db.accountingOperation.findMany({
+      where: { sessionId: session.id },
+      include: { category: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.accountingAuditLog.findMany({
+      where: { sessionId: session.id },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+    }),
+    db.accountingReport.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+    db.user.findMany({
+      where: { role: "LIVREUR" },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.customer.findMany({
+      select: { id: true, name: true, phone: true },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+    }),
+  ]);
+
+  const totals = summarizeOperations(operations);
+
+  return JSON.parse(JSON.stringify({
+    session,
+    sessions: sessions.map((item: any) => ({ ...item, summary: summarizeOperations(item.operations) })),
+    categories,
+    operations,
+    audits,
+    reports,
+    riders,
+    customers,
+    totals,
+  }));
+}
+
+function summarizeOperations(operations: Array<{ type: AccountingType; amount: number }>) {
+  const totalIncome = operations
+    .filter((operation) => operation.type === "INCOME" || (operation.type === "CORRECTION" && operation.amount > 0))
+    .reduce((sum, operation) => sum + Math.abs(Number(operation.amount || 0)), 0);
+  const totalExpense = operations
+    .filter((operation) => operation.type === "EXPENSE" || (operation.type === "CORRECTION" && operation.amount < 0))
+    .reduce((sum, operation) => sum + Math.abs(Number(operation.amount || 0)), 0);
+  return {
+    totalIncome,
+    totalExpense,
+    balance: totalIncome - totalExpense,
+    count: operations.length,
+  };
+}
+
+export async function createAccountingCategory(data: { name: string; type: CategoryType }) {
+  const actor = await requireAccountingUser();
+  const name = data.name.trim();
+  if (name.length < 2) throw new Error("Nom de categorie trop court.");
+  const type = data.type === "EXPENSE" ? "EXPENSE" : "INCOME";
+  const slug = slugify(name);
+  if (!slug) throw new Error("Nom de categorie invalide.");
+
+  const category = await db.$transaction(async (tx: any) => {
+    const created = await tx.accountingCategory.create({
+      data: {
+        name,
+        slug,
+        type,
+        createdById: actor.id,
+        createdByName: actor.name,
+      },
+    });
+    await audit(tx, {
+      action: "CATEGORY_CREATED",
+      entityType: "AccountingCategory",
+      entityId: created.id,
+      actor,
+      details: { name, type },
+    });
+    return created;
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true, category };
+}
+
+export async function updateAccountingCategory(id: string, data: { name: string }) {
+  const actor = await requireAccountingUser();
+  const name = data.name.trim();
+  if (name.length < 2) throw new Error("Nom de categorie trop court.");
+
+  await db.$transaction(async (tx: any) => {
+    const previous = await tx.accountingCategory.findUnique({ where: { id } });
+    if (!previous) throw new Error("Categorie introuvable.");
+    const updated = await tx.accountingCategory.update({
+      where: { id },
+      data: { name, slug: slugify(name) },
+    });
+    await audit(tx, {
+      action: "CATEGORY_UPDATED",
+      entityType: "AccountingCategory",
+      entityId: id,
+      actor,
+      details: { before: previous.name, after: updated.name },
+    });
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true };
+}
+
+export async function deleteAccountingCategory(id: string) {
+  const actor = await requireAccountingUser();
+
+  await db.$transaction(async (tx: any) => {
+    const category = await tx.accountingCategory.findUnique({
+      where: { id },
+      include: { _count: { select: { operations: true } } },
+    });
+    if (!category) throw new Error("Categorie introuvable.");
+    if (category.isDefault) throw new Error("Une categorie par defaut ne peut pas etre supprimee.");
+    if (category._count.operations > 0) throw new Error("Categorie deja utilisee: suppression impossible.");
+
+    await tx.accountingCategory.delete({ where: { id } });
+    await audit(tx, {
+      action: "CATEGORY_DELETED",
+      entityType: "AccountingCategory",
+      entityId: id,
+      actor,
+      details: { name: category.name, type: category.type },
+    });
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true };
+}
+
+export async function createAccountingOperation(data: {
+  sessionId: string;
+  categoryId: string;
+  type: AccountingType;
+  source?: AccountingSource;
+  amount: number;
+  description?: string;
+  proofUrl?: string;
+}) {
+  const actor = await requireAccountingUser();
+  const amount = positiveAmount(data.amount);
+  const type: AccountingType = data.type === "EXPENSE" ? "EXPENSE" : data.type === "CORRECTION" ? "CORRECTION" : "INCOME";
+
+  const operation = await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    const category = await tx.accountingCategory.findUnique({ where: { id: data.categoryId } });
+    if (!category) throw new Error("Categorie introuvable.");
+    if (type !== "CORRECTION" && category.type !== type) {
+      throw new Error("La categorie ne correspond pas au type d'operation.");
+    }
+
+    const created = await tx.accountingOperation.create({
+      data: {
+        sessionId: data.sessionId,
+        categoryId: data.categoryId,
+        type,
+        source: data.source || "MANUAL",
+        amount,
+        description: data.description?.trim() || null,
+        proofUrl: data.proofUrl?.trim() || null,
+        createdById: actor.id,
+        createdByName: actor.name,
+      },
+    });
+    await audit(tx, {
+      action: "OPERATION_CREATED",
+      entityType: "AccountingOperation",
+      entityId: created.id,
+      sessionId: data.sessionId,
+      operationId: created.id,
+      newAmount: amount,
+      actor,
+      details: { type, source: data.source || "MANUAL" },
+    });
+    return created;
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true, operation };
+}
+
+export async function updateAccountingOperation(id: string, data: {
+  amount: number;
+  categoryId?: string;
+  description?: string;
+  proofUrl?: string;
+  reason?: string;
+}) {
+  const actor = await requireAccountingUser();
+  const amount = positiveAmount(data.amount);
+  const reason = data.reason?.trim() || "Regularisation comptable";
+
+  await db.$transaction(async (tx: any) => {
+    const previous = await tx.accountingOperation.findUnique({ where: { id } });
+    if (!previous) throw new Error("Operation introuvable.");
+
+    const updated = await tx.accountingOperation.update({
+      where: { id },
+      data: {
+        amount,
+        categoryId: data.categoryId || previous.categoryId,
+        description: data.description?.trim() ?? previous.description,
+        proofUrl: data.proofUrl?.trim() ?? previous.proofUrl,
+        reason,
+        updatedById: actor.id,
+        updatedByName: actor.name,
+      },
+    });
+
+    await audit(tx, {
+      action: "OPERATION_UPDATED",
+      entityType: "AccountingOperation",
+      entityId: id,
+      sessionId: previous.sessionId,
+      operationId: id,
+      previousAmount: previous.amount,
+      newAmount: updated.amount,
+      reason,
+      actor,
+      details: { source: previous.source, deliveryOrderRef: previous.deliveryOrderRef },
+    });
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true };
+}
+
+export async function deleteAccountingOperation(id: string, reason?: string) {
+  const actor = await requireAccountingUser();
+
+  await db.$transaction(async (tx: any) => {
+    const operation = await tx.accountingOperation.findUnique({ where: { id } });
+    if (!operation) throw new Error("Operation introuvable.");
+    if (operation.source === "DELIVERY") {
+      throw new Error("Une entree de livraison doit etre regularisee plutot que supprimee.");
+    }
+
+    await tx.accountingOperation.delete({ where: { id } });
+    await audit(tx, {
+      action: "OPERATION_DELETED",
+      entityType: "AccountingOperation",
+      entityId: id,
+      sessionId: operation.sessionId,
+      previousAmount: operation.amount,
+      reason: reason?.trim() || "Suppression comptable",
+      actor,
+      details: { type: operation.type, source: operation.source },
+    });
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true };
+}
+
+export async function createAccountingReport(data: {
+  name: string;
+  dateFrom: string;
+  dateTo: string;
+  categoryIds?: string[];
+  riderIds?: string[];
+  customerIds?: string[];
+  sessionIds?: string[];
+  operationTypes?: AccountingType[];
+  description?: string;
+}) {
+  const actor = await requireAccountingUser();
+  const name = data.name.trim();
+  if (name.length < 2) throw new Error("Nom du bilan requis.");
+  const dateFrom = startOfLocalDay(data.dateFrom);
+  const dateTo = endOfLocalDay(data.dateTo);
+  if (dateFrom > dateTo) throw new Error("La date de debut doit preceder la date de fin.");
+  const operationTypes = data.operationTypes?.length ? data.operationTypes : ["INCOME", "EXPENSE", "CORRECTION"];
+
+  const categoryIds = Array.from(new Set(data.categoryIds || []));
+  const riderIds = Array.from(new Set(data.riderIds || []));
+  const sessionIds = Array.from(new Set(data.sessionIds || []));
+
+  const where: any = {
+    createdAt: { gte: dateFrom, lte: dateTo },
+    type: { in: operationTypes },
+  };
+  if (categoryIds.length) where.categoryId = { in: categoryIds };
+  if (riderIds.length) where.riderId = { in: riderIds };
+  if (data.customerIds?.length) where.customerId = { in: Array.from(new Set(data.customerIds)) };
+  if (sessionIds.length) where.sessionId = { in: sessionIds };
+
+  const operations = await db.accountingOperation.findMany({ where, select: { type: true, amount: true, sessionId: true } });
+  const totals = summarizeOperations(operations);
+  const reportSessionIds = Array.from(new Set(operations.map((operation: any) => operation.sessionId)));
+
+  const report = await db.accountingReport.create({
+    data: {
+      name,
+      description: data.description?.trim() || null,
+      dateFrom,
+      dateTo,
+      operationTypes,
+      filters: {
+        categoryIds,
+        riderIds,
+        customerIds: data.customerIds || [],
+        sessionIds,
+      },
+      totalIncome: totals.totalIncome,
+      totalExpense: totals.totalExpense,
+      balance: totals.balance,
+      operationsCount: operations.length,
+      createdById: actor.id,
+      createdByName: actor.name,
+      categories: categoryIds.length ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
+      sessions: reportSessionIds.length ? { connect: reportSessionIds.map((id) => ({ id })) } : undefined,
+    },
+  });
+
+  await db.accountingAuditLog.create({
+    data: {
+      action: "REPORT_CREATED",
+      entityType: "AccountingReport",
+      entityId: report.id,
+      actorId: actor.id,
+      actorName: actor.name,
+      actorEmail: actor.email,
+      details: { name, totals },
+    },
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  return { success: true, report };
+}

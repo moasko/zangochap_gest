@@ -12,11 +12,12 @@ import {
   Plus, Edit3, Trash2, Mail, Phone, Shield,
   ShoppingBag, Package, Truck, Box, User,
   MoreVertical, Search, Filter, PauseCircle, Clock,
-  X
+  X, Landmark
 } from "lucide-react";
 
 const ROLE_ICONS: Record<string, React.ReactNode> = {
   developer: <Shield size={18} />,
+  comptable: <Landmark size={18} />,
   admin: <Shield size={18} />,
   commercial: <ShoppingBag size={18} />,
   packing: <Package size={18} />,
@@ -27,6 +28,7 @@ const ROLE_ICONS: Record<string, React.ReactNode> = {
 
 const ROLE_COLORS: Record<string, string> = {
   developer: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+  comptable: 'linear-gradient(135deg, #0F766E 0%, #134E4A 100%)',
   admin: 'linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)',
   commercial: 'linear-gradient(135deg, #D4541C 0%, #A34015 100%)',
   packing: 'linear-gradient(135deg, #059669 0%, #065F46 100%)',
