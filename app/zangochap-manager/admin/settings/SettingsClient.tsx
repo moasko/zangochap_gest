@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, LayoutGrid, MapPin, Settings, Store, Tag, Users } from "lucide-react";
+import { ArrowRight, LayoutGrid, MapPin, MessageCircle, Settings, Store, Users } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -36,6 +36,14 @@ const SECTIONS = [
     icon: <Users size={20} />,
     iconColor: "#2563EB",
     bgColor: "#EFF6FF",
+  },
+  {
+    title: "WhatsApp Business",
+    description: "Connectez Meta Cloud API, testez les messages et vérifiez le webhook.",
+    href: "/zangochap-manager/admin/whatsapp",
+    icon: <MessageCircle size={20} />,
+    iconColor: "#128C5A",
+    bgColor: "#EAF8F0",
   },
 ];
 

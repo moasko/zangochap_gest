@@ -108,6 +108,7 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
         { label: 'Fiche d\'expédition', href: '/zangochap-manager/admin/delivery-sheet', icon: <FileText size={18} /> },
         { label: 'Galerie Media', href: '/zangochap-manager/media', icon: <ImageIcon size={18} /> },
         { label: 'CMS public', href: '/zangochap-manager/admin/cms', icon: <FileText size={18} /> },
+        { label: 'WhatsApp Business', href: '/zangochap-manager/admin/whatsapp', icon: <MessageCircle size={18} /> },
         { label: 'Codes promo', href: '/zangochap-manager/admin/promos', icon: <Tag size={18} /> },
         { label: 'Top Produits', href: '/zangochap-manager/admin/top-products', icon: <BarChart3 size={18} /> },
         { label: 'Performance Équipe', href: '/zangochap-manager/admin/performance', icon: <BarChart3 size={18} /> },
