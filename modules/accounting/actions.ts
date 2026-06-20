@@ -152,48 +152,59 @@ async function syncDeliveryOperations(session: any, actor: any) {
     },
   });
 
-  if (!orders.length) return;
+  // Calculate totals for the day
+  const validOrders = orders
+    .map((order: any) => ({
+      ...order,
+      computedAmount: Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0)),
+    }))
+    .filter((order: any) => order.computedAmount > 0);
 
-  // Single query: find which orders already have accounting operations
-  const existingOps = await db.accountingOperation.findMany({
-    where: {
-      source: "DELIVERY",
-      deliveryOrderId: { in: orders.map((o: any) => o.id) },
-    },
-    select: { deliveryOrderId: true },
+  const totalAmount = validOrders.reduce((sum: number, order: any) => sum + order.computedAmount, 0);
+  const orderCount = validOrders.length;
+  const description = `${orderCount} livraison(s) du jour`;
+
+  // Find existing grouped delivery operation for this session
+  const existingGrouped = await db.accountingOperation.findFirst({
+    where: { sessionId: session.id, source: "DELIVERY", deliveryOrderId: null },
   });
-  const syncedOrderIds = new Set(existingOps.map((op: any) => op.deliveryOrderId));
 
-  // Build batch of only the missing operations
-  const newOperations = orders
-    .filter((order: any) => !syncedOrderIds.has(order.id))
-    .map((order: any) => {
-      const amount = Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0));
-      return { amount, order };
-    })
-    .filter(({ amount }) => amount > 0)
-    .map(({ amount, order }) => ({
-      type: "INCOME",
-      source: "DELIVERY",
-      amount,
-      originalAmount: amount,
-      description: `Livraison ${order.ref || order.id}`,
-      sessionId: session.id,
-      categoryId: deliveryCategory.id,
-      deliveryOrderId: order.id,
-      deliveryOrderRef: order.ref,
-      customerId: order.customerId,
-      clientName: order.customerName,
-      riderId: order.deliverymanId,
-      riderName: order.deliverymanName,
-      createdById: actor?.id,
-      createdByName: actor?.name || "Synchronisation",
-    }));
+  if (orderCount === 0 && existingGrouped) {
+    // Never delete accounting history automatically in production.
+    return;
+  }
 
-  if (newOperations.length) {
-    await db.accountingOperation.createMany({
-      data: newOperations,
-      skipDuplicates: true,
+  if (orderCount === 0) return;
+
+  if (existingGrouped) {
+    // Update existing grouped operation with latest totals
+    if (existingGrouped.amount !== totalAmount || existingGrouped.originalAmount !== totalAmount) {
+      const dataToUpdate: any = { originalAmount: totalAmount, description };
+      // If the user hasn't provided a reason (i.e. hasn't validated/edited it manually), keep amount in sync
+      if (!existingGrouped.reason) {
+        dataToUpdate.amount = totalAmount;
+      }
+      await db.accountingOperation.update({
+        where: { id: existingGrouped.id },
+        data: dataToUpdate,
+      });
+    }
+  } else {
+    // Create single grouped operation
+    await db.accountingOperation.create({
+      data: {
+        type: "INCOME",
+        source: "DELIVERY",
+        amount: totalAmount,
+        originalAmount: totalAmount,
+        description,
+        sessionId: session.id,
+        categoryId: deliveryCategory.id,
+        deliveryOrderId: null,
+        deliveryOrderRef: null,
+        createdById: actor?.id,
+        createdByName: actor?.name || "Synchronisation",
+      },
     });
   }
 }
@@ -201,7 +212,7 @@ async function syncDeliveryOperations(session: any, actor: any) {
 export async function getAccountingWorkspace(date = dateInputValue()) {
   const actor = await requireAccountingUser();
 
-  // All three operations are idempotent — no interactive transaction needed
+  // All three operations are idempotent; no interactive transaction needed.
   await ensureDefaultCategories();
   const session = await ensureSessionForDate(db, date, actor);
   await syncDeliveryOperations(session, actor);

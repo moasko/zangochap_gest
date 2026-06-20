@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { ensureAuth } from "@/lib/auth";
+import type { Prisma } from "@prisma/client";
 import * as fs from "fs";
 import * as path from "path";
 import { recordDeveloperAudit } from "./audit";
@@ -27,6 +28,16 @@ interface BackupMetadata {
   };
 }
 
+interface ImportedBackupPayload {
+  metadata?: Record<string, unknown>;
+  tables: Record<string, unknown>;
+}
+
+type BackupCustomerInput = Prisma.CustomerCreateManyInput & {
+  id: string;
+  phone?: string | null;
+};
+
 function ensureBackupDirectory() {
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -50,6 +61,10 @@ function resolveBackupFile(fileName: string) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Erreur inconnue.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 async function getBackupPayload(storeExternally: boolean, fileName: string) {
@@ -223,6 +238,120 @@ export async function listSystemBackupsAction() {
   }
 }
 
+export async function importSystemBackupAction(data: {
+  originalFileName: string;
+  fileContent: string;
+}) {
+  await ensureAuth(["developer"]);
+  try {
+    ensureBackupDirectory();
+
+    const originalFileName = path.basename(data.originalFileName || "backup_import.json");
+    if (!originalFileName.toLowerCase().endsWith(".json")) {
+      return { success: false, error: "Le fichier doit etre au format JSON." };
+    }
+
+    const sizeKb = Math.round((Buffer.byteLength(data.fileContent || "", "utf-8") / 1024) * 10) / 10;
+    if (sizeKb <= 0) {
+      return { success: false, error: "Le fichier est vide." };
+    }
+    if (sizeKb > 25_000) {
+      return { success: false, error: "Fichier trop volumineux. Limite actuelle: 25 Mo." };
+    }
+
+    let parsedUnknown: unknown;
+    try {
+      parsedUnknown = JSON.parse(data.fileContent);
+    } catch {
+      return { success: false, error: "JSON invalide ou corrompu." };
+    }
+
+    if (!isRecord(parsedUnknown) || !isRecord(parsedUnknown.tables)) {
+      return { success: false, error: "Structure de backup invalide: objet tables manquant." };
+    }
+
+    const parsed: ImportedBackupPayload = {
+      metadata: isRecord(parsedUnknown.metadata) ? parsedUnknown.metadata : undefined,
+      tables: parsedUnknown.tables,
+    };
+    const tables = parsed.tables;
+    const requiredTables = ["orders", "products", "customers"];
+    const missingRequiredTables = requiredTables.filter((table) => !Array.isArray(tables[table]));
+    if (missingRequiredTables.length > 0) {
+      return {
+        success: false,
+        error: `Structure de backup incomplete. Tables manquantes: ${missingRequiredTables.join(", ")}.`,
+      };
+    }
+
+    const stats = {
+      orders: Array.isArray(tables.orders) ? tables.orders.length : 0,
+      products: Array.isArray(tables.products) ? tables.products.length : 0,
+      customers: Array.isArray(tables.customers) ? tables.customers.length : 0,
+      stockMovements: Array.isArray(tables.stockMovements) ? tables.stockMovements.length : 0,
+      promos: Array.isArray(tables.promos) ? tables.promos.length : 0,
+      categories: Array.isArray(tables.categories) ? tables.categories.length : 0,
+      warehouses: Array.isArray(tables.warehouses) ? tables.warehouses.length : 0,
+      users: Array.isArray(tables.users) ? tables.users.length : 0,
+      settlements: Array.isArray(tables.settlements) ? tables.settlements.length : 0,
+    };
+
+    const formattedDate = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const importedFileName = `backup_${formattedDate}.json`;
+    const { safeName, filePath } = resolveBackupFile(importedFileName);
+    if (fs.existsSync(filePath)) {
+      return { success: false, error: "Un backup importe au meme horodatage existe deja. Reessayez dans quelques secondes." };
+    }
+
+    const normalizedPayload = {
+      ...parsedUnknown,
+      metadata: {
+        ...(parsed.metadata || {}),
+        version: typeof parsed.metadata?.version === "string" ? parsed.metadata.version : "1.0",
+        timestamp: typeof parsed.metadata?.timestamp === "string" ? parsed.metadata.timestamp : new Date().toISOString(),
+        importedAt: new Date().toISOString(),
+        importedFrom: originalFileName,
+        fileName: safeName,
+        location: "Local",
+        stats,
+        warning: typeof parsed.metadata?.warning === "string"
+          ? parsed.metadata.warning
+          : "Backup importe dans l'application. Aucune restauration n'a ete executee.",
+      },
+      tables,
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(normalizedPayload, null, 2), "utf-8");
+
+    await recordDeveloperAudit("backup.import", "success", {
+      fileName: safeName,
+      originalFileName,
+      sizeKb,
+      stats,
+      restoreExecuted: false,
+    });
+
+    return {
+      success: true,
+      message: `Backup importe comme '${safeName}'. Aucune donnee n'a ete restauree.`,
+      data: {
+        fileName: safeName,
+        originalFileName,
+        sizeKb,
+        stats,
+      },
+    };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.import", "failure", {
+      originalFileName: data.originalFileName,
+      error: message,
+      restoreExecuted: false,
+    });
+    return { success: false, error: message || "Impossible d'importer le backup." };
+  }
+}
+
 export async function deleteSystemBackupAction(fileName: string) {
   await ensureAuth(["developer"]);
   try {
@@ -338,5 +467,184 @@ export async function downloadBackupAction(fileName: string) {
     const message = getErrorMessage(error);
     await recordDeveloperAudit("backup.download", "failure", { fileName, error: message });
     return { success: false, error: message || "Erreur de telechargement du fichier." };
+  }
+}
+
+export async function restoreSystemBackupAction(fileName: string) {
+  await ensureAuth(["developer"]);
+  try {
+    ensureBackupDirectory();
+    const { safeName, filePath } = resolveBackupFile(fileName);
+
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: "Fichier de sauvegarde introuvable." };
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (!parsed.metadata || !parsed.tables) {
+      return { success: false, error: "Structure de sauvegarde invalide ou corrompue." };
+    }
+
+    const { tables } = parsed;
+
+    // Fetch existing users to validate foreign keys that point to Users
+    const existingUsers = await prisma.user.findMany({ select: { id: true } });
+    const existingUserIds = new Set(existingUsers.map(u => u.id));
+    const fallbackUser = existingUsers[0]?.id;
+
+    if (!fallbackUser) {
+      return { success: false, error: "Aucun utilisateur trouvé en base. Impossible d'assigner les relations sans utilisateur." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Suppression dans l'ordre pour respecter les clés étrangères
+      await tx.orderItem.deleteMany();
+      await tx.collectionRecord.deleteMany();
+      await tx.order.deleteMany();
+      await tx.stockMovement.deleteMany();
+      await tx.stockLevel.deleteMany();
+      await tx.productImage.deleteMany();
+      await tx.productVariant.deleteMany();
+      await tx.product.deleteMany();
+      await tx.customer.deleteMany();
+      await tx.promoUsage.deleteMany();
+      await tx.promoCode.deleteMany();
+      // On ne supprime pas les Users pour garder les accès.
+
+      // 2. Restauration des données
+      const customerIdMap = new Map<string, string>();
+      const uniqueCustomers: BackupCustomerInput[] = [];
+      const phoneSet = new Set<string>();
+
+      if (tables.customers?.length) {
+        for (const c of tables.customers) {
+          const phoneStr = c.phone || `0000-${c.id}`;
+          if (phoneSet.has(phoneStr)) {
+            const keptCustomer = uniqueCustomers.find(uc => (uc.phone || `0000-${uc.id}`) === phoneStr);
+            if (keptCustomer) {
+              customerIdMap.set(c.id, keptCustomer.id);
+            }
+          } else {
+            phoneSet.add(phoneStr);
+            uniqueCustomers.push(c);
+            customerIdMap.set(c.id, c.id);
+          }
+        }
+        await tx.customer.createMany({ data: uniqueCustomers, skipDuplicates: true });
+      }
+
+      let anonymousCustomerId = null;
+      
+      if (tables.promos?.length) {
+        await tx.promoCode.createMany({ data: tables.promos, skipDuplicates: true });
+      }
+
+      if (tables.categories?.length) {
+        await tx.category.createMany({ data: tables.categories, skipDuplicates: true });
+      }
+
+      if (tables.warehouses?.length) {
+        await tx.warehouse.createMany({ data: tables.warehouses, skipDuplicates: true });
+      }
+
+      if (tables.products?.length) {
+        const flatProducts = [];
+        const flatVariants = [];
+        const flatImages = [];
+
+        for (const p of tables.products) {
+          const { variants, images, subCategoryId, supplierId, ...productData } = p;
+          
+          if (productData.creatorId && !existingUserIds.has(productData.creatorId)) {
+            productData.creatorId = fallbackUser;
+          }
+          
+          flatProducts.push(productData);
+          
+          if (variants?.length) {
+            for (const v of variants) {
+              const { stockLevels, stockMovements, orderItems, ...variantData } = v;
+              flatVariants.push(variantData);
+            }
+          }
+          
+          if (images?.length) {
+            flatImages.push(...images);
+          }
+        }
+
+        await tx.product.createMany({ data: flatProducts, skipDuplicates: true });
+        if (flatVariants.length) {
+          await tx.productVariant.createMany({ data: flatVariants, skipDuplicates: true });
+        }
+        if (flatImages.length) {
+          await tx.productImage.createMany({ data: flatImages, skipDuplicates: true });
+        }
+      }
+
+      if (tables.orders?.length) {
+        const flatOrders = [];
+        const flatItems = [];
+
+        for (const o of tables.orders) {
+          const { items, ...orderData } = o;
+          
+          if (!orderData.customerId || !customerIdMap.has(orderData.customerId)) {
+            if (!anonymousCustomerId) {
+              anonymousCustomerId = `anon-${Date.now()}`;
+              await tx.customer.create({
+                data: { id: anonymousCustomerId, name: "Client Inconnu (Backup)", phone: `0000000000-${Date.now()}` }
+              });
+            }
+            orderData.customerId = anonymousCustomerId;
+          } else {
+            orderData.customerId = customerIdMap.get(orderData.customerId);
+          }
+
+          if (orderData.commercialId && !existingUserIds.has(orderData.commercialId)) {
+            orderData.commercialId = fallbackUser;
+          }
+          if (orderData.deliverymanId && !existingUserIds.has(orderData.deliverymanId)) {
+            orderData.deliverymanId = fallbackUser;
+          }
+          
+          flatOrders.push(orderData);
+          
+          if (items?.length) {
+            flatItems.push(...items);
+          }
+        }
+
+        await tx.order.createMany({ data: flatOrders, skipDuplicates: true });
+        if (flatItems.length) {
+          await tx.orderItem.createMany({ data: flatItems, skipDuplicates: true });
+        }
+      }
+
+      if (tables.stockMovements?.length) {
+        await tx.stockMovement.createMany({ data: tables.stockMovements, skipDuplicates: true });
+      }
+
+      if (tables.settlements?.length) {
+        const safeSettlements = tables.settlements.map((s: any) => ({
+          ...s,
+          deliverymanId: existingUserIds.has(s.deliverymanId) ? s.deliverymanId : fallbackUser
+        }));
+        await tx.settlement.createMany({ data: safeSettlements, skipDuplicates: true });
+      }
+    }, {
+      maxWait: 10000,
+      timeout: 120000 // 2 minutes to allow large backup restoration
+    });
+
+    await recordDeveloperAudit("backup.restore", "success", { fileName: safeName });
+    return {
+      success: true,
+      message: "Restauration effectuée avec succès ! Les données ont été remplacées.",
+    };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    await recordDeveloperAudit("backup.restore", "failure", { fileName, error: message });
+    return { success: false, error: message || "Impossible de restaurer la sauvegarde." };
   }
 }

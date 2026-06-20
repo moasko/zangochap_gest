@@ -1,0 +1,1027 @@
+.shell {
+  min-height: 100%;
+  background: #f6f3ed;
+  color: #191714;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #111315;
+  color: white;
+  border-radius: 6px;
+  padding: 18px;
+}
+
+.header h1 {
+  margin: 2px 0;
+  font-size: clamp(24px, 5vw, 38px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.eyebrow,
+.subtitle {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.headerIcon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #ff6b2c;
+  color: white;
+  flex: 0 0 auto;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.depositTrigger {
+  min-height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.depositTrigger svg {
+  grid-row: span 2;
+  color: #ff8a57;
+}
+
+.depositTrigger span {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.depositTrigger small {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.depositPanel,
+.toolbar,
+.orderCard,
+.emptyState {
+  background: white;
+  border: 1px solid #e4ded2;
+  border-radius: 6px;
+}
+
+.depositPanel {
+  padding: 14px;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7a5a42;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.depositForm {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 0.9fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.depositForm label,
+.sheetBody label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.depositForm span,
+.sheetBody span {
+  color: #6d6257;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.depositForm input,
+.sheetBody input,
+.sheetBody textarea,
+.sheetBody select,
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8d0c2;
+  background: #fffdfa;
+  color: #191714;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  outline: none;
+}
+
+.depositForm input,
+.sheetBody input,
+.sheetBody select,
+.searchBox input {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.sheetBody textarea {
+  min-height: 92px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.depositForm input:focus,
+.sheetBody input:focus,
+.sheetBody textarea:focus,
+.sheetBody select:focus,
+.searchBox input:focus {
+  border-color: #ff6b2c;
+  box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.12);
+}
+
+.depositForm button,
+.primaryButton,
+.confirmButton {
+  border: 0;
+  background: #111315;
+  color: white;
+}
+
+.depositForm button {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.depositForm button:disabled,
+.confirmButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.fullField {
+  grid-column: span 2;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  align-items: center;
+  background: white;
+  border: 1px solid #e4ded2;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.metric div {
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+}
+
+.metric span {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #7b7166;
+}
+
+.metric strong {
+  font-size: 23px;
+  line-height: 1;
+}
+
+.metric[data-tone="green"] div {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.metric[data-tone="blue"] div {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.metric[data-tone="red"] div {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.toolbar {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.toolbarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolbarTop > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.toolbarTop strong {
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.toolbarTop span {
+  color: #887d71;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.mobileDepositTrigger {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 5px;
+  background: #ff6b2c;
+  color: white;
+  place-items: center;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchBox svg {
+  position: absolute;
+  left: 12px;
+  color: #8b8175;
+}
+
+.searchBox input {
+  padding-left: 38px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.filters button {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid #ddd5c8;
+  background: #fbfaf7;
+  color: #655b51;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.filters button span {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #ece6db;
+  color: #3b352f;
+}
+
+.filters .activeFilter {
+  background: #111315;
+  color: white;
+  border-color: #111315;
+}
+
+.filters .activeFilter span {
+  background: #ff6b2c;
+  color: white;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.orderCard {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 4px solid #16a34a;
+}
+
+.orderCard[data-status="completed"] {
+  border-left-color: #2563eb;
+}
+
+.orderCard[data-status="incoming"] {
+  border-left-color: #ff6b2c;
+}
+
+.orderCard[data-status="cancelled"] {
+  border-left-color: #dc2626;
+}
+
+.orderTop,
+.cardFooter,
+.sheetHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ref {
+  display: inline-flex;
+  color: #ff6b2c;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.orderTop h2,
+.sheetHeader h2,
+.emptyState h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.statusPill {
+  flex: 0 0 auto;
+  border: 1px solid #e3dacb;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #faf7f0;
+  color: #4d4339;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.infoItem {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #eee8dd;
+  background: #fcfaf6;
+  border-radius: 5px;
+  padding: 9px;
+}
+
+.infoItem > span {
+  color: #ff6b2c;
+  flex: 0 0 auto;
+}
+
+.infoItem div {
+  min-width: 0;
+}
+
+.infoItem small,
+.cardFooter span {
+  display: block;
+  color: #85796d;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.infoItem strong {
+  display: block;
+  color: #201c18;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.items {
+  border-top: 1px dashed #e3dacd;
+  border-bottom: 1px dashed #e3dacd;
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.itemRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 64px;
+  padding: 6px;
+  border: 1px solid #ece6dc;
+  border-radius: 6px;
+  background: #fcfaf6;
+  font-size: 12px;
+}
+
+.itemRow span {
+  color: #ff6b2c;
+  font-weight: 900;
+  align-self: start;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #fff0e8;
+}
+
+.productImage {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #eee8de;
+  color: #8b8175;
+}
+
+.productImage img {
+  object-fit: cover;
+}
+
+.productDetails {
+  min-width: 0;
+}
+
+.productDetails strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.2;
+}
+
+.productDetails em,
+.moreItems {
+  display: block;
+  margin-top: 4px;
+  color: #80766b;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.moreItems {
+  grid-column: 1 / -1;
+  padding: 4px 2px;
+}
+
+.cardFooter {
+  align-items: center;
+}
+
+.cardFooter strong {
+  font-size: 18px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: min(100%, 330px);
+}
+
+.primaryButton,
+.secondaryButton,
+.historyButton,
+.confirmButton,
+.dangerButton {
+  min-height: 38px;
+  border-radius: 5px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.primaryButton,
+.secondaryButton,
+.historyButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.historyButton {
+  border: 1px solid #d9d2c7;
+  background: #f7f4ef;
+  color: #3f3933;
+}
+
+.secondaryButton {
+  border: 1px solid #f1c8c8;
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.closedReason {
+  margin: 0;
+  max-width: 55%;
+  color: #766c60;
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.inactiveActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.inactiveActions .historyButton {
+  min-height: 38px;
+}
+
+.emptyState {
+  grid-column: 1 / -1;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 28px;
+  color: #756b60;
+}
+
+.emptyState svg {
+  color: #ff6b2c;
+}
+
+.emptyState p {
+  margin: 0;
+  max-width: 320px;
+  font-size: 13px;
+}
+
+.sheetOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(17, 19, 21, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.sheet {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 32px);
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  overflow-y: auto;
+}
+
+.sheetHeader {
+  padding: 16px;
+  border-bottom: 1px solid #eee8dd;
+}
+
+.sheetHeader span {
+  color: #ff6b2c;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.sheetHeader button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5ded3;
+  background: #fbfaf7;
+  color: #191714;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.sheetBody {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.confirmButton,
+.dangerButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+}
+
+.historySheet {
+  width: min(600px, 100%);
+}
+
+.historySummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee8dd;
+  background: #faf8f4;
+}
+
+.historySummary strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historySummary span {
+  flex: 0 0 auto;
+  color: #9a4a24;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.timeline {
+  max-height: min(62dvh, 560px);
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.timelineItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.timelineItem:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 30px;
+  bottom: 0;
+  left: 15px;
+  width: 2px;
+  background: #e9e1d6;
+}
+
+.timelineDot {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+  border-radius: 50%;
+  background: #fff0e8;
+  color: #d7541d;
+}
+
+.timelineItem strong,
+.timelineItem span {
+  display: block;
+}
+
+.timelineItem strong {
+  color: #25211d;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.timelineItem span {
+  margin-top: 4px;
+  color: #85796d;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.timelineEmpty {
+  padding: 28px 12px;
+  color: #85796d;
+  text-align: center;
+  font-size: 13px;
+}
+
+.dangerButton {
+  border: 0;
+  background: #b91c1c;
+  color: white;
+}
+
+@media (max-width: 980px) {
+  .shell {
+    padding: 12px;
+  }
+
+  .depositForm {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .depositForm button {
+    grid-column: 1 / -1;
+  }
+
+  .list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 8px;
+    gap: 9px;
+    background: #f3efe8;
+  }
+
+  .header {
+    padding: 13px;
+    min-height: 76px;
+  }
+
+  .header h1 {
+    font-size: 23px;
+  }
+
+  .eyebrow {
+    font-size: 9px;
+  }
+
+  .subtitle {
+    margin-top: 5px;
+    font-size: 9px;
+  }
+
+  .headerIcon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .depositTrigger {
+    display: none;
+  }
+
+  .mobileDepositTrigger {
+    display: grid;
+    flex: 0 0 auto;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .metric {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    gap: 4px;
+    padding: 9px 4px;
+    min-height: 83px;
+  }
+
+  .metric div {
+    grid-row: auto;
+    width: 29px;
+    height: 29px;
+  }
+
+  .metric span {
+    font-size: 8px;
+    line-height: 1.1;
+  }
+
+  .metric strong {
+    font-size: 20px;
+  }
+
+  .toolbar {
+    padding: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 5px 16px rgba(34, 28, 22, 0.06);
+  }
+
+  .toolbarTop > div {
+    display: grid;
+    gap: 1px;
+  }
+
+  .searchBox input {
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .filters {
+    display: flex;
+    overflow-x: auto;
+    gap: 7px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filters button {
+    flex: 0 0 auto;
+    min-width: 108px;
+    padding: 0 10px;
+  }
+
+  .depositForm {
+    grid-template-columns: 1fr;
+  }
+
+  .fullField {
+    grid-column: auto;
+  }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orderCard {
+    padding: 14px 12px;
+    gap: 14px;
+    border-left-width: 5px;
+  }
+
+  .orderTop {
+    align-items: flex-start;
+  }
+
+  .statusPill {
+    max-width: 45%;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .infoGrid {
+    gap: 7px;
+  }
+
+  .infoItem {
+    min-height: 54px;
+    align-items: center;
+    padding: 10px;
+  }
+
+  .items {
+    padding: 10px 0;
+    gap: 8px;
+  }
+
+  .cardFooter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .historyButton {
+    min-height: 46px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .closedReason {
+    max-width: none;
+    text-align: left;
+  }
+
+  .inactiveActions {
+    justify-content: space-between;
+  }
+
+  .inactiveActions .closedReason {
+    flex: 1;
+  }
+
+  .sheetOverlay {
+    padding: max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .sheet {
+    border-radius: 8px;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+
+  .sheetHeader {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: white;
+  }
+
+  .sheetBody {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .sheetBody input,
+  .sheetBody select {
+    height: 48px;
+    font-size: 15px;
+  }
+
+  .sheetBody textarea {
+    min-height: 110px;
+    font-size: 15px;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmButton,
+  .dangerButton {
+    min-height: 50px;
+  }
+}

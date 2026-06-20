@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { Role } from "@prisma/client";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 
 function revalidatePath(path: string) {
@@ -68,6 +69,39 @@ export async function createOrder(data: {
   allowRefRetry?: boolean;
 }) {
   const session = await getSession();
+  const isWebOrder = data.source === 'public';
+
+  if (!isWebOrder && !session) {
+    throw new Error("Votre session n'est plus valide. Veuillez vous reconnecter avant de créer la commande.");
+  }
+
+  const isRelayDelivery = data.commune.trim().toLowerCase() === "boutique";
+  let relayPointName: string | null = null;
+
+  if (isRelayDelivery) {
+    const requestedRelay = data.customerLocation.trim();
+    if (!requestedRelay) {
+      throw new Error("Veuillez sélectionner le point relais de livraison.");
+    }
+
+    const relayAccount = await prisma.user.findFirst({
+      where: {
+        role: Role.POINT_RELAIS,
+        serviceLabel: { equals: requestedRelay, mode: "insensitive" },
+      },
+      select: { serviceLabel: true },
+    });
+
+    relayPointName = relayAccount?.serviceLabel?.trim() || null;
+    if (!relayPointName) {
+      throw new Error("Ce point relais n'existe plus. Actualisez la page et sélectionnez une boutique disponible.");
+    }
+  }
+
+  const deliveryLocation = relayPointName || data.customerLocation;
+  const relayDeliveryNote = relayPointName
+    ? `[POINT_RELAIS] Boutique: ${relayPointName}${data.deliveryNote?.trim() ? ` | Note: ${data.deliveryNote.trim()}` : ""}`
+    : data.deliveryNote;
 
   // Process images & resolve product IDs. Rupture items remain orderable:
   // they are collected/restocked before packing decrements stock.
@@ -112,7 +146,7 @@ export async function createOrder(data: {
     name: data.customerName,
     phone: data.customerPhone,
     phone2: data.customerPhone2,
-    location: data.customerLocation,
+    location: deliveryLocation,
     commune: data.commune,
     orderAmount: finalTotal + (data.deliveryFee || 0),
   });
@@ -205,7 +239,6 @@ export async function createOrder(data: {
     }
   }
 
-  const isWebOrder = data.source === 'public' || !session;
   const requestedStatus = data.status?.toUpperCase();
   const staffStatus = requestedStatus === 'TO_PROCESS' ? 'CONFIRMED' : requestedStatus;
   const status = isWebOrder ? 'TO_PROCESS' : ((staffStatus as any) || 'CONFIRMED');
@@ -234,11 +267,11 @@ export async function createOrder(data: {
             customerName: data.customerName,
             customerPhone: data.customerPhone,
             customerPhone2: data.customerPhone2,
-            customerLocation: data.customerLocation,
+            customerLocation: deliveryLocation,
             commune: data.commune,
             total: finalTotal,
             deliveryFee: Number(data.deliveryFee || 0),
-            deliveryNote: data.deliveryNote,
+            deliveryNote: relayDeliveryNote,
             paymentMethod: data.paymentMethod,
             status,
             commercialId: isWebOrder ? (assignedCommercial?.id || null) : (session?.id || null),
@@ -275,6 +308,12 @@ export async function createOrder(data: {
                 by: isWebOrder ? "public" : session?.email,
                 byName: isWebOrder ? "Client Web" : session?.name,
               },
+              ...(relayPointName ? [{
+                at: new Date().toISOString(),
+                action: `Point relais : commande attribuée à ${relayPointName}`,
+                by: isWebOrder ? "public" : session?.email,
+                byName: isWebOrder ? "Client Web" : session?.name,
+              }] : []),
             ],
           },
           include: { items: true },
@@ -288,8 +327,11 @@ export async function createOrder(data: {
         throw new Error(`La référence ${requestedRef} existe déjà.`);
       }
       if (isRefCollision && attempt < 9) {
-        console.log(`Ref collision detected on ${ref}, retrying... (attempt ${attempt + 1})`);
         continue;
+      }
+      const foreignKeyField = String(e.meta?.field_name || e.meta?.constraint || '');
+      if (e.code === 'P2003' && foreignKeyField.includes('commercialId')) {
+        throw new Error("Le compte commercial associé à la session est introuvable. Veuillez vous reconnecter.");
       }
       throw e;
     }

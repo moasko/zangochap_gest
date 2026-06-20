@@ -5,15 +5,27 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - DATABASE_URL=postgresql://postgres:aa90AsmvXjeilRt8yvJA@72.62.45.245:5433/zangochapdb
-      - NEXT_PUBLIC_APP_NAME=Zangochap
-      - NODE_ENV=production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Zangochap Dev}
+      NODE_ENV: production
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
     volumes:
       - uploads_data:/app/public/uploads
     networks:
       - dokploy-network
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 
 networks:

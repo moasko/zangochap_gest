@@ -14,6 +14,7 @@ enum Role {
   PACKING
   COLLECTION
   STOCK
+  POINT_RELAIS
   CUSTOMER
   LIVREUR
 }
@@ -218,6 +219,8 @@ model AccountingOperation {
   session        AccountingSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   categoryId     String
   category       AccountingCategory        @relation(fields: [categoryId], references: [id])
+  groupId        String?
+  group          AccountingGroup?          @relation(fields: [groupId], references: [id], onDelete: SetNull)
   deliveryOrderId String?
   deliveryOrderRef String?
   customerId     String?
@@ -239,6 +242,7 @@ model AccountingOperation {
   @@index([source])
   @@index([customerId])
   @@index([createdAt])
+  @@index([groupId])
 }
 
 model AccountingAuditLog {
@@ -285,6 +289,23 @@ model AccountingReport {
   updatedAt   DateTime               @updatedAt
 
   @@index([dateFrom, dateTo])
+  @@index([createdAt])
+}
+
+model AccountingGroup {
+  id            String               @id @default(cuid())
+  name          String
+  description   String?              @db.Text
+  color         String?              // hex color e.g. "#D4541C"
+  operations    AccountingOperation[]
+  totalIncome   Int                  @default(0)
+  totalExpense  Int                  @default(0)
+  balance       Int                  @default(0)
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
   @@index([createdAt])
 }
 

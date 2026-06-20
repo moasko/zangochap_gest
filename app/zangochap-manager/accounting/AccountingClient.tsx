@@ -5,7 +5,12 @@
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Banknote,
   Calendar,
+  ClipboardCheck,
+  Clock3,
   Download,
   Edit3,
   FileText,
@@ -15,12 +20,14 @@ import {
   Printer,
   ReceiptText,
   Save,
+  Search,
+  SlidersHorizontal,
   Tag,
   Trash2,
   Wallet,
 } from "lucide-react";
 import Modal from "@/components/Modal";
-import { EmptyState, StatusBadge, TableCard } from "@/components/UI";
+import { EmptyState, TableCard } from "@/components/UI";
 import { useToast } from "@/components/Toast";
 import { formatDay, formatPrice } from "@/lib/constants";
 import {
@@ -65,17 +72,59 @@ function sourceLabel(source: string) {
   return labels[source] || source;
 }
 
+function operationTone(type: string) {
+  if (type === "INCOME") return "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]";
+  if (type === "EXPENSE") return "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]";
+  return "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]";
+}
+
 export default function AccountingClient({ workspace }: AccountingClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const [activeModal, setActiveModal] = useState<"operation" | "category" | "report" | null>(null);
+  const [activeModal, setActiveModal] = useState<"operation" | "category" | "report" | "categoryPlan" | null>(null);
   const [editingOperation, setEditingOperation] = useState<any>(null);
   const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [operationDraftType, setOperationDraftType] = useState<OperationType>("INCOME");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
 
   const incomeCategories = workspace.categories.filter((category: any) => category.type === "INCOME");
   const expenseCategories = workspace.categories.filter((category: any) => category.type === "EXPENSE");
   const sessionDate = dateInputValue(workspace.session.date);
+  const deliveryOperationsCount = workspace.operations.filter((operation: any) => operation.source === "DELIVERY").length;
+  const manualOperationsCount = workspace.operations.length - deliveryOperationsCount;
+  const hasActiveFilters = Boolean(searchTerm.trim() || typeFilter !== "ALL" || categoryFilter !== "ALL");
+
+  const openOperationModal = (type: OperationType) => {
+    setOperationDraftType(type);
+    setActiveModal("operation");
+  };
+
+  const filteredOperations = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+    return workspace.operations.filter((operation: any) => {
+      const matchesSearch = !search || [
+        operation.description,
+        operation.category?.name,
+        operation.deliveryOrderRef,
+        operation.clientName,
+        operation.riderName,
+        operation.createdByName,
+      ].filter(Boolean).some((value) => String(value).toLowerCase().includes(search));
+      const matchesType = typeFilter === "ALL" || operation.type === typeFilter;
+      const matchesCategory = categoryFilter === "ALL" || operation.categoryId === categoryFilter;
+      return matchesSearch && matchesType && matchesCategory;
+    });
+  }, [workspace.operations, searchTerm, typeFilter, categoryFilter]);
+  const filteredTotals = useMemo(() => {
+    return filteredOperations.reduce((totals: { debit: number; credit: number }, operation: any) => {
+      if (operation.type === "EXPENSE") totals.debit += Number(operation.amount || 0);
+      else totals.credit += Number(operation.amount || 0);
+      return totals;
+    }, { debit: 0, credit: 0 });
+  }, [filteredOperations]);
 
   const changeDate = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -85,36 +134,48 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-6 md:py-6">
-      <div className="mb-5 flex flex-col gap-4 border-b border-[#E8DED4] pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-black uppercase text-[#D4541C]">
-            <Landmark size={14} />
-            Comptabilite
+      <section className="mb-5 overflow-hidden rounded-lg border border-[#D8CBBB] bg-[#101820] text-white shadow-sm">
+        <div className="flex flex-col gap-4 p-4 md:p-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-black uppercase text-[#FFB38A]">
+              <Landmark size={14} />
+              Comptabilite generale
+            </div>
+            <h1 className="text-[24px] font-black md:text-[30px]">Journal de caisse</h1>
+            <p className="mt-1 max-w-2xl text-[13px] font-semibold text-white/65">
+              Encaissements, decaissements, regularisations et audit des sessions comptables.
+            </p>
           </div>
-          <h1 className="text-[24px] font-black text-[#1A1410] md:text-[28px]">Session comptable journaliere</h1>
-          <p className="mt-1 max-w-2xl text-[13px] font-semibold text-[#806A58]">
-            Entrees de livraison synchronisees, sorties manuelles, regularisations et bilans sauvegardes.
-          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 shadow-sm">
+              <Calendar size={15} className="text-white/70" />
+              <input
+                type="date"
+                value={sessionDate}
+                onChange={(event) => changeDate(event.target.value)}
+                className="bg-transparent text-[13px] font-black text-white outline-none [color-scheme:dark]"
+              />
+            </label>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#FF6B2C] px-3 text-[12px] font-black text-white shadow-sm hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
+              <ArrowUpCircle size={15} /> Entree
+            </button>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[#101820] shadow-sm hover:bg-[#F8FAFC]" onClick={() => openOperationModal("EXPENSE")}>
+              <ArrowDownCircle size={15} /> Sortie
+            </button>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white shadow-sm hover:bg-white/15" onClick={() => setActiveModal("report")}>
+              <FileText size={15} /> Bilan
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <label className="flex h-10 items-center gap-2 rounded-md border border-[#E8DED4] bg-white px-3 shadow-sm">
-            <Calendar size={15} className="text-[#8B735E]" />
-            <input
-              type="date"
-              value={sessionDate}
-              onChange={(event) => changeDate(event.target.value)}
-              className="bg-transparent text-[13px] font-black text-[#1A1410] outline-none"
-            />
-          </label>
-          <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1A1410] px-3 text-[12px] font-black text-white" onClick={() => setActiveModal("operation")}>
-            <Plus size={15} /> Operation
-          </button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E8DED4] bg-white px-3 text-[12px] font-black text-[#6B4F3B]" onClick={() => setActiveModal("report")}>
-            <FileText size={15} /> Bilan
-          </button>
+        <div className="grid border-t border-white/10 bg-white/[0.04] md:grid-cols-4">
+          <SessionSignal icon={<ClipboardCheck size={15} />} label="Session" value={sessionDate} />
+          <SessionSignal icon={<Banknote size={15} />} label="Livraisons sync" value={deliveryOperationsCount} />
+          <SessionSignal icon={<Edit3 size={15} />} label="Manuelles" value={manualOperationsCount} />
+          <SessionSignal icon={<Clock3 size={15} />} label="Audit" value={`${workspace.audits.length} trace(s)`} />
         </div>
-      </div>
+      </section>
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
         <MetricCard icon={<Wallet size={18} />} label="Total entrees" value={formatPrice(workspace.totals.totalIncome)} tone="orange" />
@@ -123,49 +184,121 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
         <MetricCard icon={<Filter size={18} />} label="Operations" value={workspace.totals.count} tone="green" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
-        <TableCard title="Operations de la session" meta={`${workspace.operations.length} ligne(s)`}>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+        <TableCard
+          title="Grand livre de la session"
+          meta={`${filteredOperations.length}/${workspace.operations.length} ecriture(s)`}
+          actions={
+            <div className="hidden items-center gap-2 text-[10px] font-black uppercase text-[#806A58] md:flex">
+              <SlidersHorizontal size={13} />
+              Controle
+            </div>
+          }
+        >
+          <div className="grid gap-2 border-b border-[#E8DED4] bg-[#FCFAF7] p-3 lg:grid-cols-[minmax(220px,1fr)_150px_190px]">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-[#E8DED4] bg-white px-3">
+              <Search size={15} className="text-[#8B735E]" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Rechercher libelle, client, livreur, reference..."
+                className="min-w-0 flex-1 bg-transparent text-[12px] font-bold text-[#1A1410] outline-none"
+              />
+            </label>
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              className="h-10 rounded-md border border-[#E8DED4] bg-white px-3 text-[12px] font-black text-[#1A1410] outline-none"
+            >
+              <option value="ALL">Tous types</option>
+              <option value="INCOME">Entrees</option>
+              <option value="EXPENSE">Sorties</option>
+              <option value="CORRECTION">Corrections</option>
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="h-10 rounded-md border border-[#E8DED4] bg-white px-3 text-[12px] font-black text-[#1A1410] outline-none"
+            >
+              <option value="ALL">Toutes categories</option>
+              {workspace.categories.map((category: any) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </div>
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8DED4] bg-white px-4 py-2">
+              <div className="text-[11px] font-bold text-[#806A58]">
+                Vue filtree: credit {formatPrice(filteredTotals.credit)} / debit {formatPrice(filteredTotals.debit)}
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center rounded-md border border-[#E8DED4] px-2 text-[11px] font-black text-[#6B4F3B] hover:bg-[#FCFAF7]"
+                onClick={() => {
+                  setSearchTerm("");
+                  setTypeFilter("ALL");
+                  setCategoryFilter("ALL");
+                }}
+              >
+                Effacer les filtres
+              </button>
+            </div>
+          )}
           {workspace.operations.length === 0 ? (
             <EmptyState icon="$" title="Aucune operation" description="Les livraisons du jour seront ajoutees automatiquement apres synchronisation." />
+          ) : filteredOperations.length === 0 ? (
+            <EmptyState icon="0" title="Aucune ecriture trouvee" description="Ajustez la recherche, le type ou la categorie." />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-[#E8DED4] text-left text-[10px] font-black uppercase text-[#806A58]">
-                    <th className="px-4 py-3">Operation</th>
-                    <th className="px-3 py-3">Categorie</th>
-                    <th className="px-3 py-3">Source</th>
-                    <th className="px-3 py-3">Auteur</th>
-                    <th className="px-3 py-3">Trace</th>
-                    <th className="px-4 py-3 text-right">Montant</th>
+                    <th className="w-[110px] px-4 py-3">Date</th>
+                    <th className="min-w-[320px] px-3 py-3">Libelle</th>
+                    <th className="min-w-[170px] px-3 py-3">Categorie</th>
+                    <th className="min-w-[130px] px-3 py-3">Source</th>
+                    <th className="px-3 py-3 text-right">Debit</th>
+                    <th className="px-3 py-3 text-right">Credit</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {workspace.operations.map((operation: any) => (
-                    <tr key={operation.id} className="border-b border-[#F1E8DF] text-[12px] last:border-b-0">
-                      <td className="max-w-[280px] px-4 py-3">
-                        <div className="font-black text-[#1A1410]">{operation.description || operationLabel(operation.type)}</div>
-                        <div className="text-[10px] font-bold text-[#806A58]">{formatDay(operation.createdAt)}</div>
+                  {filteredOperations.map((operation: any) => (
+                    <tr key={operation.id} className="border-b border-[#F1E8DF] text-[12px] last:border-b-0 hover:bg-[#FCFAF7] transition-colors">
+                      <td className="px-4 py-3 align-top">
+                        <div className="font-mono text-[11px] font-black text-[#1A1410]">{dateInputValue(operation.createdAt)}</div>
+                        <div className="text-[10px] font-bold text-[#806A58]">{new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
                       </td>
-                      <td className="px-3 py-3">
-                        <span className="inline-flex rounded-md bg-[#FFF1E8] px-2 py-1 text-[10px] font-black text-[#D4541C]">
-                          {operation.category?.name || "-"}
+                      <td className="px-3 py-3 align-top">
+                        <div className="font-black text-[#1A1410]">{operation.description || operationLabel(operation.type)}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-[#806A58]">
+                          <span className={`inline-flex rounded-sm border px-1.5 py-0.5 ${operationTone(operation.type)}`}>
+                            {operationLabel(operation.type)}
+                          </span>
+                          {operation.deliveryOrderRef && <span className="font-mono">Ref {operation.deliveryOrderRef}</span>}
+                          {operation.clientName && <span>Client: {operation.clientName}</span>}
+                          {operation.riderName && <span>Livreur: {operation.riderName}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <span className="inline-flex rounded-md bg-[#F1E8DF] px-2 py-1 text-[10px] font-black text-[#6B4F3B]">
+                          {operation.category?.name || "Sans categorie"}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="font-bold text-[#1A1410]">{sourceLabel(operation.source)}</div>
-                        {operation.deliveryOrderRef && <div className="font-mono text-[10px] text-[#806A58]">{operation.deliveryOrderRef}</div>}
+                      <td className="px-3 py-3 align-top">
+                        <div className="text-[12px] font-black text-[#1A1410]">{sourceLabel(operation.source)}</div>
+                        <div className="text-[10px] font-bold text-[#806A58]">{operation.createdByName || "Systeme"}</div>
                       </td>
-                      <td className="px-3 py-3 text-[#6B4F3B]">{operation.createdByName || "-"}</td>
-                      <td className="px-3 py-3">
-                        <StatusBadge status={operation.type === "EXPENSE" ? "RETURNED" : operation.type === "CORRECTION" ? "REPROGRAMMED" : "DELIVERED"} size="sm" />
+                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#991B1B]">
+                        {operation.type === "EXPENSE" ? formatPrice(operation.amount) : "-"}
                       </td>
-                      <td className="px-4 py-3 text-right text-[13px] font-black text-[#1A1410]">{formatPrice(operation.amount)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#166534]">
+                        {operation.type !== "EXPENSE" ? formatPrice(operation.amount) : "-"}
+                      </td>
+                      <td className="px-4 py-3 align-top">
                         <div className="flex justify-end gap-1">
                           <button
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E8DED4] bg-white text-[#6B4F3B]"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E8DED4] bg-white text-[#6B4F3B] hover:bg-[#F1E8DF]"
                             title="Modifier ou regulariser"
                             onClick={() => setEditingOperation(operation)}
                           >
@@ -173,7 +306,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                           </button>
                           {operation.source !== "DELIVERY" && (
                             <button
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#F4C7B8] bg-[#FFF7ED] text-[#C2410C]"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#F4C7B8] bg-[#FFF7ED] text-[#C2410C] hover:bg-[#FEE2E2]"
                               title="Supprimer"
                               onClick={async () => {
                                 if (!confirm("Supprimer cette operation ?")) return;
@@ -197,34 +330,31 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
 
         <div className="flex flex-col gap-4">
           <TableCard
-            title="Categories"
-            meta={`${workspace.categories.length} categorie(s)`}
-            actions={
-              <button className="inline-flex h-8 items-center gap-1 rounded-md bg-[#1A1410] px-2 text-[11px] font-black text-white" onClick={() => setActiveModal("category")}>
-                <Tag size={13} /> Ajouter
-              </button>
-            }
+            title="Actions rapides"
+            meta="Operations disponibles"
           >
-            <CategoryList
-              title="Entrees"
-              categories={incomeCategories}
-              onEdit={setEditingCategory}
-              onDelete={async (category) => {
-                await deleteAccountingCategory(category.id);
-                showToast("Categorie supprimee", "success");
-                router.refresh();
-              }}
-            />
-            <CategoryList
-              title="Sorties"
-              categories={expenseCategories}
-              onEdit={setEditingCategory}
-              onDelete={async (category) => {
-                await deleteAccountingCategory(category.id);
-                showToast("Categorie supprimee", "success");
-                router.refresh();
-              }}
-            />
+            <div className="grid gap-2 p-3">
+              <button className="flex h-10 items-center justify-between rounded-md bg-[#FF6B2C] px-3 text-left text-[12px] font-black text-white hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
+                <span className="inline-flex items-center gap-2"><ArrowUpCircle size={15} /> Ajouter une entree</span>
+                <Plus size={14} />
+              </button>
+              <button className="flex h-10 items-center justify-between rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 text-left text-[12px] font-black text-[#991B1B] hover:bg-[#FEE2E2]" onClick={() => openOperationModal("EXPENSE")}>
+                <span className="inline-flex items-center gap-2"><ArrowDownCircle size={15} /> Ajouter une sortie</span>
+                <Plus size={14} />
+              </button>
+              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("report")}>
+                <span className="inline-flex items-center gap-2"><FileText size={15} /> Creer un bilan</span>
+                <Plus size={14} />
+              </button>
+              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("category")}>
+                <span className="inline-flex items-center gap-2"><Tag size={15} /> Nouvelle categorie</span>
+                <Plus size={14} />
+              </button>
+              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("categoryPlan")}>
+                <span className="inline-flex items-center gap-2"><SlidersHorizontal size={15} /> Plan de categories</span>
+                <Tag size={14} />
+              </button>
+            </div>
           </TableCard>
 
           <TableCard title="Sessions recentes" meta="30 derniers jours">
@@ -302,6 +432,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
         <OperationModal
           sessionId={workspace.session.id}
           operation={editingOperation}
+          initialType={operationDraftType}
           incomeCategories={incomeCategories}
           expenseCategories={expenseCategories}
           onClose={() => {
@@ -325,6 +456,36 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           onClose={() => setActiveModal(null)}
         />
       )}
+      {activeModal === "categoryPlan" && (
+        <CategoryPlanModal
+          incomeCategories={incomeCategories}
+          expenseCategories={expenseCategories}
+          onNewCategory={() => {
+            setActiveModal("category");
+          }}
+          onEdit={setEditingCategory}
+          onDelete={async (category: any) => {
+            await deleteAccountingCategory(category.id);
+            showToast("Categorie supprimee", "success");
+            router.refresh();
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SessionSignal({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div className="flex min-h-[70px] items-center gap-3 border-b border-white/10 px-4 py-3 md:border-b-0 md:border-r md:last:border-r-0">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/10 text-[#FFB38A]">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10px] font-black uppercase text-white/45">{label}</div>
+        <div className="truncate text-[13px] font-black text-white">{value}</div>
+      </div>
     </div>
   );
 }
@@ -374,11 +535,49 @@ function CategoryList({ title, categories, onEdit, onDelete }: { title: string; 
   );
 }
 
-function OperationModal({ sessionId, operation, incomeCategories, expenseCategories, onClose }: any) {
+function CategoryPlanModal({
+  incomeCategories,
+  expenseCategories,
+  onNewCategory,
+  onEdit,
+  onDelete,
+  onClose,
+}: {
+  incomeCategories: any[];
+  expenseCategories: any[];
+  onNewCategory: () => void;
+  onEdit: (category: any) => void;
+  onDelete: (category: any) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal isOpen onClose={onClose} title="Plan de categories" xl>
+      <div className="grid gap-4">
+        <div className="flex flex-col gap-3 rounded-lg border border-[#E8DED4] bg-[#FCFAF7] p-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[13px] font-black text-[#1A1410]">Categories comptables</div>
+            <div className="text-[11px] font-bold text-[#806A58]">
+              Classez chaque ecriture pour obtenir des bilans fiables.
+            </div>
+          </div>
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#1A1410] px-3 text-[12px] font-black text-white" onClick={onNewCategory}>
+            <Plus size={14} /> Nouvelle categorie
+          </button>
+        </div>
+        <div className="grid overflow-hidden rounded-lg border border-[#E8DED4] lg:grid-cols-2">
+          <CategoryList title="Categories d'entree" categories={incomeCategories} onEdit={onEdit} onDelete={onDelete} />
+          <CategoryList title="Categories de sortie" categories={expenseCategories} onEdit={onEdit} onDelete={onDelete} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function OperationModal({ sessionId, operation, initialType, incomeCategories, expenseCategories, onClose }: any) {
   const router = useRouter();
   const { showToast } = useToast();
   const [isPending, startTransition] = useTransition();
-  const [type, setType] = useState<OperationType>(operation?.type || "INCOME");
+  const [type, setType] = useState<OperationType>(operation?.type || initialType || "INCOME");
   const categories = type === "EXPENSE" ? expenseCategories : incomeCategories;
   const [categoryId, setCategoryId] = useState(operation?.categoryId || categories[0]?.id || "");
   const [amount, setAmount] = useState(operation?.amount || "");
@@ -422,10 +621,25 @@ function OperationModal({ sessionId, operation, incomeCategories, expenseCategor
             {categories.map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select>
         </label>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Montant</span>
-          <input className="field-input" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} required />
-        </label>
+        <div className="grid gap-1">
+          <span className="text-[11px] font-black uppercase text-[#806A58]">Montant {operation?.source === "DELIVERY" ? "recu" : ""}</span>
+          <div className="flex items-center gap-2">
+            <input className="field-input flex-1" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+            {operation?.source === "DELIVERY" && operation.originalAmount && (
+              <button type="button" className="inline-flex h-10 items-center justify-center rounded-md border border-[#E8DED4] bg-white px-3 text-[11px] font-black text-[#6B4F3B] whitespace-nowrap hover:bg-[#FCFAF7]" onClick={() => setAmount(operation.originalAmount)}>
+                Matcher ({formatPrice(operation.originalAmount)})
+              </button>
+            )}
+          </div>
+          {operation?.source === "DELIVERY" && operation.originalAmount !== undefined && operation.originalAmount !== null && (
+            <div className={`mt-1 text-[11px] font-bold ${Number(amount) === operation.originalAmount ? 'text-[#166534]' : 'text-[#991B1B]'}`}>
+              {Number(amount) === operation.originalAmount 
+                ? "OK - Le montant correspond au total theorique" 
+                : `Ecart : ${Number(amount) > operation.originalAmount ? '+' : ''}${formatPrice(Number(amount) - operation.originalAmount)} (Theorique: ${formatPrice(operation.originalAmount)})`
+              }
+            </div>
+          )}
+        </div>
         <label className="grid gap-1">
           <span className="text-[11px] font-black uppercase text-[#806A58]">Description</span>
           <textarea className="field-input" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />

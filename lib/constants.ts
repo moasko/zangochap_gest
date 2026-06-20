@@ -46,6 +46,7 @@ export const ROLE_LABELS: Record<string, string> = {
   packing: 'Service emballage',
   collection: 'Service collecte',
   stock: 'Gestion de stock',
+  point_relais: 'Gérant point relais',
   admin: 'Administrateur',
   livreur: 'Livreur',
 };

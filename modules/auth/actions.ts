@@ -57,6 +57,8 @@ export async function loginAction(formData: FormData) {
 
   if (user.role.toUpperCase() === 'LIVREUR') {
     redirect("/zangochap-rider");
+  } else if (user.role.toUpperCase() === 'POINT_RELAIS') {
+    redirect("/zangochap-manager/boutique");
   } else if (user.role.toUpperCase() === 'COMPTABLE') {
     redirect("/zangochap-manager/accounting");
   } else {
@@ -74,7 +76,50 @@ export async function getSession() {
     const sessionToken = (await cookies()).get("zc_session")?.value;
     if (!sessionToken) return null;
     const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
-    return payload as any;
+
+    const sessionId = typeof payload.id === "string" ? payload.id : "";
+    const sessionEmail = typeof payload.email === "string"
+      ? payload.email.trim().toLowerCase()
+      : "";
+
+    if (!sessionId && !sessionEmail) return null;
+
+    // JWTs can outlive a database refresh. Resolve the current database user
+    // so stale IDs never reach foreign-key fields in business actions.
+    const userSelect = {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      initials: true,
+      serviceLabel: true,
+    } as const;
+
+    let user = sessionId
+      ? await prisma.user.findUnique({ where: { id: sessionId }, select: userSelect })
+      : null;
+
+    if (!user || (sessionEmail && user.email.toLowerCase() !== sessionEmail)) {
+      user = sessionEmail
+        ? await prisma.user.findUnique({ where: { email: sessionEmail }, select: userSelect })
+        : null;
+    }
+
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role.toLowerCase(),
+      initials: user.initials || user.name
+        .split(" ")
+        .map((word) => word[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase(),
+      serviceLabel: user.serviceLabel,
+    };
   } catch {
     return null;
   }

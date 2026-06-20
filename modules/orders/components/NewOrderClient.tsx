@@ -20,6 +20,7 @@ interface NewOrderClientProps {
   products: any[];
   user: any;
   categories: any[];
+  relayPoints: string[];
 }
 
 const ORDER_TYPE_DEFAULT_NOTES: Record<string, string> = {
@@ -27,7 +28,7 @@ const ORDER_TYPE_DEFAULT_NOTES: Record<string, string> = {
   Express: '[EXPRESS] Livraison prioritaire',
 };
 
-export default function NewOrderClient({ products, user, categories }: NewOrderClientProps) {
+export default function NewOrderClient({ products, user, categories, relayPoints }: NewOrderClientProps) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<any[]>([]);
@@ -999,8 +1000,9 @@ Ne passez pas à côté de cette belle surprise !`;
                 <div className="form-row">
                   <label className="field-label-sm">COMMUNE</label>
                   <select className="field-input" value={commune} onChange={e => {
-                    const val = e.target.value;
-                    setCommune(val);
+                     const val = e.target.value;
+                     setCommune(val);
+                     if (val === 'Boutique' || commune === 'Boutique') setCustomerLocation('');
                     if (val && DELIVERY_FEES[val]) {
                       setDeliveryFee(DELIVERY_FEES[val]);
                     }
@@ -1012,8 +1014,15 @@ Ne passez pas à côté de cette belle surprise !`;
                   </select>
                 </div>
                 <div className="form-row">
-                  <label className="field-label-sm">ADRESSE DE LIVRAISON</label>
-                  <textarea className="field-input" style={{ minHeight: 70 }} value={customerLocation} onChange={e => setCustomerLocation(e.target.value)} placeholder="Quartier, rue, repère..." />
+                  <label className="field-label-sm">{commune === 'Boutique' ? 'POINT RELAIS' : 'ADRESSE DE LIVRAISON'}</label>
+                  {commune === 'Boutique' ? (
+                    <select className="field-input" value={customerLocation} onChange={e => setCustomerLocation(e.target.value)} required>
+                      <option value="">Choisir un point relais...</option>
+                      {relayPoints.map((relayPoint) => <option key={relayPoint} value={relayPoint}>{relayPoint}</option>)}
+                    </select>
+                  ) : (
+                    <textarea className="field-input" style={{ minHeight: 70 }} value={customerLocation} onChange={e => setCustomerLocation(e.target.value)} placeholder="Quartier, rue, repère..." />
+                  )}
                 </div>
                 <div className="form-row">
                   <label className="field-label-sm">FRAIS DE LIVRAISON (FCFA)</label>

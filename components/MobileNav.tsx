@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, ShoppingBag, Truck, Settings, Package, Landmark
+  LayoutDashboard, ShoppingBag, Truck, Settings, Package, Landmark, Store
 } from "lucide-react";
  
 interface MobileNavProps {
@@ -21,6 +21,7 @@ export default function MobileNav({ user }: MobileNavProps) {
   const isPacking = user.role === 'packing';
   const isCollection = user.role === 'collection';
   const isComptable = user.role === 'comptable';
+  const isPointRelais = user.role === 'point_relais';
  
   // Main links for bottom nav
   const items = [
@@ -38,6 +39,10 @@ export default function MobileNav({ user }: MobileNavProps) {
 
   if (isComptable) {
     items.push({ label: 'Compta', href: '/zangochap-manager/accounting', icon: <Landmark size={22} /> });
+  }
+
+  if (isPointRelais) {
+    items.splice(0, items.length, { label: 'Boutique', href: '/zangochap-manager/boutique', icon: <Store size={22} /> });
   }
  
   if (isAdmin) {
