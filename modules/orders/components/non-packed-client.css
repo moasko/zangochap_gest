@@ -17,6 +17,145 @@
   color: #15803D;
   border: 1px solid #BBF7D0;
 }
+.non-packed-alternative-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 22px;
+  margin-right: 6px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid rgba(212, 84, 28, 0.32);
+  border-radius: 999px;
+  background: #FFF7ED;
+  color: var(--orange);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.non-packed-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.non-packed-history-empty {
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #FCFAF7;
+  color: var(--brown-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+.non-packed-history-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+}
+.non-packed-history-entry:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: -10px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.non-packed-history-dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin-top: 5px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 1px rgba(212, 84, 28, 0.24);
+}
+.non-packed-history-content {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #FCFAF7;
+}
+.non-packed-history-action {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.non-packed-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-top: 5px;
+  color: var(--brown-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+.non-packed-history-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.non-packed-history-details span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgba(26, 20, 16, 0.08);
+  border-radius: 999px;
+  background: white;
+  color: var(--brown);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.non-packed-history-details strong {
+  color: var(--orange);
+  font-weight: 900;
+}
+.non-packed-motif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+.non-packed-motif-line {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid rgba(212, 84, 28, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+.non-packed-motif-line span {
+  color: var(--orange);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.non-packed-motif-line strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .non-packed-filter-panel {
   display: flex;
   flex-direction: column;
