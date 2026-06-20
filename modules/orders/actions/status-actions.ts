@@ -5,11 +5,15 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/modules/auth/actions";
 import { checkOrderAccess, generateUniqueRef, isRole } from "../helpers";
-import { decrementStockForOrder, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
+import { decrementStockForOrder, InsufficientStockError, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
 
 type UpdateOrderStatusResult = {
   success: true;
   order: any;
+} | {
+  success: false;
+  code: "INSUFFICIENT_STOCK";
+  error: string;
 };
 
 const CLOSED_DELIVERY_STATUSES = ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED', 'REPRO_DISPO'];
@@ -99,14 +103,15 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
 
   let updatedOrder: any = null;
 
-  await prisma.$transaction(async (tx) => {
-    if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
-      updateData.lastDeliveryAttemptAt = new Date();
-      updateData.lastDeliveryAttemptRiderId = order.deliverymanId;
-      updateData.lastDeliveryAttemptRiderName = order.deliverymanName;
-      updateData.lastDeliveryAttemptStatus = normalizedStatus;
-      updateData.lastDeliveryAttemptReason = note?.trim();
-    }
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
+        updateData.lastDeliveryAttemptAt = new Date();
+        updateData.lastDeliveryAttemptRiderId = order.deliverymanId;
+        updateData.lastDeliveryAttemptRiderName = order.deliverymanName;
+        updateData.lastDeliveryAttemptStatus = normalizedStatus;
+        updateData.lastDeliveryAttemptReason = note?.trim();
+      }
 
     if (normalizedStatus === 'REPRO_DISPO') {
       const nextDeliveryDate = reproDeliveryDate ? new Date(`${reproDeliveryDate}T00:00:00`) : null;
@@ -141,9 +146,9 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       updateData.amountReceived = normalizedAmountReceived;
     }
 
-    if (normalizedStatus === 'PACKED') {
-      await decrementStockForOrder(order, session, tx);
-    }
+      if (normalizedStatus === 'PACKED') {
+        await decrementStockForOrder(order, session, tx);
+      }
 
     // Restore stock for non-shipping statuses
     const shippingStatuses = ['PACKED', 'ON_DELIVERY', 'DELIVERED', 'PARTIALLY_DELIVERED', 'REPRO_DISPO'];
@@ -159,15 +164,21 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       updateData.packedAt = null;
     }
 
-    updatedOrder = await tx.order.update({
-      where: { id: orderId },
-      data: {
-        ...updateData,
-        returnReason: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus) ? note : undefined
-      },
-      include: { items: true },
+      updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          ...updateData,
+          returnReason: ['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus) ? note : undefined
+        },
+        include: { items: true },
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof InsufficientStockError) {
+      return { success: false, code: error.code, error: error.message };
+    }
+    throw error;
+  }
 
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/logistics");

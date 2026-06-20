@@ -273,6 +273,10 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
     startTransition(async () => {
       try {
         const result = await updateOrderStatus(orderId, status, packingNote || undefined);
+        if (!result.success) {
+          showToast(result.error, 'error');
+          return;
+        }
         showToast('Statut mis à jour ✓', 'success');
         setOrders(prev => prev.map(o => {
           if (o.id !== orderId) return o;
@@ -292,15 +296,23 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
 
     startTransition(async () => {
       try {
-        const results = await Promise.all(Array.from(selectedIds).map(id => updateOrderStatus(id, status)));
-        const updatedById = new Map(results.filter(result => result?.order).map(result => [result.order.id, result.order]));
-        showToast(`${selectedIds.size} commandes mises à jour ✓`, 'success');
+        const orderIds = Array.from(selectedIds);
+        const results = await Promise.all(orderIds.map(id => updateOrderStatus(id, status)));
+        const successfulResults = results.filter(result => result.success);
+        const failedIds = new Set(orderIds.filter((_, index) => !results[index].success));
+        const updatedById = new Map(successfulResults.map(result => [result.order.id, result.order]));
+        if (failedIds.size > 0) {
+          const firstFailure = results.find(result => !result.success);
+          showToast(`${successfulResults.length} mise(s) à jour, ${failedIds.size} bloquée(s). ${firstFailure?.error || ''}`, 'error');
+        } else {
+          showToast(`${selectedIds.size} commandes mises à jour ✓`, 'success');
+        }
         setOrders(prev => prev.map(o => {
           const updated = updatedById.get(o.id);
           if (updated) return { ...o, ...updated };
-          return selectedIds.has(o.id) ? { ...o, status } : o;
+          return o;
         }));
-        setSelectedIds(new Set());
+        setSelectedIds(failedIds);
       } catch {
         showToast('Erreur lors du traitement groupé', 'error');
       }

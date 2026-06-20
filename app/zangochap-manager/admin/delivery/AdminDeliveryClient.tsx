@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo } from "react";
+import Link from "next/link";
 import { TableCard, EmptyState, StatCard, StatusBadge } from "@/components/UI";
 import Modal from "@/components/Modal";
 import { formatPrice, formatDate, COMMUNES } from "@/lib/constants";
@@ -129,6 +130,8 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   const router = useRouter();
   const { showToast } = useToast();
+  const accountingDate = filterDate || dateInputValue(new Date());
+  const accountingSessionHref = `/zangochap-manager/accounting/sessions/by-date/${accountingDate}`;
 
   const handleAssign = (orderId: string, dId: string) => {
     const isUnassigning = dId === "unassigned" || dId === "";
@@ -771,6 +774,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             <span>{archivedOrders.length} archives recentes</span>
             <span>{todaySheets.reduce((sum, sheet) => sum + sheet.orders.length, 0)} sur les fiches</span>
           </div>
+          <Link
+            href={accountingSessionHref}
+            className="dispatch-auto-btn"
+            style={{ background: '#101820', color: 'white', textDecoration: 'none' }}
+            title="Ouvrir la validation comptable des livraisons de cette date"
+          >
+            <FileText size={15} />
+            Compta livraisons
+          </Link>
           <button
             type="button"
             className="dispatch-auto-btn"
@@ -1321,6 +1333,9 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
               <span className="count-badge active">{todaySheets.reduce((s, g) => s + g.orders.length, 0)} commandes</span>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Link href={accountingSessionHref} className="btn-secondary" style={{ gap: 8, textDecoration: 'none', borderColor: 'var(--ink)', color: 'var(--ink)' }}>
+                <FileText size={14} /> Valider en compta
+              </Link>
               <button className="btn-secondary" onClick={() => handleExportWord()} style={{ gap: 8, borderColor: 'var(--blue)', color: 'var(--blue)' }}>
                 <Download size={14} /> Tout exporter Word
               </button>

@@ -103,7 +103,8 @@ export default function NonPackedClient({
 
     startTransition(async () => {
       try {
-        await updateOrderStatus(orderId, status);
+        const result = await updateOrderStatus(orderId, status);
+        if (!result.success) throw new Error(result.error);
         showToast('Statut mis à jour ✓', 'success');
         setSelectedOrder(null);
       } catch (e: any) {

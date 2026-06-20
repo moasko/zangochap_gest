@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDownCircle,
@@ -360,17 +361,17 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           <TableCard title="Sessions recentes" meta="30 derniers jours">
             <div className="divide-y divide-[#F1E8DF]">
               {workspace.sessions.map((session: any) => (
-                <button
+                <Link
                   key={session.id}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#FCFAF7]"
-                  onClick={() => changeDate(dateInputValue(session.date))}
+                  href={`/zangochap-manager/accounting/sessions/${session.id}`}
                 >
                   <div>
                     <div className="text-[13px] font-black text-[#1A1410]">{dateInputValue(session.date)}</div>
-                    <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s)</div>
+                    <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s) · detail session</div>
                   </div>
                   <div className="text-right text-[12px] font-black text-[#D4541C]">{formatPrice(session.summary.balance)}</div>
-                </button>
+                </Link>
               ))}
             </div>
           </TableCard>

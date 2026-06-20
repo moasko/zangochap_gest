@@ -11,6 +11,15 @@ type StockSession = {
 
 type StockMovementType = "SALE" | "RESTOCK" | "RETURN" | "EXCHANGE" | "ADJUSTMENT" | "DAMAGE" | "LOSS";
 
+export class InsufficientStockError extends Error {
+  readonly code = "INSUFFICIENT_STOCK";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InsufficientStockError";
+  }
+}
+
 const DEFAULT_WAREHOUSE_CANDIDATES = [
   "Entrepôt Principal",
   "Entrepôt  principal",
@@ -166,7 +175,7 @@ async function decrementVariantStock(data: {
 
   const levels = await tx.stockLevel.findMany({
     where: { variantId: data.variantId, quantity: { gt: 0 } },
-    orderBy: { quantity: "desc" },
+    orderBy: [{ quantity: "desc" }, { id: "asc" }],
   });
 
   const available = levels.reduce((sum: number, level: any) => sum + cleanQty(level.quantity), 0);
@@ -175,17 +184,27 @@ async function decrementVariantStock(data: {
       where: { id: data.variantId },
       include: { product: { select: { name: true } } },
     });
-    throw new Error(`Stock insuffisant pour ${variant?.product?.name || "ce produit"} (${available} disponible, ${remaining} demandé).`);
+    throw new InsufficientStockError(`Stock insuffisant pour ${variant?.product?.name || "ce produit"} (${available} disponible, ${remaining} demandé). Réapprovisionnez cette variante avant de l'emballer.`);
   }
 
   for (const level of levels) {
     if (remaining <= 0) break;
     const taken = Math.min(cleanQty(level.quantity), remaining);
 
-    await tx.stockLevel.update({
-      where: { id: level.id },
+    const updated = await tx.stockLevel.updateMany({
+      where: { id: level.id, quantity: { gte: taken } },
       data: { quantity: { decrement: taken } },
     });
+
+    if (updated.count !== 1) {
+      const currentStock = await tx.stockLevel.aggregate({
+        where: { variantId: data.variantId },
+        _sum: { quantity: true },
+      });
+      throw new InsufficientStockError(
+        `Le stock vient d'être utilisé par une autre commande (${cleanQty(currentStock._sum.quantity || 0)} disponible). Actualisez puis réessayez.`,
+      );
+    }
 
     await recordStockMovementTx({
       variantId: data.variantId,
@@ -206,6 +225,14 @@ async function decrementVariantStock(data: {
 export async function decrementStockForOrder(order: any, session: StockSession, tx: StockTx = prisma) {
   if (order.stockDecremented) return;
 
+  const claimed = await tx.order.updateMany({
+    where: { id: order.id, stockDecremented: false },
+    data: { stockDecremented: true },
+  });
+  if (claimed.count !== 1) return;
+
+  const quantitiesByVariant = new Map<string, number>();
+
   for (const item of order.items) {
     if (item.isCustom || item.isGift || !item.productId) continue;
 
@@ -217,17 +244,23 @@ export async function decrementStockForOrder(order: any, session: StockSession, 
 
     if (!variant) continue;
 
+    quantitiesByVariant.set(
+      variant.id,
+      (quantitiesByVariant.get(variant.id) || 0) + cleanQty(item.qty),
+    );
+  }
+
+  // Stable ordering reduces lock contention when bulk packing shares variants.
+  for (const [variantId, quantity] of [...quantitiesByVariant.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     await decrementVariantStock({
-      variantId: variant.id,
-      quantity: item.qty,
+      variantId,
+      quantity,
       type: "SALE",
       orderId: order.id,
       session,
       reason: `Commande ${order.ref || order.id}`,
     }, tx);
   }
-
-  await tx.order.update({ where: { id: order.id }, data: { stockDecremented: true } });
 }
 
 export async function restoreStockForOrder(

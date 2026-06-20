@@ -332,8 +332,11 @@ export default function OrdersClient({
   // Mutations
 
   const statusMutation = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: string }) =>
-      updateOrderStatus(orderId, status),
+    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
+      const result = await updateOrderStatus(orderId, status);
+      if (!result.success) throw new Error(result.error);
+      return result;
+    },
 
     // Optimistic Update
 

@@ -42,7 +42,12 @@ export default function MobileNav({ user }: MobileNavProps) {
   }
 
   if (isPointRelais) {
-    items.splice(0, items.length, { label: 'Boutique', href: '/zangochap-manager/boutique', icon: <Store size={22} /> });
+    items.splice(
+      0,
+      items.length,
+      { label: 'Boutique', href: '/zangochap-manager/boutique', icon: <Store size={22} /> },
+      { label: 'Collecte', href: '/zangochap-manager/logistics/collection', icon: <Truck size={22} /> },
+    );
   }
  
   if (isAdmin) {

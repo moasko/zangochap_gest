@@ -1,9 +1,9 @@
 import prisma from "@/lib/prisma";
-import { getSession } from "@/modules/auth/actions";
+import { ensureAuth } from "@/lib/auth";
 import { buildCollectionItems } from "./helpers";
 
 export async function getCollectionPageData() {
-  const user = await getSession();
+  const user = await ensureAuth(["admin", "collection", "point_relais"]);
 
   const [categories, warehouses, orders] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),

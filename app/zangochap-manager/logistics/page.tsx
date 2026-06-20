@@ -9,7 +9,7 @@ export default async function LogisticsPage() {
   // Redirect based on role
   if (user?.role === 'packing') {
     redirect('/zangochap-manager/logistics/packing');
-  } else if (user?.role === 'collection') {
+  } else if (user?.role === 'collection' || user?.role === 'point_relais') {
     redirect('/zangochap-manager/logistics/collection');
   } else {
     redirect('/zangochap-manager/logistics/packing');

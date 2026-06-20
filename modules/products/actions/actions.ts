@@ -246,7 +246,7 @@ export async function updateProductVariants(productId: string, variants: Array<{
   stock: number;
   location?: string;
 }>) {
-  await ensureAuth(["admin", "stock", "packing", "collection", "commercial"]);
+  await ensureAuth(["admin", "stock", "packing", "collection", "commercial", "point_relais"]);
 
   await prisma.$transaction(async (tx) => {
     let defaultWarehouse = await tx.warehouse.findFirst({

@@ -65,8 +65,8 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
     { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Répertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
     { title: 'Inventaire', items: [{ label: 'Tous les produits', href: '/zangochap-manager/products', icon: <Box size={18} /> }, { label: 'Ruptures de stock', href: '/zangochap-manager/products/shortages', icon: <AlertTriangle size={18} /> }, { label: 'Historique stock', href: '/zangochap-manager/inventory/history', icon: <History size={18} /> }, { label: 'Entrepôts', href: '/zangochap-manager/logistics/warehouses', icon: <Warehouse size={18} /> }] },
   ],
-  point_relais: () => [
-    { items: [{ label: 'Colis en boutique', href: '/zangochap-manager/boutique', icon: <Store size={18} /> }, { label: 'Repertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
+  point_relais: (counts) => [
+    { items: [{ label: 'Colis en boutique', href: '/zangochap-manager/boutique', icon: <Store size={18} /> }, { label: 'Collecte', href: '/zangochap-manager/logistics/collection', icon: <Truck size={18} />, badge: counts.collection }, { label: 'Repertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
   ],
   comptable: () => [
     { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Repertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },

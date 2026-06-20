@@ -1,9 +1,9 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { ensureAuth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { getSession } from "@/modules/auth/actions";
 import { restockVariant } from "@/modules/orders/actions/stock";
 import { buildCollectionItems, getCollectionLabel } from "./helpers";
 import { MarkCollectionSchema } from "./types";
@@ -16,6 +16,7 @@ type OrderHistoryEntry = {
 };
 
 export async function getCollectionRecords(filters?: { byName?: string }) {
+  await ensureAuth(["admin", "collection", "point_relais"]);
   const where: Prisma.CollectionRecordWhereInput = {};
   if (filters?.byName) where.byName = filters.byName;
 
@@ -26,8 +27,7 @@ export async function getCollectionRecords(filters?: { byName?: string }) {
 }
 
 export async function markCollection(input: unknown) {
-  const session = await getSession();
-  if (!session) throw new Error("Non authentifie");
+  const session = await ensureAuth(["admin", "collection", "point_relais"]);
 
   const parsed = MarkCollectionSchema.safeParse(input);
   if (!parsed.success) {
@@ -124,6 +124,7 @@ export async function markCollection(input: unknown) {
 }
 
 export async function getItemsToCollect() {
+  await ensureAuth(["admin", "collection", "point_relais"]);
   const orders = await prisma.order.findMany({
     where: { status: { notIn: ["CANCELLED", "DELIVERED"] } },
     include: { items: true },

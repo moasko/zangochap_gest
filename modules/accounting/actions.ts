@@ -166,7 +166,7 @@ async function syncDeliveryOperations(session: any, actor: any) {
 
   // Find existing grouped delivery operation for this session
   const existingGrouped = await db.accountingOperation.findFirst({
-    where: { sessionId: session.id, source: "DELIVERY", deliveryOrderId: null },
+    where: { sessionId: session.id, source: "DELIVERY", deliveryOrderId: null, riderId: null },
   });
 
   if (orderCount === 0 && existingGrouped) {
@@ -262,6 +262,16 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
   }));
 }
 
+export async function getAccountingSessionIdForDate(date = dateInputValue()) {
+  const actor = await requireAccountingUser();
+  await ensureDefaultCategories();
+  const session = await ensureSessionForDate(db, date, actor);
+  await syncDeliveryOperations(session, actor);
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${session.id}`);
+  return session.id;
+}
+
 function summarizeOperations(operations: Array<{ type: AccountingType; amount: number }>) {
   const totalIncome = operations
     .filter((operation) => operation.type === "INCOME" || (operation.type === "CORRECTION" && operation.amount > 0))
@@ -275,6 +285,229 @@ function summarizeOperations(operations: Array<{ type: AccountingType; amount: n
     balance: totalIncome - totalExpense,
     count: operations.length,
   };
+}
+
+function expectedOrderAmount(order: any) {
+  return Math.max(0, Number(order.amountReceived ?? (Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0))));
+}
+
+async function getSessionRiderSummaries(session: any) {
+  const orders = await db.order.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] },
+      OR: [
+        { deliveryDate: { gte: session.date, lte: endOfLocalDay(session.date) } },
+        { deliveryDate: null, updatedAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
+      ],
+    },
+    select: {
+      id: true,
+      ref: true,
+      customerName: true,
+      total: true,
+      deliveryFee: true,
+      discount: true,
+      amountReceived: true,
+      status: true,
+      deliverymanId: true,
+      deliverymanName: true,
+      deliveryDate: true,
+      updatedAt: true,
+    },
+    orderBy: [{ deliverymanName: "asc" }, { deliveryDate: "asc" }],
+  });
+
+  const groups = new Map<string, any>();
+  orders.forEach((order: any) => {
+    const riderId = order.deliverymanId || "UNASSIGNED";
+    const riderName = order.deliverymanName || "Livreur non renseigne";
+    const amount = expectedOrderAmount(order);
+    const group = groups.get(riderId) || {
+      riderId,
+      riderName,
+      ordersCount: 0,
+      expectedAmount: 0,
+      orders: [],
+    };
+    group.ordersCount += 1;
+    group.expectedAmount += amount;
+    group.orders.push({ ...order, expectedAmount: amount });
+    groups.set(riderId, group);
+  });
+
+  return Array.from(groups.values()).sort((a: any, b: any) => a.riderName.localeCompare(b.riderName));
+}
+
+export async function getAccountingSessionDetail(sessionId: string) {
+  const actor = await requireAccountingUser();
+  await ensureDefaultCategories();
+
+  const session = await db.accountingSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session comptable introuvable.");
+
+  const [categories, operations, audits, riderSummaries, sessions] = await Promise.all([
+    db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    db.accountingOperation.findMany({
+      where: { sessionId },
+      include: { category: true },
+      orderBy: [{ source: "asc" }, { createdAt: "desc" }],
+    }),
+    db.accountingAuditLog.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    getSessionRiderSummaries(session),
+    db.accountingSession.findMany({
+      orderBy: { date: "desc" },
+      take: 30,
+      include: { operations: { select: { type: true, amount: true } } },
+    }),
+  ]);
+
+  const operationByRider = new Map<string, any>(
+    operations
+      .filter((operation: any) => operation.source === "DELIVERY" && operation.riderId)
+      .map((operation: any) => [operation.riderId, operation]),
+  );
+
+  const riders = riderSummaries.map((summary: any) => {
+    const operation = operationByRider.get(summary.riderId) || null;
+    return {
+      ...summary,
+      operation,
+      validatedAmount: operation?.amount || 0,
+      isValidated: Boolean(operation),
+      variance: Number(operation?.amount || 0) - Number(summary.expectedAmount || 0),
+    };
+  });
+  const totals = summarizeOperations(operations);
+
+  return JSON.parse(JSON.stringify({
+    actor: { id: actor.id, name: actor.name, role: actor.role },
+    session,
+    sessions: sessions.map((item: any) => ({ ...item, summary: summarizeOperations(item.operations) })),
+    categories,
+    operations,
+    audits,
+    riders,
+    totals,
+  }));
+}
+
+export async function validateRiderAccountingEntry(data: {
+  sessionId: string;
+  riderId: string;
+  riderName: string;
+  amount: number;
+  reason?: string;
+}) {
+  const actor = await requireAccountingUser();
+  const amount = positiveAmount(data.amount);
+  const riderId = data.riderId || "UNASSIGNED";
+  const riderName = data.riderName?.trim() || "Livreur non renseigne";
+  const reason = data.reason?.trim() || "Validation entree livreur";
+
+  await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    const category = await getDeliveryIncomeCategory(tx);
+    if (!category) throw new Error("Categorie livraison introuvable.");
+    const riderSummaries = await getSessionRiderSummaries(session);
+    const riderSummary = riderSummaries.find((item: any) => item.riderId === riderId);
+    if (!riderSummary) throw new Error("Aucune livraison trouvee pour ce livreur sur cette session.");
+
+    const previous = await tx.accountingOperation.findFirst({
+      where: {
+        sessionId: data.sessionId,
+        source: "DELIVERY",
+        riderId,
+        deliveryOrderId: null,
+      },
+    });
+
+    const legacyGlobal = await tx.accountingOperation.findFirst({
+      where: {
+        sessionId: data.sessionId,
+        source: "DELIVERY",
+        riderId: null,
+        deliveryOrderId: null,
+        amount: { gt: 0 },
+      },
+    });
+
+    if (legacyGlobal) {
+      const updatedLegacy = await tx.accountingOperation.update({
+        where: { id: legacyGlobal.id },
+        data: {
+          amount: 0,
+          reason: "Remplacee par validation detaillee des entrees livreurs",
+          updatedById: actor.id,
+          updatedByName: actor.name,
+        },
+      });
+      await audit(tx, {
+        action: "LEGACY_DELIVERY_ENTRY_NEUTRALIZED",
+        entityType: "AccountingOperation",
+        entityId: updatedLegacy.id,
+        sessionId: data.sessionId,
+        operationId: updatedLegacy.id,
+        previousAmount: legacyGlobal.amount,
+        newAmount: 0,
+        reason: "Remplacee par validation detaillee des entrees livreurs",
+        actor,
+        details: { previousDescription: legacyGlobal.description },
+      });
+    }
+
+    const payload = {
+      sessionId: data.sessionId,
+      categoryId: category.id,
+      type: "INCOME" as AccountingType,
+      source: "DELIVERY" as AccountingSource,
+      amount,
+      originalAmount: riderSummary.expectedAmount,
+      description: `Entree livreur - ${riderName} (${riderSummary.ordersCount} livraison(s))`,
+      riderId,
+      riderName,
+      reason,
+      updatedById: actor.id,
+      updatedByName: actor.name,
+    };
+
+    const operation = previous
+      ? await tx.accountingOperation.update({ where: { id: previous.id }, data: payload })
+      : await tx.accountingOperation.create({
+        data: {
+          ...payload,
+          createdById: actor.id,
+          createdByName: actor.name,
+        },
+      });
+
+    await audit(tx, {
+      action: previous ? "RIDER_ENTRY_VALIDATED_UPDATED" : "RIDER_ENTRY_VALIDATED",
+      entityType: "AccountingOperation",
+      entityId: operation.id,
+      sessionId: data.sessionId,
+      operationId: operation.id,
+      previousAmount: previous?.amount ?? null,
+      newAmount: amount,
+      reason,
+      actor,
+      details: {
+        riderId,
+        riderName,
+        expectedAmount: riderSummary.expectedAmount,
+        ordersCount: riderSummary.ordersCount,
+      },
+    });
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${data.sessionId}`);
+  return { success: true };
 }
 
 export async function createAccountingCategory(data: { name: string; type: CategoryType }) {
@@ -409,6 +642,7 @@ export async function createAccountingOperation(data: {
   });
 
   revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${data.sessionId}`);
   return { success: true, operation };
 }
 
@@ -423,7 +657,7 @@ export async function updateAccountingOperation(id: string, data: {
   const amount = positiveAmount(data.amount);
   const reason = data.reason?.trim() || "Regularisation comptable";
 
-  await db.$transaction(async (tx: any) => {
+  const sessionId = await db.$transaction(async (tx: any) => {
     const previous = await tx.accountingOperation.findUnique({ where: { id } });
     if (!previous) throw new Error("Operation introuvable.");
 
@@ -452,9 +686,11 @@ export async function updateAccountingOperation(id: string, data: {
       actor,
       details: { source: previous.source, deliveryOrderRef: previous.deliveryOrderRef },
     });
+    return previous.sessionId;
   });
 
   revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${sessionId}`);
   return { success: true };
 }
 
