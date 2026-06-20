@@ -8,6 +8,7 @@ import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calenda
 import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder, autoAssignDeliveryOrders } from "@/modules/orders/actions";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
 import "./admin-delivery-client.css";
 
 type Deliveryman = {
@@ -147,6 +148,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         showToast(isUnassigning ? 'Commande désattribuée' : 'Commande attribuée ✓', 'success');
         router.refresh();
       } catch (e: unknown) {
+        if (reloadOnStaleServerAction(e)) return;
         showToast(e instanceof Error ? e.message : 'Erreur', 'error');
       }
     });
@@ -172,6 +174,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setSelectedIds(new Set());
         router.refresh();
       } catch (e: unknown) {
+        if (reloadOnStaleServerAction(e)) return;
         showToast(e instanceof Error ? e.message : 'Erreur', 'error');
       }
     });
@@ -198,6 +201,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setAutoAssignPreviewOrders([]);
         router.refresh();
       } catch (e: unknown) {
+        if (reloadOnStaleServerAction(e)) return;
         showToast(e instanceof Error ? e.message : "Erreur", "error");
       }
     });
@@ -222,6 +226,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setReproDate(dateInputValue(getNextDeliveryDate()));
         router.refresh();
       } catch (e: unknown) {
+        if (reloadOnStaleServerAction(e)) return;
         showToast(e instanceof Error ? e.message : 'Erreur', 'error');
       }
     });
@@ -243,6 +248,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         setReopenNote("");
         router.refresh();
       } catch (e: unknown) {
+        if (reloadOnStaleServerAction(e)) return;
         showToast(e instanceof Error ? e.message : "Erreur", "error");
       }
     });
