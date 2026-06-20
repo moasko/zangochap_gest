@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, Chevron
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/components/Toast";
+import { playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 
 // Components
 import RiderGlobalStyles from "./components/RiderGlobalStyles";
@@ -140,6 +141,29 @@ export default function DeliveryClient({
     }, 10000);
     return () => clearInterval(interval);
   }, [router]);
+
+  useEffect(() => {
+    const source = new EventSource("/api/chat/rider-alerts/stream");
+    const handleCommercialConfirmation = (event: MessageEvent<string>) => {
+      try {
+        const alert = JSON.parse(event.data) as { body?: string; senderName?: string };
+        if (!alert.body?.includes("[CONFIRMATION COMMERCIALE]")) return;
+
+        showToast("Client disponible: livraison confirmee par le commercial.", "success");
+        showBrowserNotification(
+          "Livraison confirmee",
+          alert.body.replace("[CONFIRMATION COMMERCIALE] ", ""),
+        );
+        playRiderMessageSound();
+        router.refresh();
+      } catch {
+        // Ignore malformed stream events; the periodic refresh remains active.
+      }
+    };
+
+    source.addEventListener("rider-alert", handleCommercialConfirmation as EventListener);
+    return () => source.close();
+  }, [router, showToast]);
 
   const [missionFilter, setMissionFilter] = useState<MissionFilter>("pending");
   const [historyFilter, setHistoryFilter] = useState<HistoryStatusFilter>("all");
