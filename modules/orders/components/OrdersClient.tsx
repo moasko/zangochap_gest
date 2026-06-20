@@ -39,6 +39,7 @@ import {
   DELIVERY_FEES,
 } from "@/lib/constants";
 import { getImageUrl } from "@/lib/utils";
+import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -375,6 +376,7 @@ export default function OrdersClient({
         queryClient.setQueryData(["orders", queryKey[1]], context.previousData);
       }
 
+      if (reloadOnStaleServerAction(err)) return;
       showToast(err.message || "Erreur", "error");
     },
 
@@ -415,6 +417,7 @@ export default function OrdersClient({
         queryClient.setQueryData(["orders", queryKey[1]], context.previousData);
       }
 
+      if (reloadOnStaleServerAction(err)) return;
       showToast(err.message || "Erreur", "error");
     },
 
@@ -437,7 +440,10 @@ export default function OrdersClient({
       }
     },
 
-    onError: (e: any) => showToast(e.message || "Erreur", "error"),
+    onError: (e: any) => {
+      if (reloadOnStaleServerAction(e)) return;
+      showToast(e.message || "Erreur", "error");
+    },
   });
 
   const assignMutation = useMutation({
@@ -492,6 +498,7 @@ export default function OrdersClient({
         queryClient.setQueryData(["orders", queryKey[1]], context.previousData);
       }
 
+      if (reloadOnStaleServerAction(err)) return;
       showToast(err.message || "Erreur", "error");
     },
 
@@ -545,6 +552,7 @@ export default function OrdersClient({
         queryClient.setQueryData(["orders", queryKey[1]], context.previousData);
       }
 
+      if (reloadOnStaleServerAction(err)) return;
       showToast(err.message || "Erreur", "error");
     },
 
@@ -758,6 +766,7 @@ export default function OrdersClient({
           setSelectedOrder(null);
           queryClient.invalidateQueries({ queryKey: ["orders"] });
         } catch (e: any) {
+          if (reloadOnStaleServerAction(e)) return;
           showToast(e.message || "Erreur", "error");
         }
       });
@@ -778,6 +787,7 @@ export default function OrdersClient({
 
           queryClient.invalidateQueries({ queryKey: ["orders"] });
         } catch (e: any) {
+          if (reloadOnStaleServerAction(e)) return;
           showToast(e.message || "Erreur", "error");
         }
       });
