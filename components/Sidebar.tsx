@@ -10,7 +10,6 @@ import { ROLE_LABELS } from "@/lib/constants";
 import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrowserNotification } from "@/lib/client-alerts";
 import { useToast } from "@/components/Toast";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
-import { getLatestUnreadRiderMessage } from "@/modules/chat/actions";
 import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
@@ -169,15 +168,18 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const roleLabel = ROLE_LABELS[user.role] || user.role;
   const effectiveCollapsed = isCollapsed || isNarrowDesktop;
   const showRiderAlert = useCallback((alert: RiderMessageAlert) => {
+    if (!alert.body.includes("[ALERTE LIVREUR]")) return;
     if (hasSeenRiderAlert(alert.id)) return;
 
     markRiderAlertSeen(alert.id);
+    if (pathname === "/zangochap-manager/chat") return;
+
     setHasNewNotifications(true);
     playRiderMessageSound();
     showToast("Nouveau message d'un livreur", "success");
     showBrowserNotification("Message livreur ZangoChap", `${alert.senderName}: ${alert.body.slice(0, 140)}`);
     enqueueAlert(alert);
-  }, [enqueueAlert, showToast]);
+  }, [enqueueAlert, pathname, showToast]);
 
   // Track Online/Offline Status
   useEffect(() => {
@@ -217,7 +219,6 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
 
   // Counts tracking
   const prevCounts = useRef<SidebarCounts | null>(null);
-  const prevRiderAlertCount = useRef<number | null>(null);
   useEffect(() => {
     if (!prevCounts.current) {
       prevCounts.current = counts;
@@ -237,40 +238,6 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
 
     prevCounts.current = counts;
   }, [counts, pathname, showToast]);
-
-  useEffect(() => {
-    if (pathname === "/zangochap-manager/chat") {
-      prevRiderAlertCount.current = counts.riderChatUnread || 0;
-      return;
-    }
-
-    if (prevRiderAlertCount.current === null) {
-      prevRiderAlertCount.current = counts.riderChatUnread || 0;
-      return;
-    }
-
-    const hasNewRiderAlert = (counts.riderChatUnread || 0) > prevRiderAlertCount.current;
-    prevRiderAlertCount.current = counts.riderChatUnread || 0;
-    if (!hasNewRiderAlert) return;
-
-    getLatestUnreadRiderMessage()
-      .then((message) => {
-        showRiderAlert(message || {
-          id: `rider-alert-${Date.now()}`,
-          senderName: "Livreur",
-          senderPhone: null,
-          body: "Un livreur a envoye une alerte dans le chat interne.",
-        });
-      })
-      .catch(() => {
-        showRiderAlert({
-          id: `rider-alert-${Date.now()}`,
-          senderName: "Livreur",
-          senderPhone: null,
-          body: "Un livreur a envoye une alerte dans le chat interne.",
-        });
-      });
-  }, [counts.riderChatUnread, pathname, showRiderAlert]);
 
   useEffect(() => {
     setIsMobileOpen(false);

@@ -223,11 +223,44 @@
 
 @media (max-width: 520px) {
   .floatingChat {
-    border-radius: 18px;
+    right: auto;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(82px, calc(82px + env(safe-area-inset-bottom)));
+    width: 46px;
+    min-height: 46px;
+    height: 46px;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(15, 17, 21, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  }
+
+  .floatingChat:hover {
+    transform: translateY(-1px);
+  }
+
+  .iconWrap {
+    width: 28px;
+    height: 28px;
+  }
+
+  .label {
+    display: none;
   }
 
   .label strong {
     font-size: 12px;
+  }
+
+  .badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    font-size: 10px;
   }
 
   .modalBackdrop {
