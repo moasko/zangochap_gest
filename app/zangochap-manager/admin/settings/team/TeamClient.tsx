@@ -12,27 +12,31 @@ import {
   Plus, Edit3, Trash2, Mail, Phone, Shield,
   ShoppingBag, Package, Truck, Box, User,
   MoreVertical, Search, Filter, PauseCircle, Clock,
-  X
+  X, Landmark, Store
 } from "lucide-react";
 
 const ROLE_ICONS: Record<string, React.ReactNode> = {
   developer: <Shield size={18} />,
+  comptable: <Landmark size={18} />,
   admin: <Shield size={18} />,
   commercial: <ShoppingBag size={18} />,
   packing: <Package size={18} />,
   collection: <Truck size={18} />,
   stock: <Box size={18} />,
   livreur: <Truck size={18} />,
+  point_relais: <Store size={18} />,
 };
 
 const ROLE_COLORS: Record<string, string> = {
   developer: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+  comptable: 'linear-gradient(135deg, #0F766E 0%, #134E4A 100%)',
   admin: 'linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)',
   commercial: 'linear-gradient(135deg, #D4541C 0%, #A34015 100%)',
   packing: 'linear-gradient(135deg, #059669 0%, #065F46 100%)',
   collection: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)',
   stock: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
   livreur: 'linear-gradient(135deg, #D97706 0%, #92400E 100%)',
+  point_relais: 'linear-gradient(135deg, #0F766E 0%, #115E59 100%)',
 };
 
 function formatPauseDuration(value?: string | null) {
@@ -322,8 +326,14 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
               <input className="field-input" value={phone2} onChange={e => setPhone2(e.target.value)} placeholder="01 00 00 00 00" />
             </div>
             <div className="form-row span-2">
-              <label className="field-label">Libellé du service (si applicable)</label>
-              <input className="field-input" value={serviceLabel} onChange={e => setServiceLabel(e.target.value)} placeholder="Ex. Service Client, Support Tech..." />
+              <label className="field-label">{role === 'point_relais' ? 'Point relais attribué *' : 'Libellé du service (si applicable)'}</label>
+              <input
+                className="field-input"
+                value={serviceLabel}
+                onChange={e => setServiceLabel(e.target.value)}
+                placeholder={role === 'point_relais' ? 'Ex. Boutique Cocody Angré' : 'Ex. Service Client, Support Tech...'}
+                required={role === 'point_relais'}
+              />
             </div>
             <div className="form-row span-2">
               <label className="field-label">{account ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe temporaire *'}</label>

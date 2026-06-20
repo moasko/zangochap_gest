@@ -1,7 +1,6 @@
 import Topbar from "@/components/Topbar";
 import { getChatSnapshot } from "@/modules/chat/actions";
 import ChatClient from "./ChatClient";
-import "./chat.css";
 
 export const dynamic = "force-dynamic";
 

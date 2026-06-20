@@ -54,10 +54,12 @@ import {
 import {
   createSystemBackupAction,
   listSystemBackupsAction,
+  importSystemBackupAction,
   deleteSystemBackupAction,
   uploadBackupToCloudAction,
   simulateRestoreBackupAction,
-  downloadBackupAction
+  downloadBackupAction,
+  restoreSystemBackupAction
 } from "@/modules/developer/backup-actions";
 
 interface DeveloperConsoleClientProps {
@@ -115,6 +117,8 @@ export default function DeveloperConsoleClient({
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [backupStoreCloud, setBackupStoreCloud] = useState(false);
   const [backupCreating, setBackupCreating] = useState(false);
+  const [backupImporting, setBackupImporting] = useState(false);
+  const [backupImportInfo, setBackupImportInfo] = useState<string | null>(null);
   const [cloudActionLoading, setCloudActionLoading] = useState<string | null>(null);
   const [cloudLogs, setCloudLogs] = useState<string[]>([]);
 
@@ -169,6 +173,46 @@ export default function DeveloperConsoleClient({
       showToast(err.message || "Erreur lors de la sauvegarde.", "error");
     } finally {
       setBackupCreating(false);
+    }
+  };
+
+  const handleImportBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      showToast("Selectionnez un fichier de backup JSON.", "error");
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      showToast("Fichier trop volumineux. Limite actuelle: 25 Mo.", "error");
+      return;
+    }
+
+    setBackupImporting(true);
+    setBackupImportInfo(null);
+    try {
+      const fileContent = await file.text();
+      const res = await importSystemBackupAction({
+        originalFileName: file.name,
+        fileContent,
+      });
+
+      if (res.success) {
+        const importedName = res.data?.fileName || file.name;
+        showToast(res.message || "Backup importe dans l'historique.", "success");
+        setBackupImportInfo(`${importedName} importe dans l'historique. Aucune restauration DB executee.`);
+        fetchBackups();
+      } else {
+        showToast(res.error || "Impossible d'importer ce backup.", "error");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erreur lors de l'import du backup.";
+      showToast(message, "error");
+    } finally {
+      setBackupImporting(false);
     }
   };
 
@@ -246,7 +290,7 @@ export default function DeveloperConsoleClient({
           if (!prev) return prev;
           return {
             ...prev,
-            status: "done",
+            status: "idle",
             data: res.data
           };
         });
@@ -439,6 +483,8 @@ export default function DeveloperConsoleClient({
           res = await cleanTestOrdersAction();
         } else if (actionId === "deep_purge") {
           res = await deepCachePurgeAction();
+        } else if (actionId === "restore_sim" && modal.data?.fileName) {
+          res = await restoreSystemBackupAction(modal.data.fileName);
         }
 
         if (res && res.success) {
@@ -1180,6 +1226,47 @@ export default function DeveloperConsoleClient({
                     <><HardDrive size={13} /> Lancer une sauvegarde complète</>
                   )}
                 </button>
+
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <input
+                    id="backup-json-import"
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleImportBackup}
+                    disabled={backupImporting}
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="backup-json-import"
+                    className={`w-full h-10 border border-[#D9D2C5] bg-white text-[var(--ink)] text-[10px] font-extrabold tracking-[0.12em] uppercase flex items-center justify-center gap-2 transition-colors ${
+                      backupImporting
+                        ? "opacity-50 cursor-wait"
+                        : "cursor-pointer hover:bg-[#FAF9F5] hover:border-[var(--orange)]"
+                    }`}
+                  >
+                    {backupImporting ? (
+                      <><Loader2 size={13} className="animate-spin" /> Import en cours...</>
+                    ) : (
+                      <><UploadCloud size={13} /> Importer un backup JSON</>
+                    )}
+                  </label>
+
+                  <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-relaxed text-amber-800">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck size={13} className="mt-0.5 shrink-0" />
+                      <span>
+                        Import securise: le fichier est ajoute a l'historique local et audite. Aucune restauration de base de donnees n'est executee.
+                      </span>
+                    </div>
+                  </div>
+
+                  {backupImportInfo && (
+                    <div className="flex items-center gap-2 border border-green-200 bg-green-50 px-3 py-2 text-[10px] font-semibold text-green-700">
+                      <CheckCircle2 size={13} />
+                      <span className="truncate">{backupImportInfo}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1546,7 +1633,7 @@ export default function DeveloperConsoleClient({
                   )}
 
                   {/* Basic confirmations */}
-                  {["order_sim", "cache_purge", "deep_purge"].includes(modal.actionId) && (
+                  {["order_sim", "cache_purge", "deep_purge", "restore_sim"].includes(modal.actionId) && (
                     <div className="bg-[#FAF9F5] border border-[#E9E5DB] p-4 flex items-center gap-3">
                       <AlertTriangle className="text-[var(--orange)]" size={18} />
                       <span className="font-bold text-[10px] uppercase tracking-wider text-[var(--brown-soft)]">
@@ -1770,6 +1857,15 @@ export default function DeveloperConsoleClient({
                       className="h-9 px-5 bg-yellow-600 text-white border-none hover:bg-yellow-700 cursor-pointer transition-colors"
                     >
                       Lancer la Purge Profonde
+                    </button>
+                  )}
+
+                  {modal.actionId === "restore_sim" && (
+                    <button 
+                      onClick={handleConfirmAction} 
+                      className="h-9 px-5 bg-red-700 text-white border-none hover:bg-red-800 cursor-pointer transition-colors flex items-center gap-2"
+                    >
+                      <AlertTriangle size={12} /> Appliquer la Restauration
                     </button>
                   )}
                 </>

@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local operational data and credential-bearing helpers
+/backups/
+/scratch/
+/scripts/create-dev-account.ts

@@ -11,7 +11,7 @@ import { useToast } from "@/components/Toast";
 import { useSearchParams } from "next/navigation";
 import { Commune } from "@/lib/types";
 
-export default function CartPageClient({ communes = [] }: { communes?: Commune[] }) {
+export default function CartPageClient({ communes = [], relayPoints = [] }: { communes?: Commune[]; relayPoints?: string[] }) {
   const { cart, removeFromCart, clearCart } = useCart();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
@@ -301,7 +301,11 @@ export default function CartPageClient({ communes = [] }: { communes?: Commune[]
               <label className="block text-[10px] font-medium tracking-[0.12em] text-[#999] uppercase">COMMUNE</label>
               <select 
                 value={commune} 
-                onChange={e => setCommune(e.target.value)} 
+                onChange={e => {
+                  const nextCommune = e.target.value;
+                  if (nextCommune === 'Boutique' || commune === 'Boutique') setAddress('');
+                  setCommune(nextCommune);
+                }}
                 required
                 className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614]"
               >
@@ -310,15 +314,15 @@ export default function CartPageClient({ communes = [] }: { communes?: Commune[]
               </select>
             </div>
             <div className="space-y-2">
-              <label className="block text-[10px] font-medium tracking-[0.12em] text-[#999] uppercase">ADRESSE PRÉCISE</label>
-              <textarea 
-                value={address} 
-                onChange={e => setAddress(e.target.value)} 
-                placeholder="Quartier, rue, repères..." 
-                rows={3} 
-                required 
-                className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614] resize-vertical font-inherit"
-              />
+              <label className="block text-[10px] font-medium tracking-[0.12em] text-[#999] uppercase">{commune === 'Boutique' ? 'POINT RELAIS' : 'ADRESSE PRÉCISE'}</label>
+              {commune === 'Boutique' ? (
+                <select value={address} onChange={e => setAddress(e.target.value)} required className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614]">
+                  <option value="">Sélectionner un point relais</option>
+                  {relayPoints.map((relayPoint) => <option key={relayPoint} value={relayPoint}>{relayPoint}</option>)}
+                </select>
+              ) : (
+                <textarea value={address} onChange={e => setAddress(e.target.value)} placeholder="Quartier, rue, repères..." rows={3} required className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614] resize-vertical font-inherit" />
+              )}
             </div>
 
             {/* Saisie de code promo */}

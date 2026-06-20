@@ -1,6 +1,8 @@
 import { Metadata, Viewport } from "next";
+import GlobalChatAccess from "@/components/GlobalChatAccess";
 import { getSession } from "@/modules/auth/actions";
 import { redirect } from "next/navigation";
+import "../zangochap-manager/chat/chat.css";
 
 export const metadata: Metadata = {
   title: "ZangoChap Rider",
@@ -32,6 +34,7 @@ export default async function RiderLayout({
   return (
     <div className="rider-root">
       {children}
+      <GlobalChatAccess />
       <style>{`
         .rider-root {
           min-height: 100vh;

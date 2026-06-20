@@ -11,6 +11,15 @@
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
 }
 
+.chat-shell.chat-shell-modal {
+  width: min(1120px, calc(100vw - 28px));
+  height: min(760px, calc(100dvh - 28px));
+  min-height: 0;
+  margin: 0;
+  border-radius: 24px;
+  box-shadow: 0 28px 90px rgba(15, 17, 21, 0.34);
+}
+
 .chat-sidebar {
   min-width: 0;
   background: #101318;
@@ -238,6 +247,25 @@
   background: transparent;
   font-size: 13px;
   font-weight: 700;
+}
+
+.chat-modal-close {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.chat-modal-close:hover {
+  background: #fff7ed;
+  color: #d4541c;
+  border-color: #fdba74;
 }
 
 .chat-pins {
@@ -477,6 +505,11 @@
   font-weight: 900;
 }
 
+.chat-report-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .chat-report-actions button:first-child {
   background: #f1f5f9;
   color: #334155;
@@ -484,6 +517,14 @@
 
 .chat-report-actions button:last-child {
   background: #d4541c;
+  color: #ffffff;
+}
+
+.chat-report-actions button.accept {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #166534;
   color: #ffffff;
 }
 
@@ -591,5 +632,12 @@
 
   .chat-message {
     max-width: 94%;
+  }
+
+  .chat-shell.chat-shell-modal {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
   }
 }

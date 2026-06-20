@@ -4,6 +4,7 @@ import PublicLayout from "@/components/public/PublicLayout";
 import CartPageClient from "./cart-page-client";
 import { getCommunes } from "@/modules/settings/actions";
 import { SITE_NAME, SITE_URL, SITE_LOCALE, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { getActiveRelayPoints } from "@/modules/boutique/relay-queries";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +25,14 @@ export const metadata: Metadata = {
 };
 
 export default async function CartPage() {
-  const communes = await getCommunes();
+  const [communes, relayPoints] = await Promise.all([
+    getCommunes(),
+    getActiveRelayPoints(),
+  ]);
   
   return (
     <PublicLayout>
-      <CartPageClient communes={JSON.parse(JSON.stringify(communes))} />
+      <CartPageClient communes={JSON.parse(JSON.stringify(communes))} relayPoints={relayPoints} />
     </PublicLayout>
   );
 }

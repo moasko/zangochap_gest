@@ -20,7 +20,7 @@ const GREETINGS: Record<string, string> = {
 export default async function DashboardPage() {
   const user = await getSession();
   const firstName = user?.name?.split(' ')[0] || '';
-  const subtitle = GREETINGS[user?.role] || 'bord';
+  const subtitle = user?.role ? (GREETINGS[user.role] || 'bord') : 'bord';
 
   const dashboards: Record<string, any> = {
     admin: AdminDashboard,
@@ -35,7 +35,17 @@ export default async function DashboardPage() {
     redirect("/zangochap-rider");
   }
 
-  const DashboardView = dashboards[user?.role] || AdminDashboard;
+  if (user?.role?.toUpperCase() === 'COMPTABLE') {
+    const { redirect } = await import("next/navigation");
+    redirect("/zangochap-manager/accounting");
+  }
+
+  if (user?.role?.toUpperCase() === 'POINT_RELAIS') {
+    const { redirect } = await import("next/navigation");
+    redirect("/zangochap-manager/boutique");
+  }
+
+  const DashboardView = user?.role ? (dashboards[user.role] || AdminDashboard) : AdminDashboard;
 
   const serializedUser = JSON.parse(JSON.stringify(user));
 

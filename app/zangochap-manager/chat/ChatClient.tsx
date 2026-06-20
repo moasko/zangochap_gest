@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Bell, Hash, Lock, MessageCircle, Pin, RefreshCw, Search, Send, Shield, Trash2, Users } from "lucide-react";
+import { Bell, CheckCircle2, Hash, Lock, MessageCircle, Pin, RefreshCw, Search, Send, Shield, Trash2, Users, X } from "lucide-react";
 import { ROLE_LABELS } from "@/lib/constants";
 import {
+  acceptOrderAfterCommercialIntervention,
   deleteChatMessage,
   getChatSnapshot,
   markChatMessagesRead,
@@ -43,7 +44,14 @@ function getRoomLabel(room: ChatRoomKey, role: RoleKey, peer?: ChatUserView) {
   return peer?.name || "Direct";
 }
 
-export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatSnapshot }) {
+type ChatClientProps = {
+  initialSnapshot: ChatSnapshot;
+  variant?: "page" | "modal";
+  onClose?: () => void;
+  fetchSnapshot?: () => Promise<ChatSnapshot>;
+};
+
+export default function ChatClient({ initialSnapshot, variant = "page", onClose, fetchSnapshot }: ChatClientProps) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [room, setRoom] = useState<ChatRoomKey>("GENERAL");
   const [selectedRole, setSelectedRole] = useState<RoleKey>(initialSnapshot.currentUser.role as RoleKey);
@@ -73,9 +81,9 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
   }, [peers, selectedPeerId]);
 
   const refresh = useCallback(async () => {
-    const next = await getChatSnapshot();
+    const next = fetchSnapshot ? await fetchSnapshot() : await getChatSnapshot();
     setSnapshot(next);
-  }, []);
+  }, [fetchSnapshot]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -230,12 +238,37 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
     });
   };
 
+  const handleAcceptAfterIntervention = () => {
+    if (!reportingAlert) return;
+    const orderRef = extractOrderRef(reportingAlert.body);
+    startTransition(async () => {
+      try {
+        const result = await acceptOrderAfterCommercialIntervention({
+          orderRef,
+          report: contactReport,
+        });
+        showToast(
+          result.alreadyAccepted
+            ? "Cette commande est deja confirmee"
+            : `Livreur notifie: ${result.deliverymanName}`,
+          "success",
+        );
+        setReportingAlert(null);
+        setContactReport("");
+        setContactOutcome("Client contacte");
+        await refresh();
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Confirmation impossible", "error");
+      }
+    });
+  };
+
   const canDeleteMessage = (item: ChatMessageView) => (
     item.senderId === currentUser.id || currentUser.role === "ADMIN" || currentUser.role === "DEVELOPER"
   );
 
   return (
-    <div className="chat-shell">
+    <div className={`chat-shell ${variant === "modal" ? "chat-shell-modal" : ""}`}>
       <AnimatePresence>
         {activeAlert && (
           <RiderMessageAlertOverlay
@@ -318,6 +351,11 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
             <Search size={15} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher..." />
           </div>
+          {variant === "modal" && (
+            <button className="chat-modal-close" type="button" onClick={onClose} title="Fermer le chat">
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         {pinnedMessages.length > 0 && (
@@ -430,6 +468,9 @@ export default function ChatClient({ initialSnapshot }: { initialSnapshot: ChatS
             />
             <div className="chat-report-actions">
               <button type="button" onClick={() => setReportingAlert(null)}>Annuler</button>
+              <button className="accept" type="button" onClick={handleAcceptAfterIntervention} disabled={isPending}>
+                <CheckCircle2 size={15} /> Accepte
+              </button>
               <button type="button" onClick={handleSubmitContactReport} disabled={isPending || !contactReport.trim()}>
                 Enregistrer
               </button>

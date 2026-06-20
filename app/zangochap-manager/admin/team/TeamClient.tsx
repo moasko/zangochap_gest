@@ -11,7 +11,7 @@ import "./team-client.css";
 import {
   Plus, Edit3, Trash2, Mail, Phone, Shield,
   ShoppingBag, Package, Truck, Box, User,
-  MoreVertical, Search, Filter
+  MoreVertical, Search, Filter, Store
 } from "lucide-react";
 
 const ROLE_ICONS: Record<string, React.ReactNode> = {
@@ -21,6 +21,7 @@ const ROLE_ICONS: Record<string, React.ReactNode> = {
   collection: <Truck size={18} />,
   stock: <Box size={18} />,
   livreur: <Truck size={18} />,
+  point_relais: <Store size={18} />,
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -30,6 +31,7 @@ const ROLE_COLORS: Record<string, string> = {
   collection: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)',
   stock: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
   livreur: 'linear-gradient(135deg, #D97706 0%, #92400E 100%)',
+  point_relais: 'linear-gradient(135deg, #0F766E 0%, #115E59 100%)',
 };
 
 export default function TeamClient({ accounts, currentUser }: { accounts: any[]; currentUser: any }) {
@@ -194,6 +196,7 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
     const [name, setName] = useState(account?.name || '');
     const [email, setEmail] = useState(account?.email || '');
     const [phone, setPhone] = useState(account?.phone || '');
+    const [serviceLabel, setServiceLabel] = useState(account?.serviceLabel || '');
     const [role, setRole] = useState(account?.role?.toLowerCase() || '');
     const [password, setPassword] = useState('');
     const [isPending, startTransition] = useTransition();
@@ -203,11 +206,11 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
       startTransition(async () => {
         try {
           if (account) {
-            await updateAccount(account.email, { name, email, phone, role, password: password || undefined });
+            await updateAccount(account.email, { name, email, phone, serviceLabel, role, password: password || undefined });
             showToast('Compte mis à jour ✓', 'success');
           } else {
             if (!password) { showToast('Mot de passe requis', 'error'); return; }
-            const result = await createAccount({ name, email, phone, password, role });
+            const result = await createAccount({ name, email, phone, serviceLabel, password, role });
             if (!result.success) { showToast(result.error || 'Erreur', 'error'); return; }
             showToast('Nouveau membre ajouté ✓', 'success');
           }
@@ -258,6 +261,12 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
               <label className="field-label">Numéro WhatsApp</label>
               <input className="field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="07 00 00 00 00" />
             </div>
+            {role === 'point_relais' && (
+              <div className="form-row">
+                <label className="field-label">Point relais attribue *</label>
+                <input className="field-input" value={serviceLabel} onChange={e => setServiceLabel(e.target.value)} required placeholder="Ex. Boutique Cocody Angre" />
+              </div>
+            )}
             <div className="form-row span-2">
               <label className="field-label">{account ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe temporaire *'}</label>
               <input className="field-input" type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••" minLength={account ? 0 : 4} required={!account} />

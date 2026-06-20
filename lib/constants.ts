@@ -40,11 +40,13 @@ export const DELIVERY_FEES: Record<string, number> = {
 };
 
 export const ROLE_LABELS: Record<string, string> = {
+  comptable: 'Comptable',
   developer: 'Développeur',
   commercial: 'Commercial',
   packing: 'Service emballage',
   collection: 'Service collecte',
   stock: 'Gestion de stock',
+  point_relais: 'Gérant point relais',
   admin: 'Administrateur',
   livreur: 'Livreur',
 };

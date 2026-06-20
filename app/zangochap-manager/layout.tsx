@@ -1,5 +1,7 @@
 import Sidebar from "@/components/Sidebar";
+import GlobalChatAccess from "@/components/GlobalChatAccess";
 import "./manager-layout.css";
+import "./chat/chat.css";
 import { getSession } from "@/modules/auth/actions";
 import { Metadata } from "next";
 
@@ -43,6 +45,7 @@ export default async function ManagerLayout({
           {children}
         </div>
       </main>
+      <GlobalChatAccess />
     </div>
   );
 }

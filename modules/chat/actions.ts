@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { getSession } from "@/modules/auth/actions";
 import { emitRiderAlert } from "@/lib/rider-alert-events";
 
-const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
+const STAFF_ROLES = ["DEVELOPER", "ADMIN", "COMPTABLE", "COMMERCIAL", "PACKING", "COLLECTION", "STOCK", "LIVREUR"] as const;
 
 export type ChatRoomKey = "GENERAL" | "ROLE" | "DIRECT";
 
@@ -112,7 +112,7 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: [...STAFF_ROLES] },
+        role: { in: [...STAFF_ROLES] as unknown as Role[] },
       },
       select: {
         id: true,
@@ -250,10 +250,13 @@ export async function sendChatMessage(data: {
     if (!data.recipientId) throw new Error("Choisissez un destinataire.");
     const recipient = await prisma.user.findUnique({
       where: { id: data.recipientId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, isPaused: true },
     });
     if (!recipient) throw new Error("Destinataire introuvable.");
     ensureStaffRole(recipient.role);
+    if (user.role === "LIVREUR" && recipient.role === "COMMERCIAL" && recipient.isPaused) {
+      throw new Error("Ce commercial est actuellement en pause.");
+    }
     recipientId = recipient.id;
   }
 
@@ -387,6 +390,128 @@ export async function recordCommercialContactReport(data: {
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/admin/delivery/settlement");
   return { success: true };
+}
+
+export async function acceptOrderAfterCommercialIntervention(data: {
+  orderRef?: string;
+  orderId?: string;
+  report?: string;
+}) {
+  const user = await requireChatSession();
+  if (user.role !== "COMMERCIAL" && user.role !== "ADMIN" && user.role !== "DEVELOPER") {
+    throw new Error("Action reservee au call center.");
+  }
+
+  const report = data.report?.trim().slice(0, 800)
+    || "Client disponible, livraison confirmee apres intervention commerciale.";
+  const orderWhere = data.orderId
+    ? { id: data.orderId }
+    : data.orderRef
+      ? { ref: data.orderRef }
+      : null;
+  if (!orderWhere) throw new Error("Commande introuvable dans l'alerte.");
+
+  const order = await prisma.order.findUnique({
+    where: orderWhere as Prisma.OrderWhereUniqueInput,
+    select: {
+      id: true,
+      ref: true,
+      history: true,
+      status: true,
+      commercialId: true,
+      deliverymanId: true,
+      deliverymanName: true,
+      commercialContactOutcome: true,
+    },
+  });
+  if (!order) throw new Error("Commande introuvable.");
+  if (user.role === "COMMERCIAL" && order.commercialId && order.commercialId !== user.id) {
+    throw new Error("Cette commande appartient a un autre commercial.");
+  }
+  if (!order.deliverymanId) throw new Error("Aucun livreur n'est assigne a cette commande.");
+  if (["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED"].includes(order.status)) {
+    throw new Error("Cette commande est deja cloturee.");
+  }
+
+  const acceptedOutcome = "Client disponible - livraison confirmee";
+  if (order.commercialContactOutcome === acceptedOutcome) {
+    return { success: true, alreadyAccepted: true };
+  }
+
+  const now = new Date();
+  const history: Prisma.InputJsonValue[] = Array.isArray(order.history)
+    ? [...(order.history as Prisma.InputJsonValue[])]
+    : [];
+  const nextHistory = [
+    ...history,
+    {
+      at: now.toISOString(),
+      action: `Colis accepte apres intervention commerciale: ${report}`,
+      by: user.email,
+      byName: user.name,
+    },
+  ] as Prisma.InputJsonValue;
+  const notificationBody = [
+    `[CONFIRMATION COMMERCIALE] Commande ${order.ref || order.id}`,
+    "Client disponible, livraison confirmee.",
+    `Intervention: ${user.name}`,
+    `Rapport: ${report}`,
+  ].join("\n");
+
+  const notification = await prisma.$transaction(async (tx) => {
+    const accepted = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        OR: [
+          { commercialContactOutcome: null },
+          { commercialContactOutcome: { not: acceptedOutcome } },
+        ],
+      },
+      data: {
+        isCommercialContacted: true,
+        commercialContactedAt: now,
+        commercialContactedByName: user.name,
+        commercialContactOutcome: acceptedOutcome,
+        commercialContactReport: report,
+        history: nextHistory,
+      },
+    });
+    if (accepted.count === 0) return null;
+
+    return tx.chatMessage.create({
+      data: {
+        body: notificationBody,
+        scope: "DIRECT",
+        recipientId: order.deliverymanId,
+        senderId: user.id,
+        senderName: user.name,
+        senderRole: user.role,
+        reads: { create: { userId: user.id } },
+      },
+    });
+  });
+
+  if (!notification) return { success: true, alreadyAccepted: true };
+
+  emitRiderAlert({
+    id: notification.id,
+    body: notification.body,
+    senderName: user.name,
+    senderPhone: null,
+    createdAt: notification.createdAt.toISOString(),
+    scope: "DIRECT",
+    targetRole: null,
+    recipientId: order.deliverymanId,
+  });
+
+  revalidatePath("/zangochap-manager/chat");
+  revalidatePath("/zangochap-manager/orders");
+  revalidatePath("/zangochap-rider");
+  return {
+    success: true,
+    alreadyAccepted: false,
+    deliverymanName: order.deliverymanName || "le livreur",
+  };
 }
 
 export async function sendOrderSupportAlert(data: {
