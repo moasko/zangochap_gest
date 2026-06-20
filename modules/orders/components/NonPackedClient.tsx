@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useMemo } from "react";
 import { TableCard, EmptyState, StatusBadge } from "@/components/UI";
 import { useToast } from "@/components/Toast";
-import { CalendarDays, ChevronDown, Eye, FileText, Filter, Package, RefreshCw, Search, X } from "lucide-react";
+import { ChevronDown, Eye, FileText, Filter, Package, RefreshCw, Search, X } from "lucide-react";
 import { useIsMobile } from "@/lib/hooks";
 import { STATUS_LABELS } from "@/lib/constants";
 import { AnimatePresence } from "framer-motion";
@@ -203,7 +203,8 @@ export default function NonPackedClient({
     setCommercialFilter("all");
   };
 
-  const OrderSection = ({ orders, title, meta, showCommercial = false, grouped = false }: { orders: any[], title: string, meta: string, showCommercial?: boolean, grouped?: boolean }) => {
+  const OrderSection = ({ orders, title, meta, showCommercial = false, grouped = false, reminderKind = "notPacked" }: { orders: any[], title: string, meta: string, showCommercial?: boolean, grouped?: boolean, reminderKind?: "notPacked" | "alternative" }) => {
+    const isAlternativeSection = reminderKind === "alternative";
     
     const renderGroupedOrders = () => {
       const byCommercial: Record<string, any[]> = {};
@@ -246,6 +247,7 @@ export default function NonPackedClient({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="cell-mono" style={{ color: 'var(--orange)', fontWeight: 700, fontSize: 13 }}>{o.ref}</span>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{o.customerName}</span>
+                    {isAlternativeSection && <span className="non-packed-alternative-badge">Alternative proposée</span>}
                   </div>
                   <div style={{ color: '#8E8E93', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     → {o.motif}
@@ -288,6 +290,7 @@ export default function NonPackedClient({
                 isMobile={true} 
                 idx={i} 
                 showCommercial={showCommercial}
+                reminderKind={reminderKind}
                 onSelect={setSelectedOrder} 
               />
             ))
@@ -322,6 +325,7 @@ export default function NonPackedClient({
                   order={order} 
                   isMobile={false} 
                   showCommercial={showCommercial}
+                  reminderKind={reminderKind}
                   onSelect={setSelectedOrder} 
                 />
               ))}
@@ -517,6 +521,7 @@ export default function NonPackedClient({
           meta={`${filteredNotPacked.length} rappel(s)`}
           showCommercial={isAdmin}
           grouped={isAdmin && commercialFilter === 'all'}
+          reminderKind="notPacked"
         />
 
         <OrderSection
@@ -525,6 +530,7 @@ export default function NonPackedClient({
           meta={`${filteredAlternatives.length} rappel(s)`}
           showCommercial={isAdmin}
           grouped={isAdmin && commercialFilter === 'all'}
+          reminderKind="alternative"
         />
       </div>
 

@@ -10,6 +10,7 @@ interface NonPackedItemProps {
   order: any;
   isMobile: boolean;
   showCommercial?: boolean;
+  reminderKind?: "notPacked" | "alternative";
   onSelect: (order: any) => void;
   idx?: number;
 }
@@ -18,9 +19,14 @@ export default function NonPackedItem({
   order: o,
   isMobile,
   showCommercial,
+  reminderKind,
   onSelect,
   idx = 0
 }: NonPackedItemProps) {
+  const isAlternative = reminderKind === "alternative" || o.status === "ALTERNATIVE" || o.motif === "Alternative proposée";
+  const alternativeBadge = isAlternative ? (
+    <span className="non-packed-alternative-badge">Alternative proposée</span>
+  ) : null;
   
   if (isMobile) {
     return (
@@ -46,7 +52,10 @@ export default function NonPackedItem({
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 13, color: 'var(--orange)' }}>{o.ref}</div>
             <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>{o.customerName}</div>
           </div>
-          <StatusBadge status={o.status} size="sm" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            {alternativeBadge}
+            <StatusBadge status={o.status} size="sm" />
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
@@ -118,6 +127,7 @@ export default function NonPackedItem({
           borderLeft: '3px solid var(--orange)',
           maxWidth: 240
         }}>
+          {alternativeBadge}
           {o.motif}
           {o.motifs?.length > 0 && (
             <div style={{ color: 'var(--orange)', marginTop: 6 }}>
