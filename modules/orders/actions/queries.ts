@@ -155,6 +155,24 @@ export async function getToProcessOrders(user?: SessionUser | null) {
 const ISSUE_KEYWORDS = ["propose", "alternative", "indispo", "manque", "pas en stock", "épuisé", "rupture", "incomplet"];
 const ALTERNATIVE_KEYWORDS = ["propose", "alternative"];
 
+function normalizeReminderText(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function isReminderIssueAction(action: unknown) {
+  const normalizedAction = normalizeReminderText(action);
+  return ISSUE_KEYWORDS.some((keyword) => normalizedAction.includes(normalizeReminderText(keyword)));
+}
+
+function isAlternativeReminderAction(action: unknown) {
+  const normalizedAction = normalizeReminderText(action);
+  return normalizedAction.includes("collection_status:alternative")
+    || ALTERNATIVE_KEYWORDS.some((keyword) => normalizedAction.includes(keyword));
+}
+
 function getReminderMotifs(history: OrderHistoryEntry[]) {
   return Array.from(new Set(
     history
@@ -204,25 +222,25 @@ export async function getNonPackedOrdersData(
 
   allOrders.forEach((order) => {
     const history = Array.isArray(order.history) ? (order.history as OrderHistoryEntry[]) : [];
-    const lastIssueEvent = [...history].reverse().find((entry) => {
-      const action = String(entry.action || "").toLowerCase();
-      return ISSUE_KEYWORDS.some((keyword) => action.includes(keyword));
-    });
+    const lastIssueEvent = [...history].reverse().find((entry) => isReminderIssueAction(entry.action));
 
-    if (!lastIssueEvent && order.status !== "PARTIAL" && order.status !== "UNAVAILABLE") return;
+    if (!lastIssueEvent && !["PARTIAL", "UNAVAILABLE", "ALTERNATIVE"].includes(order.status)) return;
 
-    const hasAlt = history.some((entry) => {
-      const action = String(entry.action || "").toLowerCase();
-      return ALTERNATIVE_KEYWORDS.some((keyword) => action.includes(keyword));
-    });
+    const isAlternative = order.status === "ALTERNATIVE"
+      || (order.status !== "UNAVAILABLE" && isAlternativeReminderAction(lastIssueEvent?.action));
 
     const orderWithMotif = {
       ...order,
-      motif: lastIssueEvent?.action || (order.status === "PARTIAL" ? "Emballage partiel" : "Problème de stock"),
+      motif: lastIssueEvent?.action
+        || (order.status === "ALTERNATIVE"
+          ? "Alternative proposée"
+          : order.status === "PARTIAL"
+            ? "Emballage partiel"
+            : "Problème de stock"),
       motifs: getReminderMotifs(history),
     };
 
-    if (hasAlt) {
+    if (isAlternative) {
       withAlternatives.push(orderWithMotif);
     } else {
       notPacked.push(orderWithMotif);

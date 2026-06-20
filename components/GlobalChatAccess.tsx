@@ -13,8 +13,8 @@ import styles from "./GlobalChatAccess.module.css";
 const CHAT_PATH = "/zangochap-manager/chat";
 const CHAT_SNAPSHOT_API = "/api/chat/snapshot";
 
-async function fetchChatSnapshot() {
-  const response = await fetch(CHAT_SNAPSHOT_API, { cache: "no-store" });
+async function fetchChatSnapshot(signal?: AbortSignal) {
+  const response = await fetch(CHAT_SNAPSHOT_API, { cache: "no-store", signal });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(payload?.error || "Chat indisponible.");
@@ -33,8 +33,8 @@ export default function GlobalChatAccess() {
   const [unread, setUnread] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ChatSnapshot | null>(null);
-  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
   const [snapshotError, setSnapshotError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -72,27 +72,37 @@ export default function GlobalChatAccess() {
   }, []);
 
   useEffect(() => {
-    if (!isOpen || snapshot || isLoadingSnapshot) return;
+    if (!isOpen || snapshot) return;
 
     let isMounted = true;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
     setSnapshotError("");
-    setIsLoadingSnapshot(true);
 
-    fetchChatSnapshot()
+    fetchChatSnapshot(controller.signal)
       .then((next) => {
         if (isMounted) setSnapshot(next);
       })
       .catch((error) => {
-        if (isMounted) setSnapshotError(error instanceof Error ? error.message : "Chat indisponible.");
+        if (!isMounted) return;
+        setSnapshotError(
+          error instanceof DOMException && error.name === "AbortError"
+            ? "Le chargement du chat a expire. Reessayez."
+            : error instanceof Error
+              ? error.message
+              : "Chat indisponible.",
+        );
       })
       .finally(() => {
-        if (isMounted) setIsLoadingSnapshot(false);
+        window.clearTimeout(timeoutId);
       });
 
     return () => {
       isMounted = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, [isOpen, snapshot, isLoadingSnapshot]);
+  }, [isOpen, snapshot, loadAttempt]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -178,7 +188,7 @@ export default function GlobalChatAccess() {
                     <button type="button" onClick={() => {
                       setSnapshot(null);
                       setSnapshotError("");
-                      setIsLoadingSnapshot(false);
+                      setLoadAttempt((attempt) => attempt + 1);
                     }}>
                       Reessayer
                     </button>
