@@ -5,13 +5,36 @@ import { StatusBadge } from "@/components/UI";
 import { Eye } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/constants";
+import { ReminderMotif } from "./ReminderMotif";
+
+type NonPackedItemLine = {
+  color?: string | null;
+  emoji?: string | null;
+  image?: string | null;
+  name?: string | null;
+  qty?: number | null;
+  size?: string | null;
+};
+
+type NonPackedOrder = {
+  commercialName?: string | null;
+  commune?: string | null;
+  createdAt: string | Date;
+  customerName?: string | null;
+  id: string;
+  items: NonPackedItemLine[];
+  motif?: string | null;
+  motifs?: string[] | null;
+  ref?: string | null;
+  status?: string | null;
+};
 
 interface NonPackedItemProps {
-  order: any;
+  order: NonPackedOrder;
   isMobile: boolean;
   showCommercial?: boolean;
   reminderKind?: "notPacked" | "alternative";
-  onSelect: (order: any) => void;
+  onSelect: (order: NonPackedOrder) => void;
   idx?: number;
 }
 
@@ -59,10 +82,10 @@ export default function NonPackedItem({
         </div>
 
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-          {o.items.map((item: any, i: number) => (
+          {o.items.map((item, i) => (
             <div key={i} style={{ flexShrink: 0, width: 40, height: 40, background: '#F2F2F7', borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E5E5EA' }}>
               {item.image ? (
-                <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={item.image} alt={item.name || "Article"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <span style={{ fontSize: 18 }}>{item.emoji || '📦'}</span>
               )}
@@ -70,15 +93,7 @@ export default function NonPackedItem({
           ))}
         </div>
 
-        <div style={{ padding: '8px 12px', background: 'var(--orange-soft)', borderRadius: 8, fontSize: 12 }}>
-          <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--orange)', marginBottom: 2 }}>MOTIF / ÉTAT</div>
-          <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{o.motif}</div>
-          {o.motifs?.length > 0 && (
-            <div style={{ fontWeight: 700, color: 'var(--orange)', marginTop: 6 }}>
-              Motif: {o.motifs.join(' | ')}
-            </div>
-          )}
-        </div>
+        <ReminderMotif motif={o.motif} motifs={o.motifs} />
 
         {showCommercial && (
           <div style={{ fontSize: 11, fontWeight: 700, color: '#8E8E93' }}>
@@ -102,10 +117,10 @@ export default function NonPackedItem({
       </td>
       <td>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {o.items.map((item: any, i: number) => (
+          {o.items.map((item, i) => (
             <div key={i} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
               {item.image ? (
-                <img src={item.image} style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover' }} />
+                <img src={item.image} alt={item.name || "Article"} style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover' }} />
               ) : (
                 <span style={{ fontSize: 14 }}>{item.emoji || '📦'}</span>
               )}
@@ -116,24 +131,9 @@ export default function NonPackedItem({
         </div>
       </td>
       <td>
-        <div style={{ 
-          fontSize: 11, 
-          color: 'var(--ink)', 
-          lineHeight: 1.4, 
-          fontWeight: 600, 
-          background: 'var(--orange-soft)', 
-          padding: '6px 10px', 
-          borderRadius: 8,
-          borderLeft: '3px solid var(--orange)',
-          maxWidth: 240
-        }}>
+        <div style={{ maxWidth: 280 }}>
           {alternativeBadge}
-          {o.motif}
-          {o.motifs?.length > 0 && (
-            <div style={{ color: 'var(--orange)', marginTop: 6 }}>
-              Motif: {o.motifs.join(' | ')}
-            </div>
-          )}
+          <ReminderMotif motif={o.motif} motifs={o.motifs} compact />
         </div>
       </td>
       {showCommercial && <td>
