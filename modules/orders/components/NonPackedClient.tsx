@@ -11,6 +11,7 @@ import { updateOrderStatus } from "@/modules/orders/actions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import NonPackedModal from "./_components/NonPackedModal";
 import NonPackedItem from "./_components/NonPackedItem";
+import { ReminderMotif } from "./_components/ReminderMotif";
 import "./non-packed-client.css";
 
 type NonPackedPeriod = "today" | "yesterday" | "all";
@@ -250,14 +251,9 @@ export default function NonPackedClient({
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{o.customerName}</span>
                     {isAlternativeSection && <span className="non-packed-alternative-badge">Alternative proposée</span>}
                   </div>
-                  <div style={{ color: '#8E8E93', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    → {o.motif}
+                  <div style={{ marginTop: 6 }}>
+                    <ReminderMotif motif={o.motif} motifs={o.motifs} compact />
                   </div>
-                  {o.motifs?.length > 0 && (
-                    <div style={{ color: 'var(--orange)', fontSize: 11, fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      Motif: {o.motifs.join(' | ')}
-                    </div>
-                  )}
                 </div>
                 <StatusBadge status={o.status} size="sm" />
                 <button className="action-btn" style={{ background: 'white' }}>
