@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 import { getSession } from "@/modules/auth/actions";
 
 type OrdersQueryParams = {
@@ -107,7 +107,7 @@ export async function getOrdersListData(params: OrdersQueryParams, user: Session
 
 export async function getOrdersStaffData() {
   const session = await getSession();
-  const where: any = {};
+  const where: Prisma.UserWhereInput = {};
   if (!session || session.role !== "developer") {
     where.role = { not: "DEVELOPER" };
   }
@@ -124,7 +124,7 @@ export async function getOrdersStaffData() {
 }
 
 export async function getToProcessOrders(user?: SessionUser | null) {
-  const where: any = {
+  const where: Prisma.OrderWhereInput = {
     ...WEB_TO_PROCESS_WHERE,
   };
   if (user && user.role?.toLowerCase() === "commercial") {
@@ -152,7 +152,25 @@ export async function getToProcessOrders(user?: SessionUser | null) {
   });
 }
 
-const ISSUE_KEYWORDS = ["propose", "alternative", "indispo", "manque", "pas en stock", "épuisé", "rupture", "incomplet"];
+const ACTIVE_REMINDER_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.CONFIRMED,
+  OrderStatus.PREPARING,
+  OrderStatus.PARTIAL,
+  OrderStatus.UNAVAILABLE,
+  OrderStatus.ALTERNATIVE,
+  OrderStatus.REPROGRAMMED,
+  OrderStatus.REPRO_DISPO,
+];
+
+const DIRECT_REMINDER_STATUSES: OrderStatus[] = [
+  OrderStatus.PARTIAL,
+  OrderStatus.UNAVAILABLE,
+  OrderStatus.ALTERNATIVE,
+  OrderStatus.REPRO_DISPO,
+];
+
+const ISSUE_KEYWORDS = ["propose", "alternative", "indispo", "manque", "pas en stock", "épuisé", "rupture", "incomplet", "partiel"];
 const ALTERNATIVE_KEYWORDS = ["propose", "alternative"];
 
 function normalizeReminderText(value: unknown) {
@@ -183,6 +201,21 @@ function getReminderMotifs(history: OrderHistoryEntry[]) {
   ));
 }
 
+function isDateInPeriod(date: Date, period: NonPackedOrdersPeriod, today: Date, yesterday: Date, tomorrow: Date) {
+  if (period === "all") return true;
+  if (period === "today") return date >= today && date < tomorrow;
+  return date >= yesterday && date < today;
+}
+
+function getReminderDate(order: { createdAt: Date; updatedAt?: Date | null }, lastIssueEvent?: OrderHistoryEntry) {
+  const issueDate = lastIssueEvent && "at" in lastIssueEvent
+    ? new Date(String((lastIssueEvent as OrderHistoryEntry & { at?: unknown }).at || ""))
+    : null;
+  if (issueDate && !Number.isNaN(issueDate.getTime())) return issueDate;
+  if (order.updatedAt instanceof Date && !Number.isNaN(order.updatedAt.getTime())) return order.updatedAt;
+  return order.createdAt;
+}
+
 export async function getNonPackedOrdersData(
   user: SessionUser | null | undefined,
   period: NonPackedOrdersPeriod = "yesterday",
@@ -198,14 +231,8 @@ export async function getNonPackedOrdersData(
 
   const where: Record<string, unknown> = {
     deletedAt: null,
-    status: { in: ["CONFIRMED", "PENDING", "PARTIAL", "UNAVAILABLE", "ALTERNATIVE"] },
+    status: { in: ACTIVE_REMINDER_STATUSES },
   };
-
-  if (period === "today") {
-    where.createdAt = { gte: today, lt: tomorrow };
-  } else if (period === "yesterday") {
-    where.createdAt = { gte: yesterday, lt: today };
-  }
 
   if (user?.role?.toLowerCase() === "commercial") {
     where.commercialId = user.id;
@@ -224,7 +251,10 @@ export async function getNonPackedOrdersData(
     const history = Array.isArray(order.history) ? (order.history as OrderHistoryEntry[]) : [];
     const lastIssueEvent = [...history].reverse().find((entry) => isReminderIssueAction(entry.action));
 
-    if (!lastIssueEvent && !["PARTIAL", "UNAVAILABLE", "ALTERNATIVE"].includes(order.status)) return;
+    if (!lastIssueEvent && !DIRECT_REMINDER_STATUSES.includes(order.status)) return;
+
+    const reminderDate = getReminderDate(order, lastIssueEvent);
+    if (!isDateInPeriod(reminderDate, period, today, yesterday, tomorrow)) return;
 
     const isAlternative = order.status === "ALTERNATIVE"
       || (order.status !== "UNAVAILABLE" && isAlternativeReminderAction(lastIssueEvent?.action));
@@ -236,7 +266,9 @@ export async function getNonPackedOrdersData(
           ? "Alternative proposée"
           : order.status === "PARTIAL"
             ? "Emballage partiel"
-            : "Problème de stock"),
+            : order.status === "REPRO_DISPO"
+              ? "Reprogrammation disponible"
+              : "Problème de stock"),
       motifs: getReminderMotifs(history),
     };
 
@@ -294,7 +326,7 @@ export async function getRoundRobinState() {
       lastAssignedId: data?.lastAssignedId || null,
       activeCommercialIds: data?.activeCommercialIds || []
     };
-  } catch (e) {
+  } catch {
     return { lastAssignedId: null, activeCommercialIds: [] };
   }
 }
