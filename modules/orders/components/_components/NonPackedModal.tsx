@@ -5,6 +5,7 @@ import Modal from "@/components/Modal";
 import { DetailCard, ItemLine } from "@/components/UI";
 import { MessageCircle, Check } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/constants";
+import { ReminderMotif } from "./ReminderMotif";
 
 type LogisticsHistoryEntry = {
   at?: string;
@@ -320,22 +321,8 @@ export default function NonPackedModal({
           )}
           
           {order.motif && (
-            <div style={{ marginTop: 14, padding: 12, background: 'var(--orange-soft)', borderRadius: 8, borderLeft: '4px solid var(--orange)' }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--orange)', marginBottom: 4 }}>MOTIF SIGNALEMENT</div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{formatHistoryAction(order.motif)}</div>
-              {orderMotifs.length > 0 && (
-                <div className="non-packed-motif-list">
-                  {orderMotifs.map((motif, index) => {
-                    const readableMotif = formatHistoryAction(motif);
-                    return (
-                      <div key={`${motif}-${index}`} className="non-packed-motif-line">
-                        <span>Motif</span>
-                        <strong>{readableMotif}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div style={{ marginTop: 14 }}>
+              <ReminderMotif motif={order.motif} motifs={orderMotifs} />
             </div>
           )}
         </div>
