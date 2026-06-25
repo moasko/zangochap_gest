@@ -29,7 +29,6 @@ import { formatDay, formatPrice } from "@/lib/constants";
 import {
   createAccountingCategory,
   createAccountingOperation,
-  createAccountingReport,
   deleteAccountingCategory,
   deleteAccountingOperation,
   updateAccountingCategory,
@@ -78,7 +77,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const [activeModal, setActiveModal] = useState<"operation" | "category" | "report" | "categoryPlan" | null>(null);
+  const [activeModal, setActiveModal] = useState<"operation" | "category" | "categoryPlan" | null>(null);
   const [editingOperation, setEditingOperation] = useState<any>(null);
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [operationDraftType, setOperationDraftType] = useState<OperationType>("INCOME");
@@ -158,9 +157,9 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[#101820] hover:bg-[#F8FAFC]" onClick={() => openOperationModal("EXPENSE")}>
               <ArrowDownCircle size={15} /> Sortie
             </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15" onClick={() => setActiveModal("report")}>
+            <Link href="/zangochap-manager/accounting/bilan" className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15">
               <FileText size={15} /> Bilan
-            </button>
+            </Link>
             <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15" onClick={() => setActiveModal("categoryPlan")}>
               <Tag size={15} /> Categories
             </button>
@@ -439,12 +438,6 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           }}
         />
       )}
-      {activeModal === "report" && (
-        <ReportModal
-          workspace={workspace}
-          onClose={() => setActiveModal(null)}
-        />
-      )}
       {activeModal === "categoryPlan" && (
         <CategoryPlanModal
           incomeCategories={incomeCategories}
@@ -690,112 +683,6 @@ function CategoryModal({ category, onClose }: any) {
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
           <button type="submit" className="btn-orange" disabled={isPending}>Enregistrer</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function ReportModal({ workspace, onClose }: any) {
-  const router = useRouter();
-  const { showToast } = useToast();
-  const [isPending, startTransition] = useTransition();
-  const [name, setName] = useState("Bilan journalier");
-  const [dateFrom, setDateFrom] = useState(dateInputValue(workspace.session.date));
-  const [dateTo, setDateTo] = useState(dateInputValue(workspace.session.date));
-  const [categoryId, setCategoryId] = useState("");
-  const [riderId, setRiderId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [sessionId, setSessionId] = useState("");
-  const [operationScope, setOperationScope] = useState("BOTH");
-
-  const operationTypes = useMemo(() => {
-    if (operationScope === "INCOME") return ["INCOME"];
-    if (operationScope === "EXPENSE") return ["EXPENSE"];
-    return ["INCOME", "EXPENSE", "CORRECTION"];
-  }, [operationScope]);
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    startTransition(async () => {
-      try {
-        await createAccountingReport({
-          name,
-          dateFrom,
-          dateTo,
-          categoryIds: categoryId ? [categoryId] : [],
-          riderIds: riderId ? [riderId] : [],
-          customerIds: customerId ? [customerId] : [],
-          sessionIds: sessionId ? [sessionId] : [],
-          operationTypes: operationTypes as OperationType[],
-        });
-        showToast("Bilan enregistre", "success");
-        router.refresh();
-        onClose();
-      } catch (error: any) {
-        showToast(error.message || "Erreur bilan", "error");
-      }
-    });
-  };
-
-  return (
-    <Modal isOpen onClose={onClose} title="Creer un bilan personnalise">
-      <form onSubmit={submit} className="grid gap-3">
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Nom du bilan</span>
-          <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} required />
-        </label>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1">
-            <span className="text-[11px] font-black uppercase text-[#806A58]">Debut</span>
-            <input className="field-input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} required />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-[11px] font-black uppercase text-[#806A58]">Fin</span>
-            <input className="field-input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} required />
-          </label>
-        </div>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Type d&apos;operations</span>
-          <select className="field-input" value={operationScope} onChange={(event) => setOperationScope(event.target.value)}>
-            <option value="BOTH">Entrees et sorties</option>
-            <option value="INCOME">Entrees seulement</option>
-            <option value="EXPENSE">Sorties seulement</option>
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Categorie</span>
-          <select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-            <option value="">Toutes categories</option>
-            {workspace.categories.map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Livreur</span>
-          <select className="field-input" value={riderId} onChange={(event) => setRiderId(event.target.value)}>
-            <option value="">Tous livreurs</option>
-            {workspace.riders.map((rider: any) => <option key={rider.id} value={rider.id}>{rider.name}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Client</span>
-          <select className="field-input" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-            <option value="">Tous clients</option>
-            {workspace.customers.map((customer: any) => <option key={customer.id} value={customer.id}>{customer.name} - {customer.phone}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Session</span>
-          <select className="field-input" value={sessionId} onChange={(event) => setSessionId(event.target.value)}>
-            <option value="">Toutes sessions</option>
-            {workspace.sessions.map((session: any) => <option key={session.id} value={session.id}>{dateInputValue(session.date)}</option>)}
-          </select>
-        </label>
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
-          <button type="submit" className="btn-orange" disabled={isPending}>
-            <Save size={14} /> {isPending ? "Creation..." : "Enregistrer le bilan"}
-          </button>
         </div>
       </form>
     </Modal>

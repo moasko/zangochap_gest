@@ -890,3 +890,106 @@ export async function createAccountingReport(data: {
   revalidatePath(ACCOUNTING_PATH);
   return { success: true, report };
 }
+
+// Bilan sur une periode : totaux, repartition par categorie et par jour, plus la
+// liste des ecritures. Filtre toujours par DATE DE SESSION (jour comptable reel).
+export async function getAccountingBilan(filters: {
+  dateFrom: string;
+  dateTo: string;
+  scope?: "BOTH" | "INCOME" | "EXPENSE";
+  categoryIds?: string[];
+  riderIds?: string[];
+  source?: string;
+}) {
+  await requireAccountingUser();
+  const dateFrom = startOfLocalDay(filters.dateFrom);
+  const dateTo = endOfLocalDay(filters.dateTo);
+  if (dateFrom > dateTo) throw new Error("La date de debut doit preceder la date de fin.");
+
+  const operationTypes = filters.scope === "INCOME"
+    ? ["INCOME"]
+    : filters.scope === "EXPENSE"
+      ? ["EXPENSE"]
+      : ["INCOME", "EXPENSE", "CORRECTION"];
+
+  const categoryIds = Array.from(new Set(filters.categoryIds || []));
+  const riderIds = Array.from(new Set(filters.riderIds || []));
+
+  const where: any = {
+    session: { is: { date: { gte: dateFrom, lte: dateTo } } },
+    type: { in: operationTypes },
+  };
+  if (categoryIds.length) where.categoryId = { in: categoryIds };
+  if (riderIds.length) where.riderId = { in: riderIds };
+  if (filters.source && filters.source !== "ALL") where.source = filters.source;
+
+  const operations = await db.accountingOperation.findMany({
+    where,
+    include: { category: true, session: { select: { date: true, status: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 2000,
+  });
+
+  const totals = summarizeOperations(operations);
+
+  const isExpense = (op: any) => op.type === "EXPENSE" || (op.type === "CORRECTION" && Number(op.amount) < 0);
+
+  const categoryMap = new Map<string, any>();
+  const dayMap = new Map<string, any>();
+  operations.forEach((op: any) => {
+    const amount = Math.abs(Number(op.amount || 0));
+    const expense = isExpense(op);
+
+    const catKey = op.categoryId || "none";
+    const cat = categoryMap.get(catKey) || {
+      categoryId: catKey,
+      name: op.category?.name || "Sans categorie",
+      type: op.category?.type || op.type,
+      income: 0,
+      expense: 0,
+      count: 0,
+    };
+    if (expense) cat.expense += amount; else cat.income += amount;
+    cat.count += 1;
+    categoryMap.set(catKey, cat);
+
+    const dayKey = new Date(op.session.date).toISOString().slice(0, 10);
+    const day = dayMap.get(dayKey) || { date: dayKey, income: 0, expense: 0, count: 0 };
+    if (expense) day.expense += amount; else day.income += amount;
+    day.count += 1;
+    dayMap.set(dayKey, day);
+  });
+
+  const byCategory = Array.from(categoryMap.values())
+    .sort((a: any, b: any) => (b.income + b.expense) - (a.income + a.expense));
+  const byDay = Array.from(dayMap.values())
+    .sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+  const [categories, riders] = await Promise.all([
+    db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    db.user.findMany({ where: { role: "LIVREUR" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+
+  const rows = operations.slice(0, 300).map((op: any) => ({
+    id: op.id,
+    date: op.session.date,
+    type: op.type,
+    source: op.source,
+    amount: op.amount,
+    description: op.description,
+    categoryName: op.category?.name || null,
+    riderName: op.riderName || null,
+  }));
+
+  return JSON.parse(JSON.stringify({
+    range: { from: dateInputValue(dateFrom), to: dateInputValue(dateTo) },
+    scope: filters.scope || "BOTH",
+    totals,
+    byCategory,
+    byDay,
+    operations: rows,
+    operationsCount: operations.length,
+    categories,
+    riders,
+  }));
+}
