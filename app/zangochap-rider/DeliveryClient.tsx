@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useCallback, useEffect, useRef } from "react";
-import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, ChevronRight, MapPin, Package, Search, SlidersHorizontal, WifiOff, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CalendarDays, CheckCircle2, ChevronRight, MapPin, MessageCircle, Package, Search, SlidersHorizontal, WifiOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/components/Toast";
@@ -23,6 +23,7 @@ import { calculateOrderCollectionTotal, calculatePartialSummary } from "./utils"
 import { updateOrderStatus, markPartialDelivery } from "@/modules/orders/actions";
 import { logoutAction } from "@/modules/auth/actions";
 import { sendOrderSupportAlert } from "@/modules/chat/actions";
+import { openTeamChat } from "@/components/GlobalChatAccess";
 
 type AppTab = "missions" | "history" | "wallet" | "profile";
 type MissionFilter = "pending" | "current";
@@ -472,13 +473,21 @@ export default function DeliveryClient({
                 </div>
               </div>
             </div>
-            {activeTab === "missions" && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              {activeTab === "missions" && (
                 <div className="px-2 py-1 bg-white/10 rounded-sm flex items-center gap-1.5 border border-white/10">
                   <span className="text-[11px] font-black text-white">{new Intl.NumberFormat("fr-FR").format(stats.cash)} F</span>
                 </div>
-              </div>
-            )}
+              )}
+              <button
+                onClick={openTeamChat}
+                aria-label="Ouvrir le chat equipe"
+                title="Chat equipe"
+                className="w-9 h-9 rounded-sm bg-white/10 border border-white/10 flex items-center justify-center text-white/80 active:scale-90 transition-transform"
+              >
+                <MessageCircle size={17} />
+              </button>
+            </div>
           </div>
           {activeTab === "missions" && (
             <div className="space-y-3">

@@ -7,11 +7,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ChatClient from "@/app/zangochap-manager/chat/ChatClient";
 import type { ChatSnapshot } from "@/modules/chat/actions";
-import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 import styles from "./GlobalChatAccess.module.css";
 
 const CHAT_PATH = "/zangochap-manager/chat";
 const CHAT_SNAPSHOT_API = "/api/chat/snapshot";
+
+/** Dispatch this event anywhere to open the team chat modal. */
+export const OPEN_CHAT_EVENT = "zango:open-chat";
+
+export function openTeamChat() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(OPEN_CHAT_EVENT));
+  }
+}
 
 async function fetchChatSnapshot(signal?: AbortSignal) {
   const response = await fetch(CHAT_SNAPSHOT_API, { cache: "no-store", signal });
@@ -30,45 +38,28 @@ function isEditableTarget(target: EventTarget | null) {
 
 export default function GlobalChatAccess() {
   const pathname = usePathname();
-  const [unread, setUnread] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ChatSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
 
+  // The chat is now opened from a discreet trigger placed in each workspace header.
+  // We listen for a global event (and the Alt+C shortcut) instead of rendering a
+  // floating button over every page.
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const refresh = async () => {
-      try {
-        const response = await fetch("/api/sidebar-counts", { cache: "no-store" });
-        if (!response.ok) return;
-        const counts = (await response.json()) as Partial<SidebarCounts>;
-        if (isMounted) setUnread(Math.max(0, counts.chatUnread || 0));
-      } catch {
-        // The chat shortcut must never block the current workspace screen.
-      } finally {
-        if (isMounted) timeoutId = setTimeout(refresh, 10_000);
-      }
-    };
-
-    refresh();
-    return () => {
-      isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, []);
-
-  useEffect(() => {
+    const openModal = () => setIsOpen(true);
     const handleShortcut = (event: KeyboardEvent) => {
       if (!event.altKey || event.key.toLowerCase() !== "c" || isEditableTarget(event.target)) return;
       event.preventDefault();
       setIsOpen(true);
     };
 
+    window.addEventListener(OPEN_CHAT_EVENT, openModal);
     window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
+    return () => {
+      window.removeEventListener(OPEN_CHAT_EVENT, openModal);
+      window.removeEventListener("keydown", handleShortcut);
+    };
   }, []);
 
   useEffect(() => {
@@ -115,30 +106,8 @@ export default function GlobalChatAccess() {
 
   if (pathname === CHAT_PATH) return null;
 
-  const unreadLabel = unread > 99 ? "99+" : String(unread);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-    >
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className={`${styles.floatingChat} ${unread > 0 ? styles.pulse : ""}`}
-        aria-label={unread > 0 ? `Ouvrir le chat equipe, ${unreadLabel} message(s) non lu(s)` : "Ouvrir le chat equipe"}
-        title="Ouvrir le chat equipe en modal (Alt+C)"
-      >
-        <span className={styles.iconWrap}>
-          <MessageCircle size={18} aria-hidden="true" />
-        </span>
-        <span className={styles.label}>
-          <strong>Chat</strong>
-          <span>Alt+C</span>
-        </span>
-        {unread > 0 && <span className={styles.badge}>{unreadLabel}</span>}
-      </button>
+    <>
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -199,6 +168,6 @@ export default function GlobalChatAccess() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </>
   );
 }

@@ -11,6 +11,7 @@ import { hasSeenRiderAlert, markRiderAlertSeen, playRiderMessageSound, showBrows
 import { useToast } from "@/components/Toast";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
+import { openTeamChat } from "@/components/GlobalChatAccess";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
 import {
@@ -264,10 +265,16 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
           <img src="/logo.png" alt="Logo" width="100" height="30" className="h-auto block object-contain" />
           {mounted && isOffline && <WifiOff size={14} color="#FF3B30" className="ml-2" />}
         </div>
-        <button className="bg-transparent border-none p-2 relative" onClick={() => setShowNotifications(!showNotifications)}>
-          <Bell size={22} color={mounted && hasNewNotifications ? 'var(--orange)' : '#8E8E93'} />
-          {mounted && hasNewNotifications && <span className="absolute top-2 right-2 w-2 h-2 bg-[#FF3B30] rounded-full border-2 border-white" />}
-        </button>
+        <div className="flex items-center">
+          <button className="bg-transparent border-none p-2 relative" onClick={openTeamChat} aria-label="Ouvrir le chat equipe" title="Chat equipe (Alt+C)">
+            <MessageCircle size={22} color={mounted && counts.chatUnread > 0 ? 'var(--orange)' : '#8E8E93'} />
+            {mounted && counts.chatUnread > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF3B30] rounded-full border-2 border-white" />}
+          </button>
+          <button className="bg-transparent border-none p-2 relative" onClick={() => setShowNotifications(!showNotifications)}>
+            <Bell size={22} color={mounted && hasNewNotifications ? 'var(--orange)' : '#8E8E93'} />
+            {mounted && hasNewNotifications && <span className="absolute top-2 right-2 w-2 h-2 bg-[#FF3B30] rounded-full border-2 border-white" />}
+          </button>
+        </div>
       </div>
 
       {/* OVERLAY */}
@@ -308,6 +315,21 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
                 <WifiOff size={16} />
               </div>
             )}
+            <button
+              className={`
+                bg-white/5 border-none w-9 h-9 rounded-[10px] flex items-center justify-center relative cursor-pointer transition-all duration-200
+                hover:bg-white/10 hover:text-white
+                ${mounted && counts.chatUnread > 0 ? 'text-[#FF6B2C] bg-white/10' : 'text-white/40'}
+              `}
+              onClick={openTeamChat}
+              aria-label="Ouvrir le chat equipe"
+              title="Chat equipe (Alt+C)"
+            >
+              <MessageCircle size={20} />
+              {mounted && counts.chatUnread > 0 && (
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full border-2 border-[#0F1115]" />
+              )}
+            </button>
             <button
               className={`
                 bg-white/5 border-none text-white/40 w-9 h-9 rounded-[10px] flex items-center justify-center relative cursor-pointer transition-all duration-200
