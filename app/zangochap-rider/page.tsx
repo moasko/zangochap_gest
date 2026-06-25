@@ -28,8 +28,16 @@ export default async function DeliveryPage() {
       deletedAt: null,
       OR: [
         {
+          // Missions actives du jour uniquement : on borne par la date de
+          // livraison planifiee pour eviter d'afficher d'anciennes commandes
+          // PACKED/ON_DELIVERY jamais cloturees des jours precedents.
           deliverymanId: user.id,
           status: { in: [...readyMissionStatuses] },
+          OR: [
+            { deliveryDate: { gte: startOfDay, lte: endOfDay } },
+            // Repli : commande sans date de livraison mais touchee aujourd'hui.
+            { deliveryDate: null, updatedAt: { gte: startOfDay } },
+          ],
         },
         {
           deliverymanId: user.id,

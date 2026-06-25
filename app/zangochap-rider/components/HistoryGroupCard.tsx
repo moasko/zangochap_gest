@@ -14,7 +14,9 @@ interface HistoryGroupCardProps {
 
 export function HistoryGroupCard({ date, orders, onClick }: HistoryGroupCardProps) {
   const stats = {
-    total: orders.reduce((acc, o) => acc + calculateOrderCollectionTotal(o), 0),
+    total: orders
+      .filter((o) => ["DELIVERED", "PARTIALLY_DELIVERED"].includes(o.status))
+      .reduce((acc, o) => acc + calculateOrderCollectionTotal(o), 0),
     delivered: orders.filter(o => o.status === "DELIVERED").length,
     pending: orders.filter(o => !["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED", "REPRO_DISPO"].includes(o.status)).length,
     count: orders.length

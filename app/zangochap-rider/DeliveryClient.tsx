@@ -26,7 +26,6 @@ import { sendOrderSupportAlert } from "@/modules/chat/actions";
 import { openTeamChat } from "@/components/GlobalChatAccess";
 
 type AppTab = "missions" | "history" | "wallet" | "profile";
-type MissionFilter = "pending" | "current";
 type HistoryStatusFilter = "all" | "DELIVERED" | "CANCELLED" | "PARTIALLY_DELIVERED" | "RETURNED" | "REPRO_DISPO";
 type HistoryDateFilter = "today" | "week" | "month" | "all";
 type StatusReasonRequest = {
@@ -87,7 +86,19 @@ function formatCompactPrice(value: number) {
   return `${new Intl.NumberFormat("fr-FR").format(value)} F`;
 }
 
-function getRevenueDate(order: RiderOrder) {
+// Date a laquelle l'action de livraison a reellement eu lieu (et non la date
+// planifiee). On classe ainsi l'historique sur "ce que le livreur a fait, le
+// jour ou il l'a fait". Pour un echec / une reprogrammation, lastDeliveryAttemptAt
+// est pose au moment exact de l'action : on l'utilise pour eviter qu'une commande
+// reprogrammee (dont la deliveryDate est repoussee dans le futur) ne remonte en
+// tete de l'historique a une date ou rien ne s'est passe.
+function getHistoryEventDate(order: RiderOrder) {
+  if (
+    ["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(order.status)
+    && order.lastDeliveryAttemptAt
+  ) {
+    return order.lastDeliveryAttemptAt;
+  }
   return order.updatedAt || order.deliveryDate || order.createdAt;
 }
 
@@ -166,7 +177,6 @@ export default function DeliveryClient({
     return () => source.close();
   }, [router, showToast]);
 
-  const [missionFilter, setMissionFilter] = useState<MissionFilter>("pending");
   const [historyFilter, setHistoryFilter] = useState<HistoryStatusFilter>("all");
   const [historyDateFilter, setHistoryDateFilter] = useState<HistoryDateFilter>("week");
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<string | null>(null);
@@ -183,7 +193,7 @@ export default function DeliveryClient({
   const completedStatuses = useMemo(() => ["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED", "REPRO_DISPO"], []);
   const activeAssignedOrders = useMemo(() => localOrders.filter((o) => !completedStatuses.includes(o.status)), [localOrders, completedStatuses]);
   const completedTodayOrders = useMemo(
-    () => localOrders.filter((o) => completedStatuses.includes(o.status) && isSameDay(o.deliveryDate || o.updatedAt || o.createdAt)),
+    () => localOrders.filter((o) => completedStatuses.includes(o.status) && isSameDay(getHistoryEventDate(o))),
     [localOrders, completedStatuses],
   );
   const todayOrders = useMemo(() => {
@@ -192,14 +202,21 @@ export default function DeliveryClient({
     return Array.from(byId.values());
   }, [activeAssignedOrders, completedTodayOrders]);
   const pending = useMemo(() => activeAssignedOrders, [activeAssignedOrders]);
-  const inProgress = useMemo(() => activeAssignedOrders.filter((o) => o.status === "ON_DELIVERY"), [activeAssignedOrders]);
   const history = useMemo(() => localOrders.filter((o) => completedStatuses.includes(o.status)), [localOrders, completedStatuses]);
+  // Historique restreint a la periode choisie (today/week/month). Sert de base
+  // commune aux compteurs de statut et a la liste, pour qu'ils restent coherents.
+  const dateFilteredHistory = useMemo(() => {
+    if (historyDateFilter === "today") return history.filter((o) => isSameDay(getHistoryEventDate(o)));
+    if (historyDateFilter === "week") return history.filter((o) => isWithinDays(getHistoryEventDate(o), 7));
+    if (historyDateFilter === "month") return history.filter((o) => isWithinDays(getHistoryEventDate(o), 30));
+    return history;
+  }, [history, historyDateFilter]);
   const historyStatusCounts = useMemo(() => {
-    return history.reduce((counts: Record<string, number>, order) => {
+    return dateFilteredHistory.reduce((counts: Record<string, number>, order) => {
       counts[order.status] = (counts[order.status] || 0) + 1;
       return counts;
     }, {});
-  }, [history]);
+  }, [dateFilteredHistory]);
 
   const filterBySearch = useCallback((base: RiderOrder[]) => {
     if (!searchQuery.trim()) return base;
@@ -212,23 +229,13 @@ export default function DeliveryClient({
     ));
   }, [searchQuery]);
 
-  const displayedOrders = useMemo(() => {
-    const base = missionFilter === "pending" ? pending : inProgress;
-    return filterBySearch(base);
-  }, [missionFilter, pending, inProgress, filterBySearch]);
+  const displayedOrders = useMemo(() => filterBySearch(pending), [pending, filterBySearch]);
 
   const filteredHistory = useMemo(() => {
-    let base = history;
+    let base = dateFilteredHistory;
     if (historyFilter !== "all") base = base.filter((o) => o.status === historyFilter);
-    if (historyDateFilter === "today") {
-      base = base.filter((o) => isSameDay(o.deliveryDate || o.updatedAt || o.createdAt));
-    } else if (historyDateFilter === "week") {
-      base = base.filter((o) => isWithinDays(o.deliveryDate || o.updatedAt || o.createdAt, 7));
-    } else if (historyDateFilter === "month") {
-      base = base.filter((o) => isWithinDays(o.deliveryDate || o.updatedAt || o.createdAt, 30));
-    }
     return filterBySearch(base);
-  }, [history, historyFilter, historyDateFilter, filterBySearch]);
+  }, [dateFilteredHistory, historyFilter, filterBySearch]);
 
   const groupedHistory = useMemo(() => {
     const formatter = new Intl.DateTimeFormat("fr-FR", {
@@ -238,7 +245,7 @@ export default function DeliveryClient({
     });
 
     const groups = filteredHistory.reduce<Record<string, { label: string; orders: RiderOrder[]; timestamp: number }>>((acc, order) => {
-      const dateValue = order.deliveryDate || order.updatedAt || order.createdAt;
+      const dateValue = getHistoryEventDate(order);
       const date = new Date(dateValue);
       const key = date.toISOString().slice(0, 10);
       if (!acc[key]) {
@@ -280,7 +287,7 @@ export default function DeliveryClient({
 
   const paidStatuses = useMemo(() => ["DELIVERED", "PARTIALLY_DELIVERED"], []);
   const deliveredTodayOrders = useMemo(
-    () => history.filter((o) => paidStatuses.includes(o.status) && isSameDay(getRevenueDate(o))),
+    () => history.filter((o) => paidStatuses.includes(o.status) && isSameDay(getHistoryEventDate(o))),
     [history, paidStatuses],
   );
   const ordersToSettle = useMemo(() => localOrders.filter(o => paidStatuses.includes(o.status) && !o.settlementId), [localOrders, paidStatuses]);
@@ -294,7 +301,7 @@ export default function DeliveryClient({
     const groups = history
       .filter((order) => paidStatuses.includes(order.status))
       .reduce<Record<string, { date: Date; orders: RiderOrder[] }>>((acc, order) => {
-        const date = new Date(getRevenueDate(order));
+        const date = new Date(getHistoryEventDate(order));
         const key = date.toISOString().slice(0, 10);
         if (!acc[key]) acc[key] = { date, orders: [] };
         acc[key].orders.push(order);
@@ -326,10 +333,9 @@ export default function DeliveryClient({
     amountToSettle: ordersToSettle.reduce((acc, o) => acc + calculateOrderCollectionTotal(o), 0),
     todayCash: deliveredTodayOrders.reduce((acc, o) => acc + calculateOrderCollectionTotal(o), 0),
     count: pending.length,
-    inProgressCount: inProgress.length,
     deliveredToday: deliveredTodayOrders.length,
     partiallyDeliveredToday: deliveredTodayOrders.filter((o) => o.status === "PARTIALLY_DELIVERED").length,
-  }), [pending, inProgress, ordersToSettle, deliveredTodayOrders]);
+  }), [pending, ordersToSettle, deliveredTodayOrders]);
   const routeStats = useMemo(() => ({
     total: todayOrders.length,
     completed: todayOrders.filter((o) => ["DELIVERED", "PARTIALLY_DELIVERED"].includes(o.status)).length,
@@ -512,35 +518,6 @@ export default function DeliveryClient({
                   <RouteStat label="À suivre" value={routeStats.issues} tone="orange" />
                 </div>
               </div>
-              <div className="flex p-1 bg-[#F3F4F6] rounded-sm border border-[#E5E7EB]">
-                {[
-                  { id: "pending", label: "À traiter", count: stats.count },
-                  { id: "current", label: "En route", count: stats.inProgressCount },
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setMissionFilter(t.id as MissionFilter)}
-                    className={`flex-1 py-1.5 rounded text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
-                      missionFilter === t.id
-                        ? "bg-white text-[#111827] border border-[#E5E7EB]"
-                        : "text-[#6B7280] active:scale-95"
-                    }`}
-                  >
-                    {t.label}
-                    {t.count !== undefined && t.count > 0 && (
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${
-                          missionFilter === t.id
-                            ? "bg-[#111827] text-white"
-                            : "bg-[#E5E7EB] text-[#6B7280]"
-                        }`}
-                      >
-                        {t.count}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
               <div className="relative group mt-1">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] group-focus-within:text-[#111827] transition-colors" />
                 <input type="text" placeholder="Rechercher client, réf, lieu..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full h-11 bg-white border border-[#E5E7EB] focus:border-[#475569] focus:ring-1 focus:ring-[#CBD5E1] rounded-md pl-9 pr-4 text-[13px] outline-none transition-all placeholder:text-[#9CA3AF] text-[#111827]" />
@@ -563,7 +540,7 @@ export default function DeliveryClient({
                     <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-md bg-[#F3F4F6] text-[#475569]">
                       <Package size={22} />
                     </div>
-                    <p className="text-sm font-black text-[#111827]">Aucune mission dans cette section</p>
+                    <p className="text-sm font-black text-[#111827]">Aucune mission à traiter</p>
                     <p className="mx-auto mt-1 max-w-[260px] text-[12px] font-semibold leading-relaxed text-[#6B7280]">
                       Les livraisons assignées pour aujourd&apos;hui apparaissent ici.
                     </p>
@@ -648,7 +625,7 @@ export default function DeliveryClient({
                         <span className={`rounded-sm px-1.5 py-0.5 text-[9px] leading-none ${
                           historyFilter === option.value ? "bg-white/20 text-white" : "bg-[#E5E7EB] text-[#64748B]"
                         }`}>
-                          {option.value === "all" ? history.length : historyStatusCounts[option.value] || 0}
+                          {option.value === "all" ? dateFilteredHistory.length : historyStatusCounts[option.value] || 0}
                         </span>
                       </button>
                     ))}

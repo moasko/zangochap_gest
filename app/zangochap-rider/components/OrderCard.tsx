@@ -41,8 +41,8 @@ export function OrderCard({ order, onClick, index = 0 }: OrderCardProps) {
           {/* Top Row: Ref & Price */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="bg-[#F3F4F6] px-1.5 py-0.5 rounded-sm">
-                <span className="text-[11px] font-bold text-[#111827] tabular-nums">#{order.ref}</span>
+              <div className="bg-[#F3F4F6] px-2 py-0.5 rounded-sm">
+                <span className="text-[14px] font-extrabold text-[#111827] tabular-nums">#{order.ref}</span>
               </div>
               <div className="flex items-center gap-1 text-[#6B7280]">
                 <Clock size={12} />
@@ -61,18 +61,18 @@ export function OrderCard({ order, onClick, index = 0 }: OrderCardProps) {
             </div>
           </div>
 
-          {/* Middle Row: Customer & Location */}
+          {/* Middle Row: Location (priorité livreur) & Customer */}
           <div className="space-y-1">
-            <h3 className="text-[15px] font-bold text-[#111827] leading-tight">
-              {order.customerName}
-            </h3>
             <div className="flex items-center gap-1.5 text-[#334155]">
-              <MapPin size={12} className="text-[#334155] shrink-0" />
-              <span className="text-[12px] font-bold truncate">{order.commune || "Commune non renseignée"}</span>
+              <MapPin size={15} className="text-[#334155] shrink-0" />
+              <span className="text-[16px] font-extrabold truncate">{order.commune || "Commune non renseignée"}</span>
             </div>
-            <p className="pl-[18px] text-[11px] font-semibold leading-snug text-[#64748B] line-clamp-2">
+            <p className="pl-[21px] text-[14px] font-bold leading-snug text-[#475569] line-clamp-2">
               {order.customerLocation || "Lieu exact non renseigné"}
             </p>
+            <h3 className="text-[12px] font-medium text-[#6B7280] leading-tight">
+              {order.customerName}
+            </h3>
             {cardNote && (
               <div className="flex items-start gap-1.5 rounded-sm bg-[#F8FAFC] px-2 py-1.5 text-[#475569] border border-[#E2E8F0]">
                 <StickyNote size={12} className="shrink-0 mt-0.5" />

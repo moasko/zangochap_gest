@@ -62,7 +62,6 @@ export interface RiderStats {
   todayCash: number;
   amountToSettle: number;
   count: number;
-  inProgressCount: number;
   deliveredToday: number;
   partiallyDeliveredToday: number;
 }
