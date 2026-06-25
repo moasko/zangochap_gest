@@ -8,24 +8,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Banknote,
   Calendar,
-  ClipboardCheck,
-  Clock3,
+  ChevronRight,
   Download,
   Edit3,
   FileText,
-  Filter,
   Landmark,
   Plus,
   Printer,
-  ReceiptText,
   Save,
   Search,
   SlidersHorizontal,
   Tag,
   Trash2,
-  Wallet,
 } from "lucide-react";
 import Modal from "@/components/Modal";
 import { EmptyState, TableCard } from "@/components/UI";
@@ -94,11 +89,14 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const incomeCategories = workspace.categories.filter((category: any) => category.type === "INCOME");
   const expenseCategories = workspace.categories.filter((category: any) => category.type === "EXPENSE");
   const sessionDate = dateInputValue(workspace.session.date);
-  const deliveryOperationsCount = workspace.operations.filter((operation: any) => operation.source === "DELIVERY").length;
-  const manualOperationsCount = workspace.operations.length - deliveryOperationsCount;
+  const isClosed = workspace.session.status === "CLOSED";
   const hasActiveFilters = Boolean(searchTerm.trim() || typeFilter !== "ALL" || categoryFilter !== "ALL");
 
   const openOperationModal = (type: OperationType) => {
+    if (isClosed) {
+      showToast("Session cloturee : reouvrez-la depuis le detail pour ajouter une ecriture.", "error");
+      return;
+    }
     setOperationDraftType(type);
     setActiveModal("operation");
   };
@@ -136,20 +134,16 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-6 md:py-6">
       <section className="mb-5 overflow-hidden rounded-lg border border-[#D8CBBB] bg-[#101820] text-white shadow-sm">
-        <div className="flex flex-col gap-4 p-4 md:p-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between md:p-5">
           <div>
             <div className="mb-1 flex items-center gap-2 text-[11px] font-black uppercase text-[#FFB38A]">
-              <Landmark size={14} />
-              Comptabilite generale
+              <Landmark size={14} /> Comptabilite generale
             </div>
-            <h1 className="text-[24px] font-black md:text-[30px]">Journal de caisse</h1>
-            <p className="mt-1 max-w-2xl text-[13px] font-semibold text-white/65">
-              Encaissements, decaissements, regularisations et audit des sessions comptables.
-            </p>
+            <h1 className="text-[22px] font-black md:text-[26px]">Journal de caisse</h1>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <label className="flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 shadow-sm">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3">
               <Calendar size={15} className="text-white/70" />
               <input
                 type="date"
@@ -158,32 +152,46 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                 className="bg-transparent text-[13px] font-black text-white outline-none [color-scheme:dark]"
               />
             </label>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#FF6B2C] px-3 text-[12px] font-black text-white shadow-sm hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#FF6B2C] px-3 text-[12px] font-black text-white hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
               <ArrowUpCircle size={15} /> Entree
             </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[#101820] shadow-sm hover:bg-[#F8FAFC]" onClick={() => openOperationModal("EXPENSE")}>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[#101820] hover:bg-[#F8FAFC]" onClick={() => openOperationModal("EXPENSE")}>
               <ArrowDownCircle size={15} /> Sortie
             </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white shadow-sm hover:bg-white/15" onClick={() => setActiveModal("report")}>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15" onClick={() => setActiveModal("report")}>
               <FileText size={15} /> Bilan
+            </button>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15" onClick={() => setActiveModal("categoryPlan")}>
+              <Tag size={15} /> Categories
             </button>
           </div>
         </div>
-
-        <div className="grid border-t border-white/10 bg-white/[0.04] md:grid-cols-4">
-          <SessionSignal icon={<ClipboardCheck size={15} />} label="Session" value={sessionDate} />
-          <SessionSignal icon={<Banknote size={15} />} label="Livraisons sync" value={deliveryOperationsCount} />
-          <SessionSignal icon={<Edit3 size={15} />} label="Manuelles" value={manualOperationsCount} />
-          <SessionSignal icon={<Clock3 size={15} />} label="Audit" value={`${workspace.audits.length} trace(s)`} />
-        </div>
       </section>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-4">
-        <MetricCard icon={<Wallet size={18} />} label="Total entrees" value={formatPrice(workspace.totals.totalIncome)} tone="orange" />
-        <MetricCard icon={<ReceiptText size={18} />} label="Total sorties" value={formatPrice(workspace.totals.totalExpense)} tone="blue" />
-        <MetricCard icon={<Landmark size={18} />} label="Solde final" value={formatPrice(workspace.totals.balance)} tone="ink" />
-        <MetricCard icon={<Filter size={18} />} label="Operations" value={workspace.totals.count} tone="green" />
-      </div>
+      {isClosed && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-2.5 text-[12px] font-bold text-[#166534]">
+          <span>Session cloturee : les ecritures sont verrouillees.</span>
+          <Link href={`/zangochap-manager/accounting/sessions/${workspace.session.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#BBF7D0] bg-white px-3 py-1.5 font-black hover:bg-[#ECFDF5]">
+            Gerer la cloture
+          </Link>
+        </div>
+      )}
+
+      <section className="mb-5 rounded-lg border border-[#E8DED4] bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase text-[#806A58]">
+            <Landmark size={13} /> Flux de caisse du jour
+          </div>
+          <span className="text-[10px] font-bold text-[#806A58]">{workspace.totals.count} operation(s)</span>
+        </div>
+        <div className="grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <FlowTile label="Total entrees" value={formatPrice(workspace.totals.totalIncome)} chip={{ text: "credit", tone: "ok" }} />
+          <FlowArrow />
+          <FlowTile label="Total sorties" value={formatPrice(workspace.totals.totalExpense)} chip={{ text: "debit", tone: "dang" }} />
+          <FlowArrow />
+          <FlowTile label="Solde final" value={formatPrice(workspace.totals.balance)} accent sub="entrees moins sorties" />
+        </div>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
         <TableCard
@@ -330,49 +338,29 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
         </TableCard>
 
         <div className="flex flex-col gap-4">
-          <TableCard
-            title="Actions rapides"
-            meta="Operations disponibles"
-          >
-            <div className="grid gap-2 p-3">
-              <button className="flex h-10 items-center justify-between rounded-md bg-[#FF6B2C] px-3 text-left text-[12px] font-black text-white hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
-                <span className="inline-flex items-center gap-2"><ArrowUpCircle size={15} /> Ajouter une entree</span>
-                <Plus size={14} />
-              </button>
-              <button className="flex h-10 items-center justify-between rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 text-left text-[12px] font-black text-[#991B1B] hover:bg-[#FEE2E2]" onClick={() => openOperationModal("EXPENSE")}>
-                <span className="inline-flex items-center gap-2"><ArrowDownCircle size={15} /> Ajouter une sortie</span>
-                <Plus size={14} />
-              </button>
-              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("report")}>
-                <span className="inline-flex items-center gap-2"><FileText size={15} /> Creer un bilan</span>
-                <Plus size={14} />
-              </button>
-              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("category")}>
-                <span className="inline-flex items-center gap-2"><Tag size={15} /> Nouvelle categorie</span>
-                <Plus size={14} />
-              </button>
-              <button className="flex h-10 items-center justify-between rounded-md border border-[#E8DED4] bg-white px-3 text-left text-[12px] font-black text-[#1A1410] hover:bg-[#FCFAF7]" onClick={() => setActiveModal("categoryPlan")}>
-                <span className="inline-flex items-center gap-2"><SlidersHorizontal size={15} /> Plan de categories</span>
-                <Tag size={14} />
-              </button>
-            </div>
-          </TableCard>
-
-          <TableCard title="Sessions recentes" meta="30 derniers jours">
+          <TableCard title="Grand livre des sessions" meta={`${workspace.openSessionsCount || 0} ouverte(s)`}>
             <div className="divide-y divide-[#F1E8DF]">
-              {workspace.sessions.map((session: any) => (
-                <Link
-                  key={session.id}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#FCFAF7]"
-                  href={`/zangochap-manager/accounting/sessions/${session.id}`}
-                >
-                  <div>
-                    <div className="text-[13px] font-black text-[#1A1410]">{dateInputValue(session.date)}</div>
-                    <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s) · detail session</div>
-                  </div>
-                  <div className="text-right text-[12px] font-black text-[#D4541C]">{formatPrice(session.summary.balance)}</div>
-                </Link>
-              ))}
+              {workspace.sessions.map((session: any) => {
+                const open = session.status !== "CLOSED";
+                return (
+                  <Link
+                    key={session.id}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#FCFAF7] ${open ? "border-l-2 border-[#FF6B2C]" : "border-l-2 border-transparent"}`}
+                    href={`/zangochap-manager/accounting/sessions/${session.id}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-black text-[#1A1410]">{dateInputValue(session.date)}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${open ? "bg-[#FFF7ED] text-[#C2410C]" : "bg-[#F0FDF4] text-[#166534]"}`}>
+                          {open ? "Ouverte" : "Cloturee"}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s)</div>
+                    </div>
+                    <div className="text-right text-[12px] font-black text-[#D4541C]">{formatPrice(session.summary.balance)}</div>
+                  </Link>
+                );
+              })}
             </div>
           </TableCard>
         </div>
@@ -477,37 +465,30 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   );
 }
 
-function SessionSignal({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+function FlowTile({ label, value, sub, chip, accent }: {
+  label: string;
+  value: string;
+  sub?: string;
+  chip?: { text: string; tone: "ok" | "dang" | "info" };
+  accent?: boolean;
+}) {
+  const chipClasses: Record<string, string> = {
+    ok: "bg-[#F0FDF4] text-[#166534]",
+    dang: "bg-[#FEF2F2] text-[#991B1B]",
+    info: "bg-[#EFF6FF] text-[#1D4ED8]",
+  };
   return (
-    <div className="flex min-h-[70px] items-center gap-3 border-b border-white/10 px-4 py-3 md:border-b-0 md:border-r md:last:border-r-0">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/10 text-[#FFB38A]">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <div className="text-[10px] font-black uppercase text-white/45">{label}</div>
-        <div className="truncate text-[13px] font-black text-white">{value}</div>
-      </div>
+    <div className="rounded-md border border-[#F1E8DF] bg-[#FCFAF7] px-3 py-3">
+      <div className="text-[10px] font-black uppercase text-[#806A58]">{label}</div>
+      <div className={`mt-1 text-[19px] font-black ${accent ? "text-[#D4541C]" : "text-[#1A1410]"}`}>{value}</div>
+      {chip && <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[10px] font-black ${chipClasses[chip.tone]}`}>{chip.text}</span>}
+      {sub && <div className="mt-1 text-[10px] font-bold text-[#806A58]">{sub}</div>}
     </div>
   );
 }
 
-function MetricCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string | number; tone: "orange" | "ink" | "blue" | "green" }) {
-  const classes: Record<string, string> = {
-    orange: "bg-[#FF6B2C] text-white",
-    ink: "border-[#E8DED4] bg-white text-[#1A1410]",
-    blue: "border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]",
-    green: "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]",
-  };
-
-  return (
-    <div className={`flex min-h-[92px] items-center gap-3 rounded-lg border p-4 shadow-sm ${classes[tone]}`}>
-      <div className={`flex h-10 w-10 items-center justify-center rounded-md ${tone === "orange" ? "bg-white/20" : "bg-white"}`}>{icon}</div>
-      <div>
-        <div className={`text-[10px] font-black uppercase ${tone === "orange" ? "text-white/80" : "text-current/70"}`}>{label}</div>
-        <div className="text-[20px] font-black">{value}</div>
-      </div>
-    </div>
-  );
+function FlowArrow() {
+  return <div className="hidden items-center justify-center text-[#C9BBAA] md:flex" aria-hidden="true"><ChevronRight size={18} /></div>;
 }
 
 function CategoryList({ title, categories, onEdit, onDelete }: { title: string; categories: any[]; onEdit: (category: any) => void; onDelete: (category: any) => void }) {
@@ -634,9 +615,9 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
           </div>
           {operation?.source === "DELIVERY" && operation.originalAmount !== undefined && operation.originalAmount !== null && (
             <div className={`mt-1 text-[11px] font-bold ${Number(amount) === operation.originalAmount ? 'text-[#166534]' : 'text-[#991B1B]'}`}>
-              {Number(amount) === operation.originalAmount 
-                ? "OK - Le montant correspond au total theorique" 
-                : `Ecart : ${Number(amount) > operation.originalAmount ? '+' : ''}${formatPrice(Number(amount) - operation.originalAmount)} (Theorique: ${formatPrice(operation.originalAmount)})`
+              {Number(amount) === operation.originalAmount
+                ? "OK - Le montant correspond au total attendu"
+                : `Ecart : ${Number(amount) > operation.originalAmount ? '+' : ''}${formatPrice(Number(amount) - operation.originalAmount)} (Attendu: ${formatPrice(operation.originalAmount)})`
               }
             </div>
           )}

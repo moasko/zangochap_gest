@@ -129,6 +129,8 @@ async function ensureSessionForDate(tx: any, date: string | Date, actor: any) {
 }
 
 async function syncDeliveryOperations(session: any, actor: any) {
+  // Une session cloturee est verrouillee : on ne touche plus aux ecritures.
+  if (session.status === "CLOSED") return;
   const deliveryCategory = await getDeliveryIncomeCategory();
   const orders = await db.order.findMany({
     where: {
@@ -152,15 +154,19 @@ async function syncDeliveryOperations(session: any, actor: any) {
     },
   });
 
-  // Calculate totals for the day
+  // Totaux du jour : on distingue le theorique (attendu) de l'encaisse (reel).
+  // L'ecriture comptable porte l'encaisse en montant (amount) et le theorique en
+  // originalAmount, ce qui permet d'afficher l'ecart sans recalcul ailleurs.
   const validOrders = orders
     .map((order: any) => ({
       ...order,
-      computedAmount: Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0)),
+      theoreticalAmount: orderTheoreticalAmount(order),
+      collectedAmount: orderCollectedAmount(order),
     }))
-    .filter((order: any) => order.computedAmount > 0);
+    .filter((order: any) => order.theoreticalAmount > 0);
 
-  const totalAmount = validOrders.reduce((sum: number, order: any) => sum + order.computedAmount, 0);
+  const theoreticalTotal = validOrders.reduce((sum: number, order: any) => sum + order.theoreticalAmount, 0);
+  const collectedTotal = validOrders.reduce((sum: number, order: any) => sum + order.collectedAmount, 0);
   const orderCount = validOrders.length;
   const description = `${orderCount} livraison(s) du jour`;
 
@@ -178,11 +184,11 @@ async function syncDeliveryOperations(session: any, actor: any) {
 
   if (existingGrouped) {
     // Update existing grouped operation with latest totals
-    if (existingGrouped.amount !== totalAmount || existingGrouped.originalAmount !== totalAmount) {
-      const dataToUpdate: any = { originalAmount: totalAmount, description };
+    if (existingGrouped.amount !== collectedTotal || existingGrouped.originalAmount !== theoreticalTotal) {
+      const dataToUpdate: any = { originalAmount: theoreticalTotal, description };
       // If the user hasn't provided a reason (i.e. hasn't validated/edited it manually), keep amount in sync
       if (!existingGrouped.reason) {
-        dataToUpdate.amount = totalAmount;
+        dataToUpdate.amount = collectedTotal;
       }
       await db.accountingOperation.update({
         where: { id: existingGrouped.id },
@@ -195,8 +201,8 @@ async function syncDeliveryOperations(session: any, actor: any) {
       data: {
         type: "INCOME",
         source: "DELIVERY",
-        amount: totalAmount,
-        originalAmount: totalAmount,
+        amount: collectedTotal,
+        originalAmount: theoreticalTotal,
         description,
         sessionId: session.id,
         categoryId: deliveryCategory.id,
@@ -217,10 +223,18 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
   const session = await ensureSessionForDate(db, date, actor);
   await syncDeliveryOperations(session, actor);
 
-  const [sessions, categories, operations, audits, reports, riders, customers] = await Promise.all([
+  const [recentSessions, openSessionsRaw, categories, operations, audits, reports, riders, customers] = await Promise.all([
     db.accountingSession.findMany({
       orderBy: { date: "desc" },
       take: 30,
+      include: { operations: { select: { type: true, amount: true } } },
+    }),
+    // Toutes les sessions encore ouvertes (a cloturer), meme hors fenetre recente,
+    // pour qu'aucune session non cloturee oubliee n'echappe au journal.
+    db.accountingSession.findMany({
+      where: { status: { not: "CLOSED" } },
+      orderBy: { date: "desc" },
+      take: 120,
       include: { operations: { select: { type: true, amount: true } } },
     }),
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
@@ -249,9 +263,17 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
 
   const totals = summarizeOperations(operations);
 
+  // Fusionne sessions ouvertes (toutes) + sessions recentes, dedupliquees, triees
+  // par date decroissante. Les ouvertes hors des 30 derniers jours restent visibles.
+  const sessionsById = new Map<string, any>();
+  [...openSessionsRaw, ...recentSessions].forEach((item: any) => sessionsById.set(item.id, item));
+  const mergedSessions = Array.from(sessionsById.values())
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return JSON.parse(JSON.stringify({
     session,
-    sessions: sessions.map((item: any) => ({ ...item, summary: summarizeOperations(item.operations) })),
+    sessions: mergedSessions.map((item: any) => ({ ...item, summary: summarizeOperations(item.operations) })),
+    openSessionsCount: openSessionsRaw.length,
     categories,
     operations,
     audits,
@@ -287,8 +309,17 @@ function summarizeOperations(operations: Array<{ type: AccountingType; amount: n
   };
 }
 
-function expectedOrderAmount(order: any) {
-  return Math.max(0, Number(order.amountReceived ?? (Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0))));
+// Valeur theorique attendue d'une commande (total + frais - remise), avant prise
+// en compte de ce qui a reellement ete encaisse par le livreur.
+function orderTheoreticalAmount(order: any) {
+  return Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0));
+}
+
+// Montant reellement encaisse : amountReceived s'il est renseigne, sinon la valeur
+// theorique. C'est la SEULE base utilisee pour le solde de caisse, partout (journal,
+// detail session, reglement livreur) afin d'eviter les ecarts entre modules.
+function orderCollectedAmount(order: any) {
+  return Math.max(0, Number(order.amountReceived ?? orderTheoreticalAmount(order)));
 }
 
 async function getSessionRiderSummaries(session: any) {
@@ -322,17 +353,20 @@ async function getSessionRiderSummaries(session: any) {
   orders.forEach((order: any) => {
     const riderId = order.deliverymanId || "UNASSIGNED";
     const riderName = order.deliverymanName || "Livreur non renseigne";
-    const amount = expectedOrderAmount(order);
+    const theoreticalAmount = orderTheoreticalAmount(order);
+    const collectedAmount = orderCollectedAmount(order);
     const group = groups.get(riderId) || {
       riderId,
       riderName,
       ordersCount: 0,
-      expectedAmount: 0,
+      expectedAmount: 0,   // theorique attendu (total + frais - remise)
+      collectedAmount: 0,  // reellement encaisse (amountReceived)
       orders: [],
     };
     group.ordersCount += 1;
-    group.expectedAmount += amount;
-    group.orders.push({ ...order, expectedAmount: amount });
+    group.expectedAmount += theoreticalAmount;
+    group.collectedAmount += collectedAmount;
+    group.orders.push({ ...order, expectedAmount: theoreticalAmount, collectedAmount });
     groups.set(riderId, group);
   });
 
@@ -374,12 +408,18 @@ export async function getAccountingSessionDetail(sessionId: string) {
 
   const riders = riderSummaries.map((summary: any) => {
     const operation = operationByRider.get(summary.riderId) || null;
+    const validatedAmount = Number(operation?.amount || 0);
+    const expectedAmount = Number(summary.expectedAmount || 0);
+    const collectedAmount = Number(summary.collectedAmount || 0);
     return {
       ...summary,
       operation,
-      validatedAmount: operation?.amount || 0,
+      validatedAmount,
       isValidated: Boolean(operation),
-      variance: Number(operation?.amount || 0) - Number(summary.expectedAmount || 0),
+      // Ecart de collecte : ce que le livreur a encaisse vs le theorique attendu.
+      collectionVariance: collectedAmount - expectedAmount,
+      // Ecart de validation : montant valide en caisse vs encaisse declare.
+      variance: validatedAmount - collectedAmount,
     };
   });
   const totals = summarizeOperations(operations);
@@ -412,6 +452,7 @@ export async function validateRiderAccountingEntry(data: {
   await db.$transaction(async (tx: any) => {
     const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
     if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour valider une entree livreur.");
     const category = await getDeliveryIncomeCategory(tx);
     if (!category) throw new Error("Categorie livraison introuvable.");
     const riderSummaries = await getSessionRiderSummaries(session);
@@ -507,6 +548,51 @@ export async function validateRiderAccountingEntry(data: {
 
   revalidatePath(ACCOUNTING_PATH);
   revalidatePath(`${ACCOUNTING_PATH}/sessions/${data.sessionId}`);
+  return { success: true };
+}
+
+export async function closeAccountingSession(sessionId: string, reason?: string) {
+  const actor = await requireAccountingUser();
+  await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status === "CLOSED") throw new Error("Cette session est deja cloturee.");
+    await tx.accountingSession.update({ where: { id: sessionId }, data: { status: "CLOSED" } });
+    await audit(tx, {
+      action: "SESSION_CLOSED",
+      entityType: "AccountingSession",
+      entityId: sessionId,
+      sessionId,
+      reason: reason?.trim() || "Cloture de la session comptable",
+      actor,
+    });
+  });
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${sessionId}`);
+  return { success: true };
+}
+
+export async function reopenAccountingSession(sessionId: string, reason: string) {
+  // La reouverture est sensible (deverrouille des ecritures validees) : admin/dev only.
+  const actor = await ensureAuth(["admin", "developer"]);
+  const note = reason?.trim();
+  if (!note) throw new Error("Un motif est obligatoire pour reouvrir une session.");
+  await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status !== "CLOSED") throw new Error("Cette session n'est pas cloturee.");
+    await tx.accountingSession.update({ where: { id: sessionId }, data: { status: "OPEN" } });
+    await audit(tx, {
+      action: "SESSION_REOPENED",
+      entityType: "AccountingSession",
+      entityId: sessionId,
+      sessionId,
+      reason: note,
+      actor,
+    });
+  });
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${sessionId}`);
   return { success: true };
 }
 
@@ -609,6 +695,7 @@ export async function createAccountingOperation(data: {
   const operation = await db.$transaction(async (tx: any) => {
     const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
     if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour ajouter une ecriture.");
     const category = await tx.accountingCategory.findUnique({ where: { id: data.categoryId } });
     if (!category) throw new Error("Categorie introuvable.");
     if (type !== "CORRECTION" && category.type !== type) {
@@ -660,6 +747,8 @@ export async function updateAccountingOperation(id: string, data: {
   const sessionId = await db.$transaction(async (tx: any) => {
     const previous = await tx.accountingOperation.findUnique({ where: { id } });
     if (!previous) throw new Error("Operation introuvable.");
+    const session = await tx.accountingSession.findUnique({ where: { id: previous.sessionId } });
+    if (session?.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour regulariser cette ecriture.");
 
     const updated = await tx.accountingOperation.update({
       where: { id },
@@ -700,6 +789,8 @@ export async function deleteAccountingOperation(id: string, reason?: string) {
   await db.$transaction(async (tx: any) => {
     const operation = await tx.accountingOperation.findUnique({ where: { id } });
     if (!operation) throw new Error("Operation introuvable.");
+    const session = await tx.accountingSession.findUnique({ where: { id: operation.sessionId } });
+    if (session?.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour supprimer cette ecriture.");
     if (operation.source === "DELIVERY") {
       throw new Error("Une entree de livraison doit etre regularisee plutot que supprimee.");
     }
@@ -744,8 +835,11 @@ export async function createAccountingReport(data: {
   const riderIds = Array.from(new Set(data.riderIds || []));
   const sessionIds = Array.from(new Set(data.sessionIds || []));
 
+  // On filtre par la DATE DE SESSION (jour comptable) et non par createdAt : une
+  // ecriture de livraison est creee lors de la synchro (visite de la page), pas le
+  // jour de la livraison. Filtrer sur la session aligne le bilan sur le jour reel.
   const where: any = {
-    createdAt: { gte: dateFrom, lte: dateTo },
+    session: { is: { date: { gte: dateFrom, lte: dateTo } } },
     type: { in: operationTypes },
   };
   if (categoryIds.length) where.categoryId = { in: categoryIds };
