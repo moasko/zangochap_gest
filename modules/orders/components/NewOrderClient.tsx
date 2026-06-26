@@ -140,6 +140,15 @@ export default function NewOrderClient({ products, user, categories, relayPoints
     return Array.from(urls);
   }, [products]);
 
+  // Format yyyy-mm-dd en heure LOCALE (toISOString convertirait en UTC et pourrait
+  // decaler d'un jour selon le fuseau du navigateur).
+  const toDateInput = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const getDefaultDeliveryDate = () => {
     const now = new Date();
     const target = new Date(now);
@@ -150,8 +159,10 @@ export default function NewOrderClient({ products, user, categories, relayPoints
       target.setDate(target.getDate() + 1);
     }
 
-    return target.toISOString().split('T')[0];
+    return toDateInput(target);
   };
+
+  const todayInput = toDateInput(new Date());
 
   const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate());
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -1061,6 +1072,7 @@ Ne passez pas à côté de cette belle surprise !`;
                     type="date"
                     className="field-input"
                     value={deliveryDate}
+                    min={todayInput}
                     onChange={e => setDeliveryDate(e.target.value)}
                     style={{ border: '1.5px solid var(--orange-soft)', fontWeight: 700 }}
                   />

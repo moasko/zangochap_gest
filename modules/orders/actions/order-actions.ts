@@ -75,6 +75,27 @@ export async function createOrder(data: {
     throw new Error("Votre session n'est plus valide. Veuillez vous reconnecter avant de créer la commande.");
   }
 
+  // Date de livraison : parse en minuit LOCAL (et non UTC) pour rester coherent avec
+  // les comparaisons cote livreur et comptabilite. Obligatoire et non passee pour les
+  // commandes back-office (call center / admin) ; optionnelle pour le site public.
+  let parsedDeliveryDate: Date | null = null;
+  if (data.deliveryDate) {
+    parsedDeliveryDate = new Date(`${data.deliveryDate}T00:00:00`);
+    if (Number.isNaN(parsedDeliveryDate.getTime())) {
+      throw new Error("Date de livraison invalide.");
+    }
+  }
+  if (!isWebOrder) {
+    if (!parsedDeliveryDate) {
+      throw new Error("La date de livraison prévue est obligatoire.");
+    }
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    if (parsedDeliveryDate < todayStart) {
+      throw new Error("La date de livraison ne peut pas être dans le passé.");
+    }
+  }
+
   const isRelayDelivery = data.commune.trim().toLowerCase() === "boutique";
   let relayPointName: string | null = null;
 
@@ -276,7 +297,7 @@ export async function createOrder(data: {
             status,
             commercialId: isWebOrder ? (assignedCommercial?.id || null) : (session?.id || null),
             commercialName: isWebOrder ? (assignedCommercial?.name || "Site Web") : (session?.name || null),
-            deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
+            deliveryDate: parsedDeliveryDate,
             promoCode: data.promoCode,
             discount: Number(data.discount || 0),
             notes: data.notes,

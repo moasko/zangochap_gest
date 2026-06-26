@@ -170,6 +170,19 @@ const DIRECT_REMINDER_STATUSES: OrderStatus[] = [
   OrderStatus.REPRO_DISPO,
 ];
 
+// Une alternative proposee doit rester a rappeler (confirmation client) meme apres
+// emballage / mise en livraison, tant que la livraison n'est pas cloturee. Ces statuts
+// sont donc recuperes en plus, mais ne reapparaissent QUE s'ils portent une alternative.
+const ALTERNATIVE_CARRYOVER_STATUSES: OrderStatus[] = [
+  OrderStatus.PACKED,
+  OrderStatus.ON_DELIVERY,
+];
+
+const REMINDER_QUERY_STATUSES: OrderStatus[] = [
+  ...ACTIVE_REMINDER_STATUSES,
+  ...ALTERNATIVE_CARRYOVER_STATUSES,
+];
+
 const ISSUE_KEYWORDS = ["propose", "alternative", "indispo", "manque", "pas en stock", "épuisé", "rupture", "incomplet", "partiel"];
 const ALTERNATIVE_KEYWORDS = ["propose", "alternative"];
 
@@ -231,7 +244,7 @@ export async function getNonPackedOrdersData(
 
   const where: Record<string, unknown> = {
     deletedAt: null,
-    status: { in: ACTIVE_REMINDER_STATUSES },
+    status: { in: REMINDER_QUERY_STATUSES },
   };
 
   if (user?.role?.toLowerCase() === "commercial") {
@@ -251,17 +264,27 @@ export async function getNonPackedOrdersData(
     const history = Array.isArray(order.history) ? (order.history as OrderHistoryEntry[]) : [];
     const lastIssueEvent = [...history].reverse().find((entry) => isReminderIssueAction(entry.action));
 
+    // Une alternative est detectee si elle apparait n'importe ou dans l'historique :
+    // on propose souvent une alternative AVANT de marquer l'original indisponible,
+    // donc se fier uniquement au dernier evenement reclasserait a tort en "non emballe".
+    const lastAlternativeEvent = [...history].reverse().find((entry) => isAlternativeReminderAction(entry.action));
+    const isAlternative = order.status === "ALTERNATIVE" || Boolean(lastAlternativeEvent);
+
+    // Les commandes deja emballees / en livraison ne reviennent que si elles portent une
+    // alternative a confirmer ; sinon elles restent hors de la fiche de rappel.
+    if (ALTERNATIVE_CARRYOVER_STATUSES.includes(order.status) && !isAlternative) return;
+
     if (!lastIssueEvent && !DIRECT_REMINDER_STATUSES.includes(order.status)) return;
 
+    // Le filtre de periode ne s'applique qu'aux indisponibles. Une alternative reste a
+    // confirmer tant que la commande n'est pas livree, peu importe le jour ou elle a ete posee.
     const reminderDate = getReminderDate(order, lastIssueEvent);
-    if (!isDateInPeriod(reminderDate, period, today, yesterday, tomorrow)) return;
-
-    const isAlternative = order.status === "ALTERNATIVE"
-      || (order.status !== "UNAVAILABLE" && isAlternativeReminderAction(lastIssueEvent?.action));
+    if (!isAlternative && !isDateInPeriod(reminderDate, period, today, yesterday, tomorrow)) return;
 
     const orderWithMotif = {
       ...order,
-      motif: lastIssueEvent?.action
+      motif: (isAlternative ? lastAlternativeEvent?.action : undefined)
+        || lastIssueEvent?.action
         || (order.status === "ALTERNATIVE"
           ? "Alternative proposée"
           : order.status === "PARTIAL"

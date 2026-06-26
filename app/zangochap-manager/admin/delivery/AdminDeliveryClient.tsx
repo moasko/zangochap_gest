@@ -62,7 +62,8 @@ const REPRO_DISPO_REASONS = [
 ];
 
 const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO", "REPROGRAMMED"]);
-const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+const UNPACKED_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE"];
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
   return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
@@ -290,7 +291,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       const matchesStatus = filterStatus === "ALL" ||
         (filterStatus === "UNASSIGNED" && !o.deliverymanId) ||
         (filterStatus === "ASSIGNED" && o.deliverymanId) ||
-        (filterStatus === "UNPACKED" && ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING"].includes(o.status)) ||
+        (filterStatus === "UNPACKED" && UNPACKED_STATUSES.includes(o.status)) ||
         (o.status === filterStatus);
 
       const matchesDriver = filterDeliveryman === "ALL" || o.deliverymanId === filterDeliveryman;
@@ -495,7 +496,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       const matchesStatus = filterStatus === "ALL" ||
         (filterStatus === "UNASSIGNED" && !o.deliverymanId) ||
         (filterStatus === "ASSIGNED" && o.deliverymanId) ||
-        (filterStatus === "UNPACKED" && ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING"].includes(o.status)) ||
+        (filterStatus === "UNPACKED" && UNPACKED_STATUSES.includes(o.status)) ||
         (o.status === filterStatus);
 
       const matchesDriver = filterDeliveryman === "ALL" || o.deliverymanId === filterDeliveryman;

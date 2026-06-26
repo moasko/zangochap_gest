@@ -315,15 +315,9 @@ export async function getSettlementStats(from?: string, to?: string, commercialI
 
   if (commercialId) where.commercialId = commercialId;
 
-  if (from || to) {
-    where.deliveryDate = {};
-    if (from) where.deliveryDate.gte = new Date(from);
-    if (to) {
-      const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
-      where.deliveryDate.lte = toDate;
-    }
-  }
+  // Parsing en heure locale via le helper partage (coherent avec la comptabilite).
+  const deliveryRange = getDateRange(from, to);
+  if (deliveryRange) where.deliveryDate = deliveryRange;
 
   const orders = await prisma.order.findMany({
     where,

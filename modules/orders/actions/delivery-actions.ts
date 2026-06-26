@@ -7,7 +7,7 @@ import { getSession } from "@/modules/auth/actions";
 import { isRole } from "../helpers";
 import { decrementStockForOrder } from "./stock";
 
-const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
+const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
 const READY_FOR_DELIVERY_STATUSES = ["PACKED", "REPRO_DISPO"] as const;
 
 type DeliveryAssignmentOrder = {

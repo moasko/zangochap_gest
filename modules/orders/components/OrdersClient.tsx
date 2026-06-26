@@ -6974,7 +6974,7 @@ function OrderDetailModal({
                       </button>
                     )}
 
-                    {["CONFIRMED", "PACKED"].includes(order.status) && (
+                    {["CONFIRMED", "PREPARING", "PARTIAL", "UNAVAILABLE", "ALTERNATIVE", "PACKED"].includes(order.status) && (
                       <div
                         style={{
                           display: "flex",
