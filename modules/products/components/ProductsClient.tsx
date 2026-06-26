@@ -17,6 +17,7 @@ import VariantsEditorModal from "../../logistics/packing/components/VariantsEdit
 import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
 
 const PRODUCTS_PER_PAGE = 30;
+const PRODUCTS_PAGE_STORAGE_KEY = 'zango-products-last-page';
 
 interface ProductsClientProps {
   initialProducts: any[];
@@ -73,6 +74,34 @@ export default function ProductsClient({ initialProducts, user, totalCount, oosC
     params.set('page', page.toString());
     router.push(`?${params.toString()}`);
   };
+
+  // Garde la page de pagination en memoire : au retour sur le catalogue (sidebar, apres
+  // edition d'un produit, rechargement) on restaure la derniere page consultee.
+  const didRestorePage = useRef(false);
+  useEffect(() => {
+    if (didRestorePage.current) return;
+    didRestorePage.current = true;
+    // Une URL explicite (page / filtre / recherche) a toujours la priorite.
+    if (searchParams.get('page') || searchParams.get('filter') || searchParams.get('q')) return;
+    try {
+      const saved = parseInt(localStorage.getItem(PRODUCTS_PAGE_STORAGE_KEY) || '', 10);
+      if (saved > 1 && saved <= totalPages) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('page', String(saved));
+        router.replace(`?${params.toString()}`);
+      }
+    } catch { /* localStorage indisponible */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On ne memorise que la pagination du catalogue principal (sans filtre ni recherche).
+  useEffect(() => {
+    try {
+      if (filter === 'all' && !debouncedSearch) {
+        localStorage.setItem(PRODUCTS_PAGE_STORAGE_KEY, String(currentPage));
+      }
+    } catch { /* localStorage indisponible */ }
+  }, [currentPage, filter, debouncedSearch]);
 
   const paginatedProducts = initialProducts;
 
