@@ -61,8 +61,10 @@ const REPRO_DISPO_REASONS = [
   "Fin de tournee",
 ];
 
-const DELIVERY_SHEET_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO", "REPROGRAMMED"]);
 const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE", "PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+// Toute commande assignable à un livreur doit aussi pouvoir figurer sur sa fiche imprimée,
+// sinon une commande attribuée mais pas encore en PACKED (ex: CONFIRMED) reste invisible.
+const DELIVERY_SHEET_STATUSES = new Set([...DELIVERY_ASSIGNABLE_STATUSES, "REPROGRAMMED"]);
 const UNPACKED_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE"];
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
