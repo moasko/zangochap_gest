@@ -276,10 +276,11 @@ export async function getNonPackedOrdersData(
 
     if (!lastIssueEvent && !DIRECT_REMINDER_STATUSES.includes(order.status)) return;
 
-    // Le filtre de periode ne s'applique qu'aux indisponibles. Une alternative reste a
-    // confirmer tant que la commande n'est pas livree, peu importe le jour ou elle a ete posee.
-    const reminderDate = getReminderDate(order, lastIssueEvent);
-    if (!isAlternative && !isDateInPeriod(reminderDate, period, today, yesterday, tomorrow)) return;
+    // Le filtre de periode s'applique aux deux types : une indisponibilite sur sa date
+    // d'incident, une alternative sur sa date de proposition. Par defaut (today) on ne
+    // voit donc que les rappels du jour ; "Tout" reaffiche l'historique complet.
+    const reminderDate = getReminderDate(order, isAlternative ? (lastAlternativeEvent || lastIssueEvent) : lastIssueEvent);
+    if (!isDateInPeriod(reminderDate, period, today, yesterday, tomorrow)) return;
 
     const orderWithMotif = {
       ...order,

@@ -50,7 +50,7 @@ export default function NonPackedItem({
   const alternativeBadge = isAlternative ? (
     <span className="non-packed-alternative-badge">Alternative proposée</span>
   ) : null;
-  
+
   if (isMobile) {
     return (
       <motion.div
@@ -153,4 +153,3 @@ export default function NonPackedItem({
     </tr>
   );
 }
-

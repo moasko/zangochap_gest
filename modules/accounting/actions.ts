@@ -64,6 +64,20 @@ function positiveAmount(value: unknown) {
   return amount;
 }
 
+// Une CORRECTION peut diminuer la caisse : on accepte un montant negatif (mais jamais nul).
+// Les entrees/sorties restent strictement positives via positiveAmount.
+function signedAmount(value: unknown) {
+  const amount = Math.round(Number(value));
+  if (!Number.isFinite(amount) || amount === 0) {
+    throw new Error("Le montant ne peut pas etre nul.");
+  }
+  return amount;
+}
+
+function amountForType(type: AccountingType, value: unknown) {
+  return type === "CORRECTION" ? signedAmount(value) : positiveAmount(value);
+}
+
 async function requireAccountingUser() {
   return ensureAuth(["admin", "developer", "comptable"]);
 }
@@ -128,76 +142,34 @@ async function ensureSessionForDate(tx: any, date: string | Date, actor: any) {
   });
 }
 
-async function syncDeliveryOperations(session: any, actor: any) {
-  // Une session cloturee est verrouillee : on ne touche plus aux ecritures.
-  if (session.status === "CLOSED") return;
-  const deliveryCategory = await getDeliveryIncomeCategory();
-  const orders = await db.order.findMany({
-    where: {
-      deletedAt: null,
-      status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] },
-      OR: [
-        { deliveryDate: { gte: session.date, lte: endOfLocalDay(session.date) } },
-        { deliveryDate: null, updatedAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
-      ],
-    },
-    select: {
-      id: true,
-      ref: true,
-      customerName: true,
-      total: true,
-      deliveryFee: true,
-      discount: true,
-      deliverymanId: true,
-      deliverymanName: true,
-      customerId: true,
-    },
+// Recalcule l'ecriture de livraison "groupee" (riderId null) pour qu'elle ne porte
+// QUE les livreurs pas encore valides individuellement. Ainsi le journal reflete
+// toujours : entrees validees (par livreur) + encaisse restant a valider (groupee),
+// sans jamais sous-compter la recette du jour pendant la validation. Accepte db ou tx.
+async function recomputeGroupedDelivery(client: any, session: any, category: any) {
+  const riderSummaries = await getSessionRiderSummaries(session);
+
+  const validatedOps = await client.accountingOperation.findMany({
+    where: { sessionId: session.id, source: "DELIVERY", deliveryOrderId: null, riderId: { not: null } },
+    select: { riderId: true },
   });
+  const validated = new Set<string>(validatedOps.map((op: any) => op.riderId));
 
-  // Totaux du jour : on distingue le theorique (attendu) de l'encaisse (reel).
-  // L'ecriture comptable porte l'encaisse en montant (amount) et le theorique en
-  // originalAmount, ce qui permet d'afficher l'ecart sans recalcul ailleurs.
-  const validOrders = orders
-    .map((order: any) => ({
-      ...order,
-      theoreticalAmount: orderTheoreticalAmount(order),
-      collectedAmount: orderCollectedAmount(order),
-    }))
-    .filter((order: any) => order.theoreticalAmount > 0);
+  const pending = riderSummaries.filter((rider: any) => !validated.has(rider.riderId));
+  const collectedTotal = pending.reduce((sum: number, rider: any) => sum + Number(rider.collectedAmount || 0), 0);
+  const theoreticalTotal = pending.reduce((sum: number, rider: any) => sum + Number(rider.expectedAmount || 0), 0);
+  const orderCount = pending.reduce((sum: number, rider: any) => sum + Number(rider.ordersCount || 0), 0);
+  const description = orderCount > 0
+    ? `${orderCount} livraison(s) a valider`
+    : "Toutes les entrees livreurs sont validees";
 
-  const theoreticalTotal = validOrders.reduce((sum: number, order: any) => sum + order.theoreticalAmount, 0);
-  const collectedTotal = validOrders.reduce((sum: number, order: any) => sum + order.collectedAmount, 0);
-  const orderCount = validOrders.length;
-  const description = `${orderCount} livraison(s) du jour`;
-
-  // Find existing grouped delivery operation for this session
-  const existingGrouped = await db.accountingOperation.findFirst({
+  const existing = await client.accountingOperation.findFirst({
     where: { sessionId: session.id, source: "DELIVERY", deliveryOrderId: null, riderId: null },
   });
 
-  if (orderCount === 0 && existingGrouped) {
-    // Never delete accounting history automatically in production.
-    return;
-  }
-
-  if (orderCount === 0) return;
-
-  if (existingGrouped) {
-    // Update existing grouped operation with latest totals
-    if (existingGrouped.amount !== collectedTotal || existingGrouped.originalAmount !== theoreticalTotal) {
-      const dataToUpdate: any = { originalAmount: theoreticalTotal, description };
-      // If the user hasn't provided a reason (i.e. hasn't validated/edited it manually), keep amount in sync
-      if (!existingGrouped.reason) {
-        dataToUpdate.amount = collectedTotal;
-      }
-      await db.accountingOperation.update({
-        where: { id: existingGrouped.id },
-        data: dataToUpdate,
-      });
-    }
-  } else {
-    // Create single grouped operation
-    await db.accountingOperation.create({
+  if (!existing) {
+    if (orderCount === 0) return;
+    await client.accountingOperation.create({
       data: {
         type: "INCOME",
         source: "DELIVERY",
@@ -205,14 +177,29 @@ async function syncDeliveryOperations(session: any, actor: any) {
         originalAmount: theoreticalTotal,
         description,
         sessionId: session.id,
-        categoryId: deliveryCategory.id,
+        categoryId: category.id,
         deliveryOrderId: null,
         deliveryOrderRef: null,
-        createdById: actor?.id,
-        createdByName: actor?.name || "Synchronisation",
+        riderId: null,
+        createdByName: "Synchronisation",
       },
     });
+    return;
   }
+
+  if (existing.amount !== collectedTotal || existing.originalAmount !== theoreticalTotal || existing.description !== description) {
+    await client.accountingOperation.update({
+      where: { id: existing.id },
+      data: { amount: collectedTotal, originalAmount: theoreticalTotal, description },
+    });
+  }
+}
+
+async function syncDeliveryOperations(session: any) {
+  // Une session cloturee est verrouillee : on ne touche plus aux ecritures.
+  if (session.status === "CLOSED") return;
+  const deliveryCategory = await getDeliveryIncomeCategory();
+  await recomputeGroupedDelivery(db, session, deliveryCategory);
 }
 
 export async function getAccountingWorkspace(date = dateInputValue()) {
@@ -221,13 +208,13 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
   // All three operations are idempotent; no interactive transaction needed.
   await ensureDefaultCategories();
   const session = await ensureSessionForDate(db, date, actor);
-  await syncDeliveryOperations(session, actor);
+  await syncDeliveryOperations(session);
 
   const [recentSessions, openSessionsRaw, categories, operations, audits, reports, riders, customers] = await Promise.all([
     db.accountingSession.findMany({
       orderBy: { date: "desc" },
       take: 30,
-      include: { operations: { select: { type: true, amount: true } } },
+      include: { operations: { select: { type: true, amount: true, source: true, riderId: true } } },
     }),
     // Toutes les sessions encore ouvertes (a cloturer), meme hors fenetre recente,
     // pour qu'aucune session non cloturee oubliee n'echappe au journal.
@@ -235,7 +222,7 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
       where: { status: { not: "CLOSED" } },
       orderBy: { date: "desc" },
       take: 120,
-      include: { operations: { select: { type: true, amount: true } } },
+      include: { operations: { select: { type: true, amount: true, source: true, riderId: true } } },
     }),
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
     db.accountingOperation.findMany({
@@ -272,7 +259,13 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
 
   return JSON.parse(JSON.stringify({
     session,
-    sessions: mergedSessions.map((item: any) => ({ ...item, summary: summarizeOperations(item.operations) })),
+    sessions: mergedSessions.map((item: any) => ({
+      ...item,
+      summary: summarizeOperations(item.operations),
+      // Une ecriture de livraison groupee (riderId null) avec un montant > 0 signifie
+      // qu'il reste des livreurs a valider sur cette session.
+      pendingDelivery: item.operations.some((op: any) => op.source === "DELIVERY" && !op.riderId && Number(op.amount) > 0),
+    })),
     openSessionsCount: openSessionsRaw.length,
     categories,
     operations,
@@ -288,7 +281,7 @@ export async function getAccountingSessionIdForDate(date = dateInputValue()) {
   const actor = await requireAccountingUser();
   await ensureDefaultCategories();
   const session = await ensureSessionForDate(db, date, actor);
-  await syncDeliveryOperations(session, actor);
+  await syncDeliveryOperations(session);
   revalidatePath(ACCOUNTING_PATH);
   revalidatePath(`${ACCOUNTING_PATH}/sessions/${session.id}`);
   return session.id;
@@ -468,40 +461,6 @@ export async function validateRiderAccountingEntry(data: {
       },
     });
 
-    const legacyGlobal = await tx.accountingOperation.findFirst({
-      where: {
-        sessionId: data.sessionId,
-        source: "DELIVERY",
-        riderId: null,
-        deliveryOrderId: null,
-        amount: { gt: 0 },
-      },
-    });
-
-    if (legacyGlobal) {
-      const updatedLegacy = await tx.accountingOperation.update({
-        where: { id: legacyGlobal.id },
-        data: {
-          amount: 0,
-          reason: "Remplacee par validation detaillee des entrees livreurs",
-          updatedById: actor.id,
-          updatedByName: actor.name,
-        },
-      });
-      await audit(tx, {
-        action: "LEGACY_DELIVERY_ENTRY_NEUTRALIZED",
-        entityType: "AccountingOperation",
-        entityId: updatedLegacy.id,
-        sessionId: data.sessionId,
-        operationId: updatedLegacy.id,
-        previousAmount: legacyGlobal.amount,
-        newAmount: 0,
-        reason: "Remplacee par validation detaillee des entrees livreurs",
-        actor,
-        details: { previousDescription: legacyGlobal.description },
-      });
-    }
-
     const payload = {
       sessionId: data.sessionId,
       categoryId: category.id,
@@ -544,11 +503,75 @@ export async function validateRiderAccountingEntry(data: {
         ordersCount: riderSummary.ordersCount,
       },
     });
+
+    // Ce livreur est desormais valide : on retire son encaisse de l'ecriture groupee
+    // (qui ne porte plus que les livreurs restant a valider).
+    await recomputeGroupedDelivery(tx, session, category);
   });
 
   revalidatePath(ACCOUNTING_PATH);
   revalidatePath(`${ACCOUNTING_PATH}/sessions/${data.sessionId}`);
   return { success: true };
+}
+
+// Valide en une fois tous les livreurs PAS ENCORE valides, a leur montant encaisse
+// reel. Ne touche pas aux livreurs deja valides/ajustes manuellement.
+export async function validateAllRiders(sessionId: string) {
+  const actor = await requireAccountingUser();
+  let count = 0;
+  await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour valider les entrees.");
+    const category = await getDeliveryIncomeCategory(tx);
+    if (!category) throw new Error("Categorie livraison introuvable.");
+
+    const riderSummaries = await getSessionRiderSummaries(session);
+    for (const summary of riderSummaries) {
+      const collected = Math.round(Number(summary.collectedAmount || 0));
+      if (collected <= 0) continue;
+
+      const existing = await tx.accountingOperation.findFirst({
+        where: { sessionId, source: "DELIVERY", riderId: summary.riderId, deliveryOrderId: null },
+      });
+      if (existing) continue; // ne pas ecraser une validation/ajustement existant
+
+      const operation = await tx.accountingOperation.create({
+        data: {
+          sessionId,
+          categoryId: category.id,
+          type: "INCOME" as AccountingType,
+          source: "DELIVERY" as AccountingSource,
+          amount: collected,
+          originalAmount: summary.expectedAmount,
+          description: `Entree livreur - ${summary.riderName} (${summary.ordersCount} livraison(s))`,
+          riderId: summary.riderId,
+          riderName: summary.riderName,
+          reason: "Validation groupee (encaisse)",
+          createdById: actor.id,
+          createdByName: actor.name,
+        },
+      });
+      await audit(tx, {
+        action: "RIDER_ENTRY_VALIDATED",
+        entityType: "AccountingOperation",
+        entityId: operation.id,
+        sessionId,
+        operationId: operation.id,
+        newAmount: collected,
+        reason: "Validation groupee",
+        actor,
+        details: { riderId: summary.riderId, riderName: summary.riderName, ordersCount: summary.ordersCount, bulk: true },
+      });
+      count += 1;
+    }
+
+    await recomputeGroupedDelivery(tx, session, category);
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${sessionId}`);
+  return { success: true, count };
 }
 
 export async function closeAccountingSession(sessionId: string, reason?: string) {
@@ -687,10 +710,13 @@ export async function createAccountingOperation(data: {
   amount: number;
   description?: string;
   proofUrl?: string;
+  customerId?: string;
+  reason?: string;
 }) {
   const actor = await requireAccountingUser();
-  const amount = positiveAmount(data.amount);
   const type: AccountingType = data.type === "EXPENSE" ? "EXPENSE" : data.type === "CORRECTION" ? "CORRECTION" : "INCOME";
+  const amount = amountForType(type, data.amount);
+  const reason = data.reason?.trim() || null;
 
   const operation = await db.$transaction(async (tx: any) => {
     const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
@@ -702,15 +728,44 @@ export async function createAccountingOperation(data: {
       throw new Error("La categorie ne correspond pas au type d'operation.");
     }
 
+    // Une operation qui DIMINUE la caisse (sortie ou correction negative) et rend
+    // le solde de la session negatif est autorisee, mais EXIGE un motif.
+    const signedValue = type === "EXPENSE" ? -amount : amount;
+    if (signedValue < 0) {
+      const existing = await tx.accountingOperation.findMany({
+        where: { sessionId: data.sessionId },
+        select: { type: true, amount: true },
+      });
+      const projectedBalance = summarizeOperations(existing).balance + signedValue;
+      if (projectedBalance < 0 && !reason) {
+        throw new Error("Cette operation rend le solde de caisse negatif : un motif est obligatoire.");
+      }
+    }
+
+    // Rattachement client optionnel : on resout le nom et on bascule la source sur
+    // CUSTOMER pour que les bilans/filtres par client soient exploitables.
+    let customerId: string | null = null;
+    let clientName: string | null = null;
+    if (data.customerId) {
+      const customer = await tx.customer.findUnique({ where: { id: data.customerId }, select: { id: true, name: true } });
+      if (!customer) throw new Error("Client introuvable.");
+      customerId = customer.id;
+      clientName = customer.name;
+    }
+    const source: AccountingSource = customerId ? "CUSTOMER" : (data.source || "MANUAL");
+
     const created = await tx.accountingOperation.create({
       data: {
         sessionId: data.sessionId,
         categoryId: data.categoryId,
         type,
-        source: data.source || "MANUAL",
+        source,
         amount,
         description: data.description?.trim() || null,
         proofUrl: data.proofUrl?.trim() || null,
+        reason,
+        customerId,
+        clientName,
         createdById: actor.id,
         createdByName: actor.name,
       },
@@ -722,8 +777,9 @@ export async function createAccountingOperation(data: {
       sessionId: data.sessionId,
       operationId: created.id,
       newAmount: amount,
+      reason,
       actor,
-      details: { type, source: data.source || "MANUAL" },
+      details: { type, source },
     });
     return created;
   });
@@ -741,7 +797,6 @@ export async function updateAccountingOperation(id: string, data: {
   reason?: string;
 }) {
   const actor = await requireAccountingUser();
-  const amount = positiveAmount(data.amount);
   const reason = data.reason?.trim() || "Regularisation comptable";
 
   const sessionId = await db.$transaction(async (tx: any) => {
@@ -749,6 +804,7 @@ export async function updateAccountingOperation(id: string, data: {
     if (!previous) throw new Error("Operation introuvable.");
     const session = await tx.accountingSession.findUnique({ where: { id: previous.sessionId } });
     if (session?.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour regulariser cette ecriture.");
+    const amount = amountForType(previous.type, data.amount);
 
     const updated = await tx.accountingOperation.update({
       where: { id },
@@ -821,6 +877,7 @@ export async function createAccountingReport(data: {
   customerIds?: string[];
   sessionIds?: string[];
   operationTypes?: AccountingType[];
+  source?: string;
   description?: string;
 }) {
   const actor = await requireAccountingUser();
@@ -842,10 +899,12 @@ export async function createAccountingReport(data: {
     session: { is: { date: { gte: dateFrom, lte: dateTo } } },
     type: { in: operationTypes },
   };
+  const customerIds = Array.from(new Set(data.customerIds || []));
   if (categoryIds.length) where.categoryId = { in: categoryIds };
   if (riderIds.length) where.riderId = { in: riderIds };
-  if (data.customerIds?.length) where.customerId = { in: Array.from(new Set(data.customerIds)) };
+  if (customerIds.length) where.customerId = { in: customerIds };
   if (sessionIds.length) where.sessionId = { in: sessionIds };
+  if (data.source && data.source !== "ALL") where.source = data.source;
 
   const operations = await db.accountingOperation.findMany({ where, select: { type: true, amount: true, sessionId: true } });
   const totals = summarizeOperations(operations);
@@ -861,8 +920,9 @@ export async function createAccountingReport(data: {
       filters: {
         categoryIds,
         riderIds,
-        customerIds: data.customerIds || [],
+        customerIds,
         sessionIds,
+        source: data.source && data.source !== "ALL" ? data.source : null,
       },
       totalIncome: totals.totalIncome,
       totalExpense: totals.totalExpense,
@@ -899,6 +959,7 @@ export async function getAccountingBilan(filters: {
   scope?: "BOTH" | "INCOME" | "EXPENSE";
   categoryIds?: string[];
   riderIds?: string[];
+  customerIds?: string[];
   source?: string;
 }) {
   await requireAccountingUser();
@@ -914,6 +975,7 @@ export async function getAccountingBilan(filters: {
 
   const categoryIds = Array.from(new Set(filters.categoryIds || []));
   const riderIds = Array.from(new Set(filters.riderIds || []));
+  const customerIds = Array.from(new Set(filters.customerIds || []));
 
   const where: any = {
     session: { is: { date: { gte: dateFrom, lte: dateTo } } },
@@ -921,6 +983,7 @@ export async function getAccountingBilan(filters: {
   };
   if (categoryIds.length) where.categoryId = { in: categoryIds };
   if (riderIds.length) where.riderId = { in: riderIds };
+  if (customerIds.length) where.customerId = { in: customerIds };
   if (filters.source && filters.source !== "ALL") where.source = filters.source;
 
   const operations = await db.accountingOperation.findMany({
@@ -965,9 +1028,10 @@ export async function getAccountingBilan(filters: {
   const byDay = Array.from(dayMap.values())
     .sort((a: any, b: any) => a.date.localeCompare(b.date));
 
-  const [categories, riders] = await Promise.all([
+  const [categories, riders, customers] = await Promise.all([
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
     db.user.findMany({ where: { role: "LIVREUR" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.customer.findMany({ select: { id: true, name: true }, orderBy: { updatedAt: "desc" }, take: 200 }),
   ]);
 
   const rows = operations.slice(0, 300).map((op: any) => ({
@@ -979,6 +1043,7 @@ export async function getAccountingBilan(filters: {
     description: op.description,
     categoryName: op.category?.name || null,
     riderName: op.riderName || null,
+    clientName: op.clientName || null,
   }));
 
   return JSON.parse(JSON.stringify({
@@ -991,5 +1056,43 @@ export async function getAccountingBilan(filters: {
     operationsCount: operations.length,
     categories,
     riders,
+    customers,
   }));
+}
+
+// Re-execute la requete d'un bilan enregistre pour exporter ses ecritures detaillees
+// (l'export CSV ne se limite plus a une ligne de totaux).
+export async function getAccountingReportOperations(reportId: string) {
+  await requireAccountingUser();
+  const report = await db.accountingReport.findUnique({ where: { id: reportId } });
+  if (!report) throw new Error("Bilan introuvable.");
+
+  const f: any = report.filters || {};
+  const where: any = {
+    session: { is: { date: { gte: report.dateFrom, lte: report.dateTo } } },
+    type: { in: report.operationTypes?.length ? report.operationTypes : ["INCOME", "EXPENSE", "CORRECTION"] },
+  };
+  if (f.categoryIds?.length) where.categoryId = { in: f.categoryIds };
+  if (f.riderIds?.length) where.riderId = { in: f.riderIds };
+  if (f.customerIds?.length) where.customerId = { in: f.customerIds };
+  if (f.sessionIds?.length) where.sessionId = { in: f.sessionIds };
+  if (f.source && f.source !== "ALL") where.source = f.source;
+
+  const operations = await db.accountingOperation.findMany({
+    where,
+    include: { category: true, session: { select: { date: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 5000,
+  });
+
+  return JSON.parse(JSON.stringify(operations.map((op: any) => ({
+    date: op.session.date,
+    type: op.type,
+    source: op.source,
+    categoryName: op.category?.name || null,
+    description: op.description || null,
+    riderName: op.riderName || null,
+    clientName: op.clientName || null,
+    amount: op.amount,
+  }))));
 }

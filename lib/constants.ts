@@ -97,9 +97,29 @@ export const CATEGORIES: Record<string, string> = {
   kids: 'Enfants',
 };
 
-export function formatPrice(n: number | any): string {
-  const val = typeof n === 'number' ? n : Number(n);
-  return new Intl.NumberFormat('fr-FR').format(val) + ' F';
+export function formatPrice(n: number | string | null | undefined): string {
+  const val = typeof n === 'number' ? n : Number(n ?? 0);
+  return new Intl.NumberFormat('fr-FR').format(Number.isFinite(val) ? val : 0) + ' F';
+}
+
+// Libelles francais des actions d'audit comptable (sinon on affiche le code brut).
+const ACCOUNTING_ACTION_LABELS: Record<string, string> = {
+  OPERATION_CREATED: 'Ecriture creee',
+  OPERATION_UPDATED: 'Ecriture modifiee',
+  OPERATION_DELETED: 'Ecriture supprimee',
+  RIDER_ENTRY_VALIDATED: 'Entree livreur validee',
+  RIDER_ENTRY_VALIDATED_UPDATED: 'Entree livreur mise a jour',
+  LEGACY_DELIVERY_ENTRY_NEUTRALIZED: 'Entree livraison neutralisee',
+  SESSION_CLOSED: 'Session cloturee',
+  SESSION_REOPENED: 'Session rouverte',
+  CATEGORY_CREATED: 'Categorie creee',
+  CATEGORY_UPDATED: 'Categorie modifiee',
+  CATEGORY_DELETED: 'Categorie supprimee',
+  REPORT_CREATED: 'Bilan enregistre',
+};
+
+export function accountingActionLabel(action: string): string {
+  return ACCOUNTING_ACTION_LABELS[action] || action;
 }
 
 export function formatDate(d: string | Date): string {

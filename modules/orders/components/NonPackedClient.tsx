@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React, { useState, useTransition, useMemo } from "react";
 import { TableCard, EmptyState, StatusBadge } from "@/components/UI";
 import { useToast } from "@/components/Toast";
@@ -48,7 +50,8 @@ export default function NonPackedClient({
 }: NonPackedClientProps) {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [search, setSearch] = useState("");
-  const [periodFilter, setPeriodFilter] = useState<NonPackedPeriod>("yesterday");
+  const [periodFilter, setPeriodFilter] = useState<NonPackedPeriod>("today");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<ReminderTypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [commercialFilter, setCommercialFilter] = useState("all");
@@ -67,7 +70,7 @@ export default function NonPackedClient({
       if (!res.ok) throw new Error('Erreur');
       return res.json();
     },
-    initialData: periodFilter === "yesterday"
+    initialData: periodFilter === "today"
       ? {
           notPacked: initialNotPacked,
           withAlternatives: initialAlternatives,
@@ -78,11 +81,11 @@ export default function NonPackedClient({
   });
 
   const notPacked = useMemo(
-    () => data?.notPacked ?? (periodFilter === "yesterday" ? initialNotPacked : []),
+    () => data?.notPacked ?? (periodFilter === "today" ? initialNotPacked : []),
     [data?.notPacked, initialNotPacked, periodFilter],
   );
   const withAlternatives = useMemo(
-    () => data?.withAlternatives ?? (periodFilter === "yesterday" ? initialAlternatives : []),
+    () => data?.withAlternatives ?? (periodFilter === "today" ? initialAlternatives : []),
     [data?.withAlternatives, initialAlternatives, periodFilter],
   );
   const reminderOrders = useMemo(
@@ -207,7 +210,7 @@ export default function NonPackedClient({
 
   const OrderSection = ({ orders, title, meta, showCommercial = false, grouped = false, reminderKind = "notPacked" }: { orders: any[], title: string, meta: string, showCommercial?: boolean, grouped?: boolean, reminderKind?: "notPacked" | "alternative" }) => {
     const isAlternativeSection = reminderKind === "alternative";
-    
+
     const renderGroupedOrders = () => {
       const byCommercial: Record<string, any[]> = {};
       orders.forEach((o: any) => {
@@ -228,16 +231,16 @@ export default function NonPackedClient({
           </div>
           <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {list.map((o: any) => (
-              <div 
-                key={o.id} 
+              <div
+                key={o.id}
                 onClick={() => setSelectedOrder(o)}
-                style={{ 
-                  background: 'var(--cream)', 
-                  borderRadius: 10, 
-                  padding: '10px 14px', 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center', 
+                style={{
+                  background: 'var(--cream)',
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   gap: 12,
                   cursor: 'pointer',
                   border: '1px solid transparent',
@@ -279,16 +282,16 @@ export default function NonPackedClient({
               <p style={{ color: '#8E8E93', fontSize: 13 }}>Aucune commande</p>
             </div>
           ) : (
-            grouped ? renderGroupedOrders() : 
+            grouped ? renderGroupedOrders() :
             orders.map((o: any, i: number) => (
-              <NonPackedItem 
-                key={o.id} 
-                order={o} 
-                isMobile={true} 
-                idx={i} 
+              <NonPackedItem
+                key={o.id}
+                order={o}
+                isMobile={true}
+                idx={i}
                 showCommercial={showCommercial}
                 reminderKind={reminderKind}
-                onSelect={setSelectedOrder} 
+                onSelect={setSelectedOrder}
               />
             ))
           )}
@@ -317,13 +320,13 @@ export default function NonPackedClient({
             </thead>
             <tbody>
               {orders.map((order: any) => (
-                <NonPackedItem 
-                  key={order.id} 
-                  order={order} 
-                  isMobile={false} 
+                <NonPackedItem
+                  key={order.id}
+                  order={order}
+                  isMobile={false}
                   showCommercial={showCommercial}
                   reminderKind={reminderKind}
-                  onSelect={setSelectedOrder} 
+                  onSelect={setSelectedOrder}
                 />
               ))}
             </tbody>
@@ -337,13 +340,13 @@ export default function NonPackedClient({
     <div className={`content animate-fade-in ${isMobile ? 'mobile-root' : ''}`} style={{ padding: isMobile ? '16px' : '20px' }}>
       
       {/* HEADER */}
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: isMobile ? 'column' : 'row', 
-        justifyContent: 'space-between', 
-        alignItems: isMobile ? 'stretch' : 'center', 
-        gap: 16, 
-        marginBottom: 20 
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: 16,
+        marginBottom: 20
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -382,51 +385,54 @@ export default function NonPackedClient({
           )}
         </div>
 
-        {/* Filters Grid */}
-        <div className="flex flex-col gap-4 bg-white p-4 rounded-xl border border-[var(--line)] shadow-sm">
-          
-          {/* Header of filters box */}
-          <div className="flex justify-between items-center border-b border-[var(--line)] pb-3">
-            <div className="flex items-center gap-2">
-              <Filter size={16} color="var(--orange)" />
-              <span className="text-[13px] font-extrabold text-[var(--ink)]">Filtres</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-[var(--orange)] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-md">
-                  {activeFilterCount} actif{activeFilterCount > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+        {/* Toolbar : periode toujours visible + bouton Filtres repliable */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Period Filter (Segmented Control) */}
+          <div className="flex gap-1 bg-[var(--cream-2)] p-1 rounded-lg border border-[var(--line)]">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className={`px-3.5 py-1.5 text-xs rounded-md border-none cursor-pointer transition-all duration-200 ${
+                  periodFilter === option.value
+                    ? "bg-[var(--orange)] text-white shadow-[0_6px_16px_rgba(212,84,28,0.18)] font-bold"
+                    : "bg-transparent text-[var(--ink)] font-semibold hover:text-[var(--orange)]"
+                }`}
+                onClick={() => handlePeriodChange(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
             {activeFilterCount > 0 && (
-              <button 
+              <button
                 onClick={resetFilters}
-                className="text-xs text-[var(--brown-soft)] bg-transparent border-none cursor-pointer flex items-center gap-1 font-semibold hover:text-[var(--orange)] transition-colors"
+                className="flex items-center gap-1 text-xs font-semibold text-[var(--brown-soft)] bg-transparent border-none cursor-pointer hover:text-[var(--orange)] transition-colors"
               >
                 <X size={14} /> Effacer
               </button>
             )}
+            <button
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+              className={`flex items-center gap-2 h-[38px] px-3.5 rounded-lg border bg-white cursor-pointer transition-colors ${
+                filtersOpen || activeFilterCount > 0 ? "border-[var(--orange)]" : "border-[var(--line)] hover:border-[rgba(212,84,28,0.35)]"
+              }`}
+            >
+              <Filter size={16} color="var(--orange)" />
+              <span className="text-[13px] font-extrabold text-[var(--ink)]">Filtres</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-[var(--orange)] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-md">{activeFilterCount}</span>
+              )}
+              <ChevronDown size={14} className={`text-[var(--brown-soft)] transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+            </button>
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-5 items-start">
-            
-            {/* Period Filter (Segmented Control) */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-bold text-[var(--brown-soft)] uppercase tracking-wide">Période</span>
-              <div className="flex gap-1 bg-[var(--cream-2)] p-1 rounded-lg border border-[var(--line)]">
-                {PERIOD_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`px-3.5 py-1.5 text-xs rounded-md border-none cursor-pointer transition-all duration-200 ${
-                      periodFilter === option.value
-                        ? "bg-[var(--orange)] text-white shadow-[0_6px_16px_rgba(212,84,28,0.18)] font-bold"
-                        : "bg-transparent text-[var(--ink)] font-semibold hover:text-[var(--orange)]"
-                    }`}
-                    onClick={() => handlePeriodChange(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Collapsible advanced filters */}
+        {filtersOpen && (
+          <div className="flex flex-wrap gap-5 items-start bg-white p-4 rounded-xl border border-[var(--line)] shadow-sm">
 
             {/* Type Filter (Chips) */}
             <div className="flex flex-col gap-2">
@@ -456,7 +462,7 @@ export default function NonPackedClient({
                 })}
               </div>
             </div>
-            
+
             <div className="flex gap-4 flex-wrap flex-1 min-w-[280px]">
               {/* Status Filter (Select) */}
               <div className="flex flex-col gap-2 flex-1 min-w-[140px]">
@@ -502,7 +508,7 @@ export default function NonPackedClient({
             </div>
 
           </div>
-        </div>
+        )}
       </div>
 
       <div className={`info-banner ${totalCount > 0 ? 'amber' : 'green'}`} style={{ marginBottom: 24, borderRadius: 12 }}>

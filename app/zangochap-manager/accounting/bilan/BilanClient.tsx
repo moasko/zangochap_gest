@@ -61,17 +61,20 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
   const [scope, setScope] = useState<Scope>("BOTH");
   const [categoryId, setCategoryId] = useState("");
   const [riderId, setRiderId] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [source, setSource] = useState("ALL");
 
-  const run = (override: Partial<{ from: string; to: string; scope: Scope; categoryId: string; riderId: string; source: string }> = {}) => {
+  const run = (override: Partial<{ from: string; to: string; scope: Scope; categoryId: string; riderId: string; customerId: string; source: string }> = {}) => {
     const category = override.categoryId ?? categoryId;
     const rider = override.riderId ?? riderId;
+    const customer = override.customerId ?? customerId;
     const payload = {
       dateFrom: override.from ?? from,
       dateTo: override.to ?? to,
       scope: override.scope ?? scope,
       categoryIds: category ? [category] : [],
       riderIds: rider ? [rider] : [],
+      customerIds: customer ? [customer] : [],
       source: override.source ?? source,
     };
     startTransition(async () => {
@@ -103,13 +106,15 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
   );
 
   const exportCsv = () => {
-    const header = ["Date", "Type", "Source", "Categorie", "Libelle", "Montant"];
+    const header = ["Date", "Type", "Source", "Categorie", "Libelle", "Livreur", "Client", "Montant"];
     const rows = (data.operations || []).map((op: any) => [
       fmt(new Date(op.date)),
       op.type,
       SOURCE_LABELS[op.source] || op.source,
       op.categoryName || "",
       (op.description || "").replace(/\s+/g, " "),
+      op.riderName || "",
+      op.clientName || "",
       op.amount,
     ]);
     const csv = [header, ...rows].map((row) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -134,6 +139,8 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           dateTo: to,
           categoryIds: categoryId ? [categoryId] : [],
           riderIds: riderId ? [riderId] : [],
+          customerIds: customerId ? [customerId] : [],
+          source,
           operationTypes: operationTypes as any,
         });
         showToast("Bilan enregistre dans le journal", "success");
@@ -186,7 +193,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
             {isPending ? <span className="text-[#C2410C]">Calcul...</span> : <><Calendar size={12} /> {data.range?.from} → {data.range?.to} · {data.operationsCount} ecriture(s)</>}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
           <input type="date" aria-label="Du" className="field-input" value={from} onChange={(e) => { setFrom(e.target.value); setPreset("custom"); run({ from: e.target.value }); }} />
           <input type="date" aria-label="Au" className="field-input" value={to} onChange={(e) => { setTo(e.target.value); setPreset("custom"); run({ to: e.target.value }); }} />
           <select className="field-input" aria-label="Type d'operations" value={scope} onChange={(e) => { setScope(e.target.value as Scope); run({ scope: e.target.value as Scope }); }}>
@@ -201,6 +208,10 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           <select className="field-input" aria-label="Livreur" value={riderId} onChange={(e) => { setRiderId(e.target.value); run({ riderId: e.target.value }); }}>
             <option value="">Tous livreurs</option>
             {(data.riders || []).map((rider: any) => <option key={rider.id} value={rider.id}>{rider.name}</option>)}
+          </select>
+          <select className="field-input" aria-label="Client" value={customerId} onChange={(e) => { setCustomerId(e.target.value); run({ customerId: e.target.value }); }}>
+            <option value="">Tous clients</option>
+            {(data.customers || []).map((customer: any) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
           </select>
           <select className="field-input" aria-label="Source" value={source} onChange={(e) => { setSource(e.target.value); run({ source: e.target.value }); }}>
             <option value="ALL">Toutes sources</option>
@@ -291,6 +302,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
                         <td className="px-3 py-2.5 align-top">
                           <div className="font-black text-[#1A1410]">{op.description || (expense ? "Sortie" : "Entree")}</div>
                           {op.riderName && <div className="text-[10px] font-bold text-[#806A58]">Livreur: {op.riderName}</div>}
+                          {op.clientName && <div className="text-[10px] font-bold text-[#806A58]">Client: {op.clientName}</div>}
                         </td>
                         <td className="px-3 py-2.5 align-top">
                           <span className="inline-flex rounded-md bg-[#F1E8DF] px-2 py-1 text-[10px] font-black text-[#6B4F3B]">{op.categoryName || "Sans categorie"}</span>

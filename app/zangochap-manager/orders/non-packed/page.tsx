@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NonPackedOrdersPage() {
   const user = await getSession();
-  const { notPacked, withAlternatives } = await getNonPackedOrdersData(user);
+  const { notPacked, withAlternatives } = await getNonPackedOrdersData(user, "today");
 
   return (
     <>

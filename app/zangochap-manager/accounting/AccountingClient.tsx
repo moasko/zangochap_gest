@@ -6,6 +6,7 @@ import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowDownCircle,
   ArrowUpCircle,
   Calendar,
@@ -23,14 +24,16 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "@/components/Modal";
+import AmountInput from "@/components/AmountInput";
 import { EmptyState, TableCard } from "@/components/UI";
 import { useToast } from "@/components/Toast";
-import { formatDay, formatPrice } from "@/lib/constants";
+import { accountingActionLabel, formatDay, formatPrice } from "@/lib/constants";
 import {
   createAccountingCategory,
   createAccountingOperation,
   deleteAccountingCategory,
   deleteAccountingOperation,
+  getAccountingReportOperations,
   updateAccountingCategory,
   updateAccountingOperation,
 } from "@/modules/accounting/actions";
@@ -55,6 +58,14 @@ function operationLabel(type: string) {
   if (type === "INCOME") return "Entree";
   if (type === "EXPENSE") return "Sortie";
   return "Correction";
+}
+
+// Valeur signee sur la caisse : positive = credit (entree), negative = debit (sortie).
+// Une CORRECTION porte deja son signe (negative => elle diminue la caisse), une
+// EXPENSE est toujours un debit. Aligne sur summarizeOperations cote serveur.
+function signedValue(operation: { type: string; amount: number }) {
+  if (operation.type === "EXPENSE") return -Math.abs(Number(operation.amount || 0));
+  return Number(operation.amount || 0);
 }
 
 function sourceLabel(source: string) {
@@ -90,6 +101,10 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const sessionDate = dateInputValue(workspace.session.date);
   const isClosed = workspace.session.status === "CLOSED";
   const hasActiveFilters = Boolean(searchTerm.trim() || typeFilter !== "ALL" || categoryFilter !== "ALL");
+  // Sessions d'autres jours encore ouvertes : on les remonte pour ne pas les oublier.
+  const staleOpenSessions = workspace.sessions.filter(
+    (session: any) => session.status !== "CLOSED" && dateInputValue(session.date) !== sessionDate,
+  );
 
   const openOperationModal = (type: OperationType) => {
     if (isClosed) {
@@ -118,11 +133,37 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   }, [workspace.operations, searchTerm, typeFilter, categoryFilter]);
   const filteredTotals = useMemo(() => {
     return filteredOperations.reduce((totals: { debit: number; credit: number }, operation: any) => {
-      if (operation.type === "EXPENSE") totals.debit += Number(operation.amount || 0);
-      else totals.credit += Number(operation.amount || 0);
+      const value = signedValue(operation);
+      if (value < 0) totals.debit += -value;
+      else totals.credit += value;
       return totals;
     }, { debit: 0, credit: 0 });
   }, [filteredOperations]);
+
+  // Solde cumule calcule sur TOUTES les ecritures de la session, dans l'ordre
+  // chronologique (plus ancien -> plus recent). Reste correct meme sous filtre :
+  // chaque ligne affiche le solde reel de la caisse a cet instant.
+  const balanceById = useMemo(() => {
+    const ordered = [...workspace.operations].sort(
+      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    const map: Record<string, number> = {};
+    let running = 0;
+    for (const operation of ordered) {
+      running += signedValue(operation);
+      map[operation.id] = running;
+    }
+    return map;
+  }, [workspace.operations]);
+
+  // Affichage chronologique ascendant : un grand livre se lit du haut vers le bas
+  // avec un solde cumule croissant.
+  const displayedOperations = useMemo(
+    () => [...filteredOperations].sort(
+      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    ),
+    [filteredOperations],
+  );
 
   const changeDate = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -172,6 +213,17 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           <span>Session cloturee : les ecritures sont verrouillees.</span>
           <Link href={`/zangochap-manager/accounting/sessions/${workspace.session.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#BBF7D0] bg-white px-3 py-1.5 font-black hover:bg-[#ECFDF5]">
             Gerer la cloture
+          </Link>
+        </div>
+      )}
+
+      {staleOpenSessions.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#F4C7B8] bg-[#FFF7ED] px-4 py-2.5 text-[12px] font-bold text-[#9A3412]">
+          <span className="inline-flex items-center gap-1.5">
+            <AlertTriangle size={14} /> {staleOpenSessions.length} session(s) d&apos;autres jours encore ouverte(s) a cloturer.
+          </span>
+          <Link href={`/zangochap-manager/accounting/sessions/${staleOpenSessions[0].id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#F4C7B8] bg-white px-3 py-1.5 font-black hover:bg-[#FFF1E6]">
+            Traiter ({dateInputValue(staleOpenSessions[0].date)})
           </Link>
         </div>
       )}
@@ -267,11 +319,16 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                     <th className="min-w-[130px] px-3 py-3">Source</th>
                     <th className="px-3 py-3 text-right">Debit</th>
                     <th className="px-3 py-3 text-right">Credit</th>
+                    <th className="px-3 py-3 text-right">Solde</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOperations.map((operation: any) => (
+                  {displayedOperations.map((operation: any) => {
+                    const value = signedValue(operation);
+                    const isDebit = value < 0;
+                    const runningBalance = balanceById[operation.id] ?? 0;
+                    return (
                     <tr key={operation.id} className="border-b border-[#F1E8DF] text-[12px] last:border-b-0 hover:bg-[#FCFAF7] transition-colors">
                       <td className="px-4 py-3 align-top">
                         <div className="font-mono text-[11px] font-black text-[#1A1410]">{dateInputValue(operation.createdAt)}</div>
@@ -298,10 +355,13 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                         <div className="text-[10px] font-bold text-[#806A58]">{operation.createdByName || "Systeme"}</div>
                       </td>
                       <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#991B1B]">
-                        {operation.type === "EXPENSE" ? formatPrice(operation.amount) : "-"}
+                        {isDebit ? formatPrice(-value) : <span className="text-[#C9BBAA]">·</span>}
                       </td>
                       <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#166534]">
-                        {operation.type !== "EXPENSE" ? formatPrice(operation.amount) : "-"}
+                        {!isDebit ? formatPrice(value) : <span className="text-[#C9BBAA]">·</span>}
+                      </td>
+                      <td className={`px-3 py-3 text-right align-top font-mono text-[12px] font-black ${runningBalance < 0 ? "text-[#991B1B]" : "text-[#1A1410]"}`}>
+                        {formatPrice(runningBalance)}
                       </td>
                       <td className="px-4 py-3 align-top">
                         <div className="flex justify-end gap-1">
@@ -329,8 +389,20 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-[#E8DED4] bg-[#FCFAF7] text-[12px] font-black">
+                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] uppercase text-[#806A58]">
+                      Totaux ({displayedOperations.length} ecriture(s))
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-[#991B1B]">{formatPrice(filteredTotals.debit)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-[#166534]">{formatPrice(filteredTotals.credit)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-[#D4541C]">{formatPrice(filteredTotals.credit - filteredTotals.debit)}</td>
+                    <td className="px-4 py-3" />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
@@ -353,6 +425,9 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${open ? "bg-[#FFF7ED] text-[#C2410C]" : "bg-[#F0FDF4] text-[#166534]"}`}>
                           {open ? "Ouverte" : "Cloturee"}
                         </span>
+                        {session.pendingDelivery && (
+                          <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[9px] font-black uppercase text-[#92400E]">A valider</span>
+                        )}
                       </div>
                       <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s)</div>
                     </div>
@@ -402,7 +477,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
               {workspace.audits.map((audit: any) => (
                 <div key={audit.id} className="px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[12px] font-black text-[#1A1410]">{audit.action}</div>
+                    <div className="text-[12px] font-black text-[#1A1410]">{accountingActionLabel(audit.action)}</div>
                     <div className="text-[10px] font-bold text-[#806A58]">{formatDay(audit.createdAt)}</div>
                   </div>
                   <div className="mt-1 text-[11px] font-semibold text-[#806A58]">
@@ -423,6 +498,8 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           initialType={operationDraftType}
           incomeCategories={incomeCategories}
           expenseCategories={expenseCategories}
+          customers={workspace.customers || []}
+          currentBalance={workspace.totals.balance}
           onClose={() => {
             setActiveModal(null);
             setEditingOperation(null);
@@ -548,7 +625,7 @@ function CategoryPlanModal({
   );
 }
 
-function OperationModal({ sessionId, operation, initialType, incomeCategories, expenseCategories, onClose }: any) {
+function OperationModal({ sessionId, operation, initialType, incomeCategories, expenseCategories, customers = [], currentBalance = 0, onClose }: any) {
   const router = useRouter();
   const { showToast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -559,16 +636,31 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
   const [description, setDescription] = useState(operation?.description || "");
   const [proofUrl, setProofUrl] = useState(operation?.proofUrl || "");
   const [reason, setReason] = useState(operation?.reason || "");
+  const [customerId, setCustomerId] = useState(operation?.customerId || "");
+  // Le rattachement client n'a de sens que pour une entree creee manuellement.
+  const isCorrection = type === "CORRECTION";
+  const showCustomer = !operation && type === "INCOME";
+
+  // Valeur signee sur la caisse (sortie = negatif, correction garde son signe).
+  const typed = Number(amount || 0);
+  const signed = type === "EXPENSE" ? -Math.abs(typed) : typed;
+  const projectedBalance = Number(currentBalance) + signed;
+  // A la creation, une operation qui rend le solde negatif exige un motif.
+  const requiresNegativeReason = !operation && signed < 0 && projectedBalance < 0;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (requiresNegativeReason && !reason.trim()) {
+      showToast("Cette operation rend le solde negatif : un motif est obligatoire.", "error");
+      return;
+    }
     startTransition(async () => {
       try {
         if (operation) {
           await updateAccountingOperation(operation.id, { amount: Number(amount), categoryId, description, proofUrl, reason });
           showToast("Operation regularisee", "success");
         } else {
-          await createAccountingOperation({ sessionId, categoryId, type, amount: Number(amount), description, proofUrl, source: "MANUAL" });
+          await createAccountingOperation({ sessionId, categoryId, type, amount: Number(amount), description, proofUrl, source: "MANUAL", customerId: customerId || undefined, reason: requiresNegativeReason ? reason.trim() : undefined });
           showToast("Operation ajoutee", "success");
         }
         router.refresh();
@@ -599,7 +691,7 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
         <div className="grid gap-1">
           <span className="text-[11px] font-black uppercase text-[#806A58]">Montant {operation?.source === "DELIVERY" ? "recu" : ""}</span>
           <div className="flex items-center gap-2">
-            <input className="field-input flex-1" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+            <AmountInput className="field-input flex-1" allowNegative={isCorrection} value={amount} onChange={setAmount} required />
             {operation?.source === "DELIVERY" && operation.originalAmount && (
               <button type="button" className="inline-flex h-10 items-center justify-center rounded-md border border-[#E8DED4] bg-white px-3 text-[11px] font-black text-[#6B4F3B] whitespace-nowrap hover:bg-[#FCFAF7]" onClick={() => setAmount(operation.originalAmount)}>
                 Matcher ({formatPrice(operation.originalAmount)})
@@ -614,11 +706,27 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
               }
             </div>
           )}
+          {isCorrection && (
+            <div className="mt-1 text-[11px] font-bold text-[#C2410C]">
+              Montant negatif autorise pour diminuer la caisse (ex. -5000).
+            </div>
+          )}
         </div>
         <label className="grid gap-1">
           <span className="text-[11px] font-black uppercase text-[#806A58]">Description</span>
           <textarea className="field-input" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
         </label>
+        {showCustomer && (
+          <label className="grid gap-1">
+            <span className="text-[11px] font-black uppercase text-[#806A58]">Client (optionnel)</span>
+            <select className="field-input" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+              <option value="">Aucun client</option>
+              {customers.map((customer: any) => (
+                <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? ` (${customer.phone})` : ""}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="grid gap-1">
           <span className="text-[11px] font-black uppercase text-[#806A58]">Piece justificative</span>
           <input className="field-input" value={proofUrl} onChange={(event) => setProofUrl(event.target.value)} placeholder="URL ou reference interne" />
@@ -629,9 +737,18 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
             <input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Ex. Regularisation montant livreur" />
           </label>
         )}
+        {requiresNegativeReason && (
+          <div className="grid gap-1 rounded-md border border-[#FECACA] bg-[#FEF2F2] p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-black text-[#991B1B]">
+              <AlertTriangle size={13} /> Solde de caisse negatif ({formatPrice(projectedBalance)})
+            </div>
+            <span className="text-[11px] font-black uppercase text-[#806A58]">Motif obligatoire</span>
+            <textarea className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} rows={2} required placeholder="Ex. avance sur recette, depense urgente couverte demain..." />
+          </div>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Annuler</button>
-          <button type="submit" className="btn-orange" disabled={isPending}>
+          <button type="submit" className="btn-orange" disabled={isPending || (requiresNegativeReason && !reason.trim())}>
             <Save size={14} /> {isPending ? "Enregistrement..." : "Enregistrer"}
           </button>
         </div>
@@ -689,19 +806,26 @@ function CategoryModal({ category, onClose }: any) {
   );
 }
 
-function exportReportCsv(report: any) {
-  const rows = [
-    ["Nom", "Debut", "Fin", "Entrees", "Sorties", "Solde", "Operations"],
-    [
-      report.name,
-      dateInputValue(report.dateFrom),
-      dateInputValue(report.dateTo),
-      report.totalIncome,
-      report.totalExpense,
-      report.balance,
-      report.operationsCount,
-    ],
-  ];
+async function exportReportCsv(report: any) {
+  let operations: any[] = [];
+  try {
+    operations = await getAccountingReportOperations(report.id);
+  } catch {
+    operations = [];
+  }
+  const header = ["Date", "Type", "Source", "Categorie", "Libelle", "Livreur", "Client", "Montant"];
+  const body = operations.map((op) => [
+    dateInputValue(op.date),
+    operationLabel(op.type),
+    sourceLabel(op.source),
+    op.categoryName || "",
+    (op.description || "").replace(/\s+/g, " "),
+    op.riderName || "",
+    op.clientName || "",
+    op.amount,
+  ]);
+  const summary = ["", "", "", "", `${report.name}`, "Solde", "", report.balance];
+  const rows = [header, ...body, summary];
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
