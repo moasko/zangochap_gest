@@ -109,6 +109,7 @@ const ACCOUNTING_ACTION_LABELS: Record<string, string> = {
   OPERATION_DELETED: 'Ecriture supprimee',
   RIDER_ENTRY_VALIDATED: 'Entree livreur validee',
   RIDER_ENTRY_VALIDATED_UPDATED: 'Entree livreur mise a jour',
+  RIDER_ENTRY_CANCELLED: 'Validation livreur annulee',
   LEGACY_DELIVERY_ENTRY_NEUTRALIZED: 'Entree livraison neutralisee',
   SESSION_CLOSED: 'Session cloturee',
   SESSION_REOPENED: 'Session rouverte',

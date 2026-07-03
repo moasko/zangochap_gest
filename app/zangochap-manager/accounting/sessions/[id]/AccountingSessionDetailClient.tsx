@@ -20,6 +20,7 @@ import {
   Plus,
   Save,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import { EmptyState, TableCard } from "@/components/UI";
 import Modal from "@/components/Modal";
@@ -27,6 +28,7 @@ import AmountInput from "@/components/AmountInput";
 import { useToast } from "@/components/Toast";
 import { accountingActionLabel, formatDay, formatPrice } from "@/lib/constants";
 import {
+  cancelRiderValidation,
   closeAccountingSession,
   createAccountingOperation,
   deleteAccountingOperation,
@@ -165,6 +167,21 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
     }
   };
 
+  const cancelValidation = async (rider: any) => {
+    const reason = window.prompt(`Annuler la validation de ${rider.riderName} ?\nSon encaisse repassera dans les entrees a valider.\n\nMotif obligatoire :`);
+    if (!reason?.trim()) return;
+    setValidatingRiderId(rider.riderId);
+    try {
+      await cancelRiderValidation({ sessionId: workspace.session.id, riderId: rider.riderId, reason });
+      showToast("Validation annulee : le livreur repasse a valider", "success");
+      router.refresh();
+    } catch (error: any) {
+      showToast(error.message || "Annulation impossible", "error");
+    } finally {
+      setValidatingRiderId(null);
+    }
+  };
+
   const validateAll = async () => {
     if (!confirm(`Valider ${pendingRiders.length} livreur(s) restant(s) a leur montant encaisse ?`)) return;
     setValidatingAll(true);
@@ -294,6 +311,7 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
                   amount={riderAmounts[rider.riderId] || ""}
                   onAmountChange={(raw) => setRiderAmounts((current) => ({ ...current, [rider.riderId]: raw }))}
                   onValidate={() => validateRider(rider)}
+                  onCancelValidation={() => cancelValidation(rider)}
                   validating={validatingRiderId === rider.riderId}
                   locked={isClosed}
                 />
@@ -413,11 +431,12 @@ function RiderStat({ label, value, tone, hint }: { label: string; value: string;
   );
 }
 
-function RiderCard({ rider, amount, onAmountChange, onValidate, validating, locked }: {
+function RiderCard({ rider, amount, onAmountChange, onValidate, onCancelValidation, validating, locked }: {
   rider: any;
   amount: string;
   onAmountChange: (raw: string) => void;
   onValidate: () => void;
+  onCancelValidation: () => void;
   validating: boolean;
   locked: boolean;
 }) {
@@ -514,6 +533,16 @@ function RiderCard({ rider, amount, onAmountChange, onValidate, validating, lock
         >
           <Save size={14} /> {validating ? "Validation..." : rider.isValidated ? "Mettre a jour" : "Valider entree"}
         </button>
+        {rider.isValidated && !locked && (
+          <button
+            type="button"
+            className="mt-1.5 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-[#F4C7B8] bg-white px-3 text-[11px] font-black text-[#C2410C] hover:bg-[#FFF7ED] disabled:opacity-60"
+            disabled={validating}
+            onClick={onCancelValidation}
+          >
+            <Undo2 size={13} /> Annuler la validation
+          </button>
+        )}
       </div>
     </article>
   );

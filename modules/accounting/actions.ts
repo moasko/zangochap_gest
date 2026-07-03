@@ -64,6 +64,16 @@ function positiveAmount(value: unknown) {
   return amount;
 }
 
+// Une validation livreur peut etre a 0 (livreur sans encaisse : commandes impayees)
+// pour pouvoir marquer son controle comme fait.
+function nonNegativeAmount(value: unknown) {
+  const amount = Math.round(Number(value));
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Le montant ne peut pas etre negatif.");
+  }
+  return amount;
+}
+
 // Une CORRECTION peut diminuer la caisse : on accepte un montant negatif (mais jamais nul).
 // Les entrees/sorties restent strictement positives via positiveAmount.
 function signedAmount(value: unknown) {
@@ -437,7 +447,7 @@ export async function validateRiderAccountingEntry(data: {
   reason?: string;
 }) {
   const actor = await requireAccountingUser();
-  const amount = positiveAmount(data.amount);
+  const amount = nonNegativeAmount(data.amount);
   const riderId = data.riderId || "UNASSIGNED";
   const riderName = data.riderName?.trim() || "Livreur non renseigne";
   const reason = data.reason?.trim() || "Validation entree livreur";
@@ -506,6 +516,51 @@ export async function validateRiderAccountingEntry(data: {
 
     // Ce livreur est desormais valide : on retire son encaisse de l'ecriture groupee
     // (qui ne porte plus que les livreurs restant a valider).
+    await recomputeGroupedDelivery(tx, session, category);
+  });
+
+  revalidatePath(ACCOUNTING_PATH);
+  revalidatePath(`${ACCOUNTING_PATH}/sessions/${data.sessionId}`);
+  return { success: true };
+}
+
+// Annule la validation d'un livreur : supprime son ecriture individuelle et
+// reintegre son encaisse dans l'ecriture groupee (le livreur repasse "a valider").
+// Motif obligatoire : c'est la seule voie de suppression d'une ecriture DELIVERY.
+export async function cancelRiderValidation(data: {
+  sessionId: string;
+  riderId: string;
+  reason: string;
+}) {
+  const actor = await requireAccountingUser();
+  const reason = data.reason?.trim();
+  if (!reason) throw new Error("Un motif est obligatoire pour annuler une validation livreur.");
+
+  await db.$transaction(async (tx: any) => {
+    const session = await tx.accountingSession.findUnique({ where: { id: data.sessionId } });
+    if (!session) throw new Error("Session comptable introuvable.");
+    if (session.status === "CLOSED") throw new Error("Session cloturee : reouvrez-la pour annuler une validation.");
+    const category = await getDeliveryIncomeCategory(tx);
+    if (!category) throw new Error("Categorie livraison introuvable.");
+
+    const operation = await tx.accountingOperation.findFirst({
+      where: { sessionId: data.sessionId, source: "DELIVERY", riderId: data.riderId, deliveryOrderId: null },
+    });
+    if (!operation) throw new Error("Aucune validation trouvee pour ce livreur sur cette session.");
+
+    await tx.accountingOperation.delete({ where: { id: operation.id } });
+    // Pas d'operationId dans l'audit : l'ecriture vient d'etre supprimee.
+    await audit(tx, {
+      action: "RIDER_ENTRY_CANCELLED",
+      entityType: "AccountingOperation",
+      entityId: operation.id,
+      sessionId: data.sessionId,
+      previousAmount: operation.amount,
+      reason,
+      actor,
+      details: { riderId: data.riderId, riderName: operation.riderName },
+    });
+
     await recomputeGroupedDelivery(tx, session, category);
   });
 
