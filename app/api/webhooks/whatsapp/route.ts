@@ -15,9 +15,9 @@ function isValidSignature(rawBody: string, signature: string | null, appSecret: 
   return timingSafeEqual(Buffer.from(expected), Buffer.from(received));
 }
 
-function maskIdentifier(value: unknown) {
+function shortId(value: unknown) {
   const text = typeof value === "string" ? value : "";
-  return text ? `***${text.slice(-6)}` : null;
+  return text ? text.slice(-20) : null;
 }
 
 function summarizeWebhook(payload: unknown) {
@@ -40,22 +40,30 @@ function summarizeWebhook(payload: unknown) {
       for (const message of Array.isArray(content.messages) ? content.messages : []) {
         if (!message || typeof message !== "object") continue;
         const item = message as Record<string, unknown>;
+        const text = item.text && typeof item.text === "object"
+          ? (item.text as Record<string, unknown>).body
+          : null;
         summaries.push({
           direction: "incoming",
-          from: maskIdentifier(item.from),
-          messageId: maskIdentifier(item.id),
+          from: typeof item.from === "string" ? item.from : null,
+          messageId: shortId(item.id),
           type: typeof item.type === "string" ? item.type : "unknown",
+          textPreview: typeof text === "string" ? text.slice(0, 160) : null,
         });
       }
 
       for (const status of Array.isArray(content.statuses) ? content.statuses : []) {
         if (!status || typeof status !== "object") continue;
         const item = status as Record<string, unknown>;
+        const firstError = Array.isArray(item.errors) && item.errors[0] && typeof item.errors[0] === "object"
+          ? (item.errors[0] as Record<string, unknown>)
+          : null;
         summaries.push({
           direction: "status",
-          messageId: maskIdentifier(item.id),
-          recipient: maskIdentifier(item.recipient_id),
+          messageId: shortId(item.id),
+          recipient: typeof item.recipient_id === "string" ? item.recipient_id : null,
           status: typeof item.status === "string" ? item.status : "unknown",
+          error: firstError ? String(firstError.title || firstError.message || "") || null : null,
         });
       }
     }
@@ -95,13 +103,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "JSON invalide." }, { status: 400 });
   }
 
+  // Journal glissant des evenements entrants, consulte par la console admin.
   const events = summarizeWebhook(payload);
-  const webhookData: Prisma.InputJsonObject = { at: new Date().toISOString(), events };
-  await prisma.cmsContent.upsert({
-    where: { key: "whatsapp:last-webhook" },
-    update: { data: webhookData },
-    create: { key: "whatsapp:last-webhook", data: webhookData },
-  });
+  if (events.length > 0) {
+    const at = new Date().toISOString();
+    const existing = await prisma.cmsContent.findUnique({ where: { key: "whatsapp:webhook-log" } });
+    const list = Array.isArray(existing?.data) ? existing.data as Prisma.JsonArray : [];
+    const data = [
+      ...events.map((event) => ({ at, ...event })),
+      ...list,
+    ].slice(0, 100) as Prisma.InputJsonArray;
+    await prisma.cmsContent.upsert({
+      where: { key: "whatsapp:webhook-log" },
+      update: { data },
+      create: { key: "whatsapp:webhook-log", data },
+    });
+  }
 
   return NextResponse.json({ received: true });
 }

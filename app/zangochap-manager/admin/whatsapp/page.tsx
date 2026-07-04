@@ -16,7 +16,7 @@ export default async function WhatsAppBusinessPage() {
 
   return (
     <>
-      <Topbar title="WhatsApp Business" subtitle="Jasper's Market" />
+      <Topbar title="WhatsApp Business" subtitle="Canal client ZangoChap" />
       <WhatsAppBusinessClient initialData={JSON.parse(JSON.stringify(data))} />
     </>
   );
