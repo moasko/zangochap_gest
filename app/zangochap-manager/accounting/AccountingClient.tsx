@@ -806,6 +806,14 @@ function CategoryModal({ category, onClose }: any) {
   );
 }
 
+// Neutralise l'injection de formule tableur : une cellule texte commencant par
+// =, +, @ ou - (hors nombre) est prefixee d'une apostrophe avant l'echappement.
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  const risky = /^[=+@-]/.test(text) && Number.isNaN(Number(text));
+  return `"${(risky ? `'${text}` : text).replace(/"/g, '""')}"`;
+}
+
 async function exportReportCsv(report: any) {
   let operations: any[] = [];
   try {
@@ -826,7 +834,7 @@ async function exportReportCsv(report: any) {
   ]);
   const summary = ["", "", "", "", `${report.name}`, "Solde", "", report.balance];
   const rows = [header, ...body, summary];
-  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

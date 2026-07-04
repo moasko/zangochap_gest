@@ -18,6 +18,7 @@ import {
   SectionLabel,
 } from "@/components/UI";
 import Modal from "@/components/Modal";
+import WhatsAppSendModal from "./_components/WhatsAppSendModal";
 import { useToast } from "@/components/Toast";
 import {
   updateOrderStatus,
@@ -579,6 +580,9 @@ export default function OrdersClient({
   const [orderToEdit, setOrderToEdit] = useState<any>(null);
 
   const [receiptOrder, setReceiptOrder] = useState<any>(null);
+
+  // Commande pour laquelle le modal d'envoi WhatsApp (apercu + API) est ouvert.
+  const [whatsAppOrder, setWhatsAppOrder] = useState<any>(null);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -6158,8 +6162,8 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                             )}
                           <button
                             className="action-btn"
-                            title="Envoyer re?u WhatsApp au client"
-                            onClick={() => handleWhatsApp(order)}
+                            title="Envoyer un message WhatsApp au client (aperçu + envoi direct)"
+                            onClick={() => setWhatsAppOrder(order)}
                             style={{ background: "#dcfce7", color: "#16a34a" }}
                           >
                             <MessageCircle size={14} />
@@ -6344,7 +6348,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           onUpdateDetails={handleUpdateDetails}
           onDelete={handleDelete}
           onAssign={handleAssign}
-          onWhatsApp={handleWhatsApp}
+          onWhatsApp={(o: any) => setWhatsAppOrder(o)}
           onReproDispo={handleReproDispo}
           onReprogram={() => {
             setOrderToReprogram(selectedOrder);
@@ -6427,7 +6431,15 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           onClose={() => setReceiptOrder(null)}
           onPrint={handlePrintReceipt}
           onDownloadPDF={handleDownloadPDF}
-          onWhatsApp={handleWhatsApp}
+          onWhatsApp={(o: any) => setWhatsAppOrder(o)}
+        />
+      )}
+
+      {whatsAppOrder && (
+        <WhatsAppSendModal
+          order={whatsAppOrder}
+          onClose={() => setWhatsAppOrder(null)}
+          onOpenWaMe={handleWhatsApp}
         />
       )}
 

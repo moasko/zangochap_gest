@@ -94,9 +94,14 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
   const validationGap = validatedRiderTotal - collectedRiderTotal;
   const sessionDate = dateInputValue(workspace.session.date);
   // Cote caisse : on boucle sur le Solde affiche dans l'en-tete.
-  // totalIncome (serveur) = livraisons (validees + restant a valider) + entrees manuelles.
+  // totalIncome (serveur) = livraisons (validees + restant a valider) + entrees
+  // manuelles + corrections positives. On retire ces deux dernieres pour que la
+  // tuile "Livraisons" ne soit pas gonflee par une correction.
   const manualIncomeTotal = manualIncomeOperations.reduce((sum: number, operation: any) => sum + Number(operation.amount || 0), 0);
-  const deliveryIncomeTotal = Number(workspace.totals.totalIncome || 0) - manualIncomeTotal;
+  const positiveCorrectionTotal = workspace.operations
+    .filter((operation: any) => operation.type === "CORRECTION" && Number(operation.amount) > 0)
+    .reduce((sum: number, operation: any) => sum + Number(operation.amount || 0), 0);
+  const deliveryIncomeTotal = Number(workspace.totals.totalIncome || 0) - manualIncomeTotal - positiveCorrectionTotal;
   const expenseTotal = Number(workspace.totals.totalExpense || 0);
   const cashBalance = Number(workspace.totals.balance || 0);
   // Livreurs avec un encaisse mais pas encore valides en caisse.

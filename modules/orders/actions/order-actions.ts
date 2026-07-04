@@ -17,6 +17,7 @@ import { ensureAuth } from "@/lib/auth";
 import { uploadImage } from "@/lib/upload";
 import { checkOrderAccess, generateUniqueRef, upsertCustomerFromOrder } from "../helpers";
 import { decrementStockForOrder, restoreStockForOrder } from "./stock";
+import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
 
 // ============ GET ORDER ============
 export async function getOrder(id: string) {
@@ -375,6 +376,13 @@ export async function createOrder(data: {
     } catch (e) {
       console.error("Failed to record promo usage:", e);
     }
+  }
+
+  // Confirmation WhatsApp automatique (activable dans la console admin WhatsApp).
+  // Uniquement pour les commandes confirmees a la prise (pas les web TO_PROCESS) ;
+  // best-effort : n'echoue jamais la creation.
+  if (status === 'CONFIRMED') {
+    await notifyOrderCreatedWhatsApp(order);
   }
 
   revalidatePath("/zangochap-manager/orders");

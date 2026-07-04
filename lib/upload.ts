@@ -17,9 +17,10 @@ const r2Client = new S3Client({
  * Uploads an image to Cloudflare R2.
  * @param dataUrl Base64 data of the image
  * @param fileName Original filename
+ * @param options format "jpeg" pour les medias WhatsApp (l'API Cloud refuse le WebP), "webp" (defaut) sinon
  * @returns The public URL of the uploaded image
  */
-export async function uploadImage(dataUrl: string, fileName: string): Promise<string> {
+export async function uploadImage(dataUrl: string, fileName: string, options?: { format?: "webp" | "jpeg" }): Promise<string> {
   if (!dataUrl || !dataUrl.startsWith("data:image")) {
     return dataUrl;
   }
@@ -27,26 +28,27 @@ export async function uploadImage(dataUrl: string, fileName: string): Promise<st
   try {
     const base64Data = dataUrl.split(",")[1];
     const buffer = Buffer.from(base64Data, "base64");
-    
+    const format = options?.format || "webp";
+
     // Optimization with Sharp
-    const optimizedBuffer = await sharp(buffer)
-      .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toBuffer();
+    const resized = sharp(buffer).resize(1200, 1200, { fit: "inside", withoutEnlargement: true });
+    const optimizedBuffer = format === "jpeg"
+      ? await resized.jpeg({ quality: 85 }).toBuffer()
+      : await resized.webp({ quality: 80 }).toBuffer();
 
     const timestamp = Date.now();
     const slugifiedName = fileName.toLowerCase()
       .replace(/[^a-z0-9.]/g, "-")
       .replace(/\.[^/.]+$/, ""); // Remove extension
-    
-    const finalFileName = `${timestamp}-${slugifiedName}.webp`;
-    
+
+    const finalFileName = `${timestamp}-${slugifiedName}.${format === "jpeg" ? "jpg" : "webp"}`;
+
     // Upload to R2
     const uploadParams = {
       Bucket: process.env.R2_BUCKET_NAME,
       Key: finalFileName,
       Body: optimizedBuffer,
-      ContentType: "image/webp",
+      ContentType: format === "jpeg" ? "image/jpeg" : "image/webp",
     };
 
     console.log(`[R2_UPLOAD] Uploading to bucket: ${process.env.R2_BUCKET_NAME} as ${finalFileName}`);

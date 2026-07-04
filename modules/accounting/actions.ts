@@ -326,13 +326,19 @@ function orderCollectedAmount(order: any) {
 }
 
 async function getSessionRiderSummaries(session: any) {
+  // Rattachement d'une commande a un jour comptable, par ordre de fiabilite :
+  // deliveryDate, sinon lastDeliveryAttemptAt (pose a la cloture de livraison,
+  // stable), sinon updatedAt (legacy uniquement). updatedAt en premier recours
+  // faisait MIGRER une commande deja validee vers la session du jour d'une
+  // simple modification => risque de double comptage.
   const orders = await db.order.findMany({
     where: {
       deletedAt: null,
       status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] },
       OR: [
         { deliveryDate: { gte: session.date, lte: endOfLocalDay(session.date) } },
-        { deliveryDate: null, updatedAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
+        { deliveryDate: null, lastDeliveryAttemptAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
+        { deliveryDate: null, lastDeliveryAttemptAt: null, updatedAt: { gte: session.date, lte: endOfLocalDay(session.date) } },
       ],
     },
     select: {
@@ -1032,64 +1038,112 @@ export async function getAccountingBilan(filters: {
   const riderIds = Array.from(new Set(filters.riderIds || []));
   const customerIds = Array.from(new Set(filters.customerIds || []));
 
-  const where: any = {
+  // Filtres communs SANS le type : le type est reparti en "cote credit/debit"
+  // ci-dessous pour pouvoir agreger en SQL (une CORRECTION change de cote selon
+  // son signe).
+  const baseWhere: any = {
     session: { is: { date: { gte: dateFrom, lte: dateTo } } },
-    type: { in: operationTypes },
   };
-  if (categoryIds.length) where.categoryId = { in: categoryIds };
-  if (riderIds.length) where.riderId = { in: riderIds };
-  if (customerIds.length) where.customerId = { in: customerIds };
-  if (filters.source && filters.source !== "ALL") where.source = filters.source;
+  if (categoryIds.length) baseWhere.categoryId = { in: categoryIds };
+  if (riderIds.length) baseWhere.riderId = { in: riderIds };
+  if (customerIds.length) baseWhere.customerId = { in: customerIds };
+  if (filters.source && filters.source !== "ALL") baseWhere.source = filters.source;
 
-  const operations = await db.accountingOperation.findMany({
-    where,
-    include: { category: true, session: { select: { date: true, status: true } } },
-    orderBy: { createdAt: "desc" },
-    take: 2000,
-  });
+  const where = { ...baseWhere, type: { in: operationTypes } };
 
-  const totals = summarizeOperations(operations);
+  const incomeClauses: any[] = [];
+  if (operationTypes.includes("INCOME")) incomeClauses.push({ type: "INCOME" });
+  if (operationTypes.includes("CORRECTION")) incomeClauses.push({ type: "CORRECTION", amount: { gt: 0 } });
+  const expenseClauses: any[] = [];
+  if (operationTypes.includes("EXPENSE")) expenseClauses.push({ type: "EXPENSE" });
+  if (operationTypes.includes("CORRECTION")) expenseClauses.push({ type: "CORRECTION", amount: { lt: 0 } });
 
-  const isExpense = (op: any) => op.type === "EXPENSE" || (op.type === "CORRECTION" && Number(op.amount) < 0);
+  // Agregats SQL : les totaux/repartitions couvrent TOUTES les ecritures de la
+  // periode (l'ancien findMany plafonne a 2000 lignes faussait les totaux).
+  const groupSide = (clauses: any[], by: "categoryId" | "sessionId") => (clauses.length
+    ? db.accountingOperation.groupBy({
+      by: [by],
+      where: { ...baseWhere, OR: clauses },
+      _sum: { amount: true },
+      _count: { _all: true },
+    })
+    : Promise.resolve([]));
 
-  const categoryMap = new Map<string, any>();
-  const dayMap = new Map<string, any>();
-  operations.forEach((op: any) => {
-    const amount = Math.abs(Number(op.amount || 0));
-    const expense = isExpense(op);
-
-    const catKey = op.categoryId || "none";
-    const cat = categoryMap.get(catKey) || {
-      categoryId: catKey,
-      name: op.category?.name || "Sans categorie",
-      type: op.category?.type || op.type,
-      income: 0,
-      expense: 0,
-      count: 0,
-    };
-    if (expense) cat.expense += amount; else cat.income += amount;
-    cat.count += 1;
-    categoryMap.set(catKey, cat);
-
-    const dayKey = new Date(op.session.date).toISOString().slice(0, 10);
-    const day = dayMap.get(dayKey) || { date: dayKey, income: 0, expense: 0, count: 0 };
-    if (expense) day.expense += amount; else day.income += amount;
-    day.count += 1;
-    dayMap.set(dayKey, day);
-  });
-
-  const byCategory = Array.from(categoryMap.values())
-    .sort((a: any, b: any) => (b.income + b.expense) - (a.income + a.expense));
-  const byDay = Array.from(dayMap.values())
-    .sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-  const [categories, riders, customers] = await Promise.all([
+  const [incomeByCategory, expenseByCategory, incomeBySession, expenseBySession, operationsCount, rowOperations, categories, riders, customers] = await Promise.all([
+    groupSide(incomeClauses, "categoryId"),
+    groupSide(expenseClauses, "categoryId"),
+    groupSide(incomeClauses, "sessionId"),
+    groupSide(expenseClauses, "sessionId"),
+    db.accountingOperation.count({ where }),
+    db.accountingOperation.findMany({
+      where,
+      include: { category: true, session: { select: { date: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    }),
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
     db.user.findMany({ where: { role: "LIVREUR" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.customer.findMany({ select: { id: true, name: true }, orderBy: { updatedAt: "desc" }, take: 200 }),
   ]);
 
-  const rows = operations.slice(0, 300).map((op: any) => ({
+  const sumAbs = (groups: any[]) => groups.reduce((sum: number, group: any) => sum + Math.abs(Number(group._sum?.amount || 0)), 0);
+  const totalIncome = sumAbs(incomeByCategory);
+  const totalExpense = sumAbs(expenseByCategory);
+  const totals = {
+    totalIncome,
+    totalExpense,
+    balance: totalIncome - totalExpense,
+    count: operationsCount,
+  };
+
+  const categoryById = new Map<string, any>(categories.map((category: any) => [category.id, category]));
+  const categoryMap = new Map<string, any>();
+  const foldCategory = (groups: any[], side: "income" | "expense") => {
+    for (const group of groups) {
+      const key = group.categoryId || "none";
+      const known = categoryById.get(group.categoryId);
+      const entry = categoryMap.get(key) || {
+        categoryId: key,
+        name: known?.name || "Sans categorie",
+        type: known?.type || (side === "expense" ? "EXPENSE" : "INCOME"),
+        income: 0,
+        expense: 0,
+        count: 0,
+      };
+      entry[side] += Math.abs(Number(group._sum?.amount || 0));
+      entry.count += Number(group._count?._all || 0);
+      categoryMap.set(key, entry);
+    }
+  };
+  foldCategory(incomeByCategory, "income");
+  foldCategory(expenseByCategory, "expense");
+  const byCategory = Array.from(categoryMap.values())
+    .sort((a: any, b: any) => (b.income + b.expense) - (a.income + a.expense));
+
+  // Jour comptable en date LOCALE (dateInputValue) : toISOString (UTC) decalait
+  // chaque journee d'un jour des que le serveur n'etait pas en UTC.
+  const sessionIds = Array.from(new Set([...incomeBySession, ...expenseBySession].map((group: any) => group.sessionId)));
+  const sessionDates = sessionIds.length
+    ? await db.accountingSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, date: true } })
+    : [];
+  const dayBySession = new Map<string, string>(sessionDates.map((item: any) => [item.id, dateInputValue(new Date(item.date))]));
+  const dayMap = new Map<string, any>();
+  const foldDay = (groups: any[], side: "income" | "expense") => {
+    for (const group of groups) {
+      const dayKey = dayBySession.get(group.sessionId);
+      if (!dayKey) continue;
+      const entry = dayMap.get(dayKey) || { date: dayKey, income: 0, expense: 0, count: 0 };
+      entry[side] += Math.abs(Number(group._sum?.amount || 0));
+      entry.count += Number(group._count?._all || 0);
+      dayMap.set(dayKey, entry);
+    }
+  };
+  foldDay(incomeBySession, "income");
+  foldDay(expenseBySession, "expense");
+  const byDay = Array.from(dayMap.values())
+    .sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+  const rows = rowOperations.map((op: any) => ({
     id: op.id,
     date: op.session.date,
     type: op.type,
@@ -1108,7 +1162,7 @@ export async function getAccountingBilan(filters: {
     byCategory,
     byDay,
     operations: rows,
-    operationsCount: operations.length,
+    operationsCount,
     categories,
     riders,
     customers,

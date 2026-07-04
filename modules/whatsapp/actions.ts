@@ -1,18 +1,28 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { ensureAuth } from "@/lib/auth";
+import { uploadImage } from "@/lib/upload";
 import { getWhatsAppConfigurationStatus, getWhatsAppServerConfig } from "./config";
+import { normalizeIvorianPhone } from "./message-builder";
+import {
+  SENT_LOG_KEY,
+  SETTINGS_KEY,
+  WEBHOOK_LOG_KEY,
+  appendCmsLog,
+  getWhatsAppSettings,
+  graphErrorMessage,
+  graphFetch,
+  readCmsLog,
+  sendWhatsAppContent,
+} from "./send";
 
 const WHATSAPP_PATH = "/zangochap-manager/admin/whatsapp";
-const SENT_LOG_KEY = "whatsapp:sent-log";
-const WEBHOOK_LOG_KEY = "whatsapp:webhook-log";
-// Journal glissant en CmsContent (pas de migration) : on garde les N derniers evenements.
-const LOG_LIMIT = 100;
 
 const SendMessageSchema = z.discriminatedUnion("mode", [
   z.object({
@@ -26,12 +36,9 @@ const SendMessageSchema = z.discriminatedUnion("mode", [
     mode: z.literal("text"),
     recipient: z.string().trim().min(8).max(20),
     message: z.string().trim().min(1).max(4096),
+    imageUrl: z.string().trim().url().max(1000).optional(),
   }),
 ]);
-
-function normalizePhone(value: string) {
-  return value.replace(/\D/g, "");
-}
 
 function getWebhookUrl(requestHeaders: Headers) {
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host");
@@ -44,61 +51,14 @@ async function requireWhatsAppAdmin() {
   return ensureAuth(["admin", "developer"]);
 }
 
-type GraphResult = { ok: boolean; status: number; result: Record<string, any> };
-
-async function graphFetch(path: string, init?: RequestInit): Promise<GraphResult> {
-  const config = getWhatsAppServerConfig();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(`https://graph.facebook.com/${config.graphApiVersion}/${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-        ...(init?.headers || {}),
-      },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const result = await response.json().catch(() => ({}));
-    return { ok: response.ok, status: response.status, result };
-  } catch (error) {
-    const message = error instanceof Error && error.name === "AbortError"
-      ? "La requête Meta a expiré."
-      : "Impossible de joindre l'API WhatsApp Cloud.";
-    return { ok: false, status: 0, result: { error: { message } } };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function graphErrorMessage(graph: GraphResult, fallback: string) {
-  return graph.result?.error?.message || `${fallback} (${graph.status || "réseau"}).`;
-}
-
-async function readLog(key: string) {
-  const row = await prisma.cmsContent.findUnique({ where: { key } });
-  return Array.isArray(row?.data) ? (row!.data as Prisma.JsonArray) : [];
-}
-
-async function appendLog(key: string, entry: Record<string, unknown>, updatedBy?: string) {
-  const list = await readLog(key);
-  const data = [entry, ...list].slice(0, LOG_LIMIT) as Prisma.InputJsonArray;
-  await prisma.cmsContent.upsert({
-    where: { key },
-    update: { data, updatedBy },
-    create: { key, data, updatedBy },
-  });
-}
-
 export async function getWhatsAppConsoleData() {
   await requireWhatsAppAdmin();
   const config = getWhatsAppServerConfig();
-  const [requestHeaders, sentLog, webhookLog] = await Promise.all([
+  const [requestHeaders, sentLog, webhookLog, settings] = await Promise.all([
     headers(),
-    readLog(SENT_LOG_KEY),
-    readLog(WEBHOOK_LOG_KEY),
+    readCmsLog(SENT_LOG_KEY),
+    readCmsLog(WEBHOOK_LOG_KEY),
+    getWhatsAppSettings(),
   ]);
 
   return {
@@ -106,7 +66,35 @@ export async function getWhatsAppConsoleData() {
     webhookUrl: getWebhookUrl(requestHeaders),
     sentLog,
     webhookLog,
+    settings,
   };
+}
+
+// Mise a jour partielle : seuls les champs fournis sont modifies.
+export async function updateWhatsAppSettings(input: {
+  autoSendOnOrder?: boolean;
+  orderTemplate?: string | null;
+  orderImageUrl?: string | null;
+}) {
+  const session = await requireWhatsAppAdmin();
+  const current = await getWhatsAppSettings();
+  const data = {
+    autoSendOnOrder: input.autoSendOnOrder !== undefined ? Boolean(input.autoSendOnOrder) : current.autoSendOnOrder,
+    // Chaine vide => retour au modele par defaut (null).
+    orderTemplate: input.orderTemplate !== undefined
+      ? (input.orderTemplate?.trim() || null)
+      : current.orderTemplate,
+    orderImageUrl: input.orderImageUrl !== undefined
+      ? (input.orderImageUrl?.trim() || null)
+      : current.orderImageUrl,
+  };
+  await prisma.cmsContent.upsert({
+    where: { key: SETTINGS_KEY },
+    update: { data, updatedBy: session.email },
+    create: { key: SETTINGS_KEY, data, updatedBy: session.email },
+  });
+  revalidatePath(WHATSAPP_PATH);
+  return { success: true as const, settings: data };
 }
 
 // Diagnostic en direct : etat du numero (qualite, nom verifie) et sante du token
@@ -199,32 +187,38 @@ export async function sendWhatsAppMessage(input: unknown) {
     return { success: false as const, error: "Ajoutez WHATSAPP_ACCESS_TOKEN et WHATSAPP_PHONE_NUMBER_ID avant l'envoi." };
   }
 
-  const recipient = normalizePhone(parsed.data.recipient);
+  const recipient = normalizeIvorianPhone(parsed.data.recipient);
   if (!/^\d{8,15}$/.test(recipient)) {
     return { success: false as const, error: "Utilisez le format international sans espaces, par exemple 2250700000000." };
   }
 
   const data = parsed.data;
-  const payload = data.mode === "template"
-    ? {
-      messaging_product: "whatsapp",
-      to: recipient,
-      type: "template",
-      template: {
-        name: data.templateName,
-        language: { code: data.language },
-        ...(data.params?.length
-          ? { components: [{ type: "body", parameters: data.params.map((text) => ({ type: "text", text })) }] }
-          : {}),
-      },
-    }
-    : {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: recipient,
-      type: "text",
-      text: { preview_url: false, body: data.message },
-    };
+
+  // Le mode texte (avec image optionnelle) passe par le coeur partage,
+  // qui gere l'image + legende et journalise l'envoi.
+  if (data.mode === "text") {
+    const result = await sendWhatsAppContent({
+      recipient,
+      body: data.message,
+      imageUrl: data.imageUrl || null,
+      byName: session.name,
+    });
+    revalidatePath(WHATSAPP_PATH);
+    return result;
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: recipient,
+    type: "template",
+    template: {
+      name: data.templateName,
+      language: { code: data.language },
+      ...(data.params?.length
+        ? { components: [{ type: "body", parameters: data.params.map((text) => ({ type: "text", text })) }] }
+        : {}),
+    },
+  };
 
   const graph = await graphFetch(`${config.phoneNumberId}/messages`, {
     method: "POST",
@@ -237,17 +231,36 @@ export async function sendWhatsAppMessage(input: unknown) {
     byName: session.name,
     mode: data.mode,
     recipient,
-    templateName: data.mode === "template" ? data.templateName : null,
-    preview: data.mode === "text" ? data.message.slice(0, 120) : null,
+    templateName: data.templateName,
+    preview: null,
     status: graph.ok ? "sent" : "failed",
     error: graph.ok ? null : graphErrorMessage(graph, "Meta a refusé la requête"),
     messageId: messageId ? messageId.slice(-20) : null,
   };
-  await appendLog(SENT_LOG_KEY, logEntry, session.email);
+  await appendCmsLog(SENT_LOG_KEY, logEntry, session.email);
   revalidatePath(WHATSAPP_PATH);
 
   if (!graph.ok) {
     return { success: false as const, error: logEntry.error as string };
   }
   return { success: true as const, messageId };
+}
+
+// Upload d'un media WhatsApp vers R2 en JPEG (l'API Cloud refuse le WebP pour
+// les images). Retourne l'URL publique a joindre aux messages.
+export async function uploadWhatsAppMedia(dataUrl: string, fileName: string) {
+  await requireWhatsAppAdmin();
+  if (!dataUrl?.startsWith("data:image")) {
+    return { success: false as const, error: "Fichier invalide : choisissez une image." };
+  }
+  // ~5 Mo max une fois decode (limite Meta pour les images).
+  if (dataUrl.length > 7_000_000) {
+    return { success: false as const, error: "Image trop lourde (5 Mo maximum)." };
+  }
+  try {
+    const url = await uploadImage(dataUrl, fileName || "whatsapp-media", { format: "jpeg" });
+    return { success: true as const, url };
+  } catch (error: any) {
+    return { success: false as const, error: error?.message || "Upload impossible." };
+  }
 }

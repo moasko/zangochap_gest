@@ -40,6 +40,14 @@ function weekRange() {
 
 const SOURCE_LABELS: Record<string, string> = { DELIVERY: "Livraison", MANUAL: "Manuel", CUSTOMER: "Client", OTHER: "Autre" };
 
+// Neutralise l'injection de formule tableur : une cellule texte commencant par
+// =, +, @ ou - (hors nombre) est prefixee d'une apostrophe avant l'echappement.
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  const risky = /^[=+@-]/.test(text) && Number.isNaN(Number(text));
+  return `"${(risky ? `'${text}` : text).replace(/"/g, '""')}"`;
+}
+
 const PRESETS: Array<{ id: Preset; label: string }> = [
   { id: "week", label: "Cette semaine" },
   { id: "month", label: "Ce mois" },
@@ -117,7 +125,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
       op.clientName || "",
       op.amount,
     ]);
-    const csv = [header, ...rows].map((row) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
