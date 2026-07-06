@@ -18,6 +18,40 @@ import { uploadImage } from "@/lib/upload";
 import { checkOrderAccess, generateUniqueRef, upsertCustomerFromOrder } from "../helpers";
 import { decrementStockForOrder, restoreStockForOrder } from "./stock";
 import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
+import { triggerAutomations } from "@/modules/automations/engine";
+
+// ============ POINT RELAIS ============
+// L'attribution relais vit sous forme d'une ligne marqueur dans deliveryNote,
+// parsee par regex cote boutique. Ces helpers garantissent qu'une seule ligne
+// marqueur existe et que les valeurs injectees ne cassent pas le parsing.
+const RELAY_MARKER = "[POINT_RELAIS]";
+const RELAY_COMMUNE = "boutique";
+
+function sanitizeRelayMarkerValue(value?: string | null) {
+  return String(value || "").replace(/[|\r\n]+/g, " ").trim();
+}
+
+function buildRelayMarkerLine(relayPointName: string, note?: string | null) {
+  const cleanNote = sanitizeRelayMarkerValue(note);
+  return `${RELAY_MARKER} Boutique: ${sanitizeRelayMarkerValue(relayPointName)}${cleanNote ? ` | Note: ${cleanNote}` : ""}`;
+}
+
+function getRelayMarkerLine(note?: string | null) {
+  return String(note || "").split("\n").find((line) => line.includes(RELAY_MARKER)) || null;
+}
+
+function getRelayNameFromMarker(note?: string | null) {
+  return getRelayMarkerLine(note)?.match(/Boutique:\s*([^|]+)/)?.[1]?.trim() || null;
+}
+
+function stripRelayMarker(note?: string | null) {
+  const cleaned = String(note || "")
+    .split("\n")
+    .filter((line) => !line.includes(RELAY_MARKER))
+    .join("\n")
+    .trim();
+  return cleaned || null;
+}
 
 // ============ GET ORDER ============
 export async function getOrder(id: string) {
@@ -110,6 +144,7 @@ export async function createOrder(data: {
       where: {
         role: Role.POINT_RELAIS,
         serviceLabel: { equals: requestedRelay, mode: "insensitive" },
+        isPaused: false,
       },
       select: { serviceLabel: true },
     });
@@ -122,7 +157,7 @@ export async function createOrder(data: {
 
   const deliveryLocation = relayPointName || data.customerLocation;
   const relayDeliveryNote = relayPointName
-    ? `[POINT_RELAIS] Boutique: ${relayPointName}${data.deliveryNote?.trim() ? ` | Note: ${data.deliveryNote.trim()}` : ""}`
+    ? buildRelayMarkerLine(relayPointName, data.deliveryNote)
     : data.deliveryNote;
 
   // Process images & resolve product IDs. Rupture items remain orderable:
@@ -385,6 +420,9 @@ export async function createOrder(data: {
     await notifyOrderCreatedWhatsApp(order);
   }
 
+  // Automatisations « Commande créée » (best-effort : ne bloque jamais la création).
+  await triggerAutomations({ type: 'order.created', order });
+
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/orders/to-process");
   revalidatePath("/zangochap-manager/dashboard");
@@ -447,6 +485,58 @@ export async function updateOrderDetails(orderId: string, data: any) {
   for (const key of ALLOWED_FIELDS) {
     if (data[key] !== undefined) {
       sanitized[key] = (key === 'deliveryFee' || key === 'total') ? Number(data[key]) || 0 : String(data[key]);
+    }
+  }
+
+  // Coherence relais : une edition libre ne doit ni orpheliner un colis relais
+  // (marqueur [POINT_RELAIS] ecrase) ni passer une commande en "Boutique" sans marqueur.
+  const relayFieldsTouched = ["commune", "customerLocation", "deliveryNote"].some((key) => key in sanitized);
+  if (relayFieldsTouched) {
+    const prevCommune = String(order.commune || "").trim().toLowerCase();
+    const nextCommune = String(("commune" in sanitized ? sanitized.commune : order.commune) || "").trim().toLowerCase();
+    const nextNote = "deliveryNote" in sanitized ? sanitized.deliveryNote : order.deliveryNote;
+
+    if (nextCommune === RELAY_COMMUNE) {
+      let relayName = getRelayNameFromMarker(order.deliveryNote) || String(order.customerLocation || "").trim() || null;
+      const locationTouched = "customerLocation" in sanitized || "commune" in sanitized;
+      if (locationTouched) {
+        const requestedRelay = String(("customerLocation" in sanitized ? sanitized.customerLocation : order.customerLocation) || "").trim();
+        if (!requestedRelay) {
+          throw new Error("Veuillez sélectionner le point relais de livraison.");
+        }
+        const relayAccount = await prisma.user.findFirst({
+          where: {
+            role: Role.POINT_RELAIS,
+            serviceLabel: { equals: requestedRelay, mode: "insensitive" },
+          },
+          select: { serviceLabel: true },
+        });
+        relayName = relayAccount?.serviceLabel?.trim() || null;
+        if (!relayName) {
+          throw new Error(`Aucun point relais nommé "${requestedRelay}". Sélectionnez une boutique existante.`);
+        }
+        sanitized.customerLocation = relayName;
+      }
+      if (!relayName) {
+        throw new Error("Veuillez sélectionner le point relais de livraison.");
+      }
+      // Conserve la ligne marqueur existante (emplacement, note boutique) tant
+      // qu'elle pointe vers la meme boutique ; sinon la reconstruit.
+      const existingMarker = getRelayMarkerLine(order.deliveryNote);
+      const markerLine = existingMarker && getRelayNameFromMarker(order.deliveryNote)?.toLowerCase() === relayName.toLowerCase()
+        ? existingMarker
+        : buildRelayMarkerLine(relayName);
+      const rest = stripRelayMarker(nextNote);
+      sanitized.deliveryNote = rest ? `${markerLine}\n${rest}` : markerLine;
+    } else if (prevCommune === RELAY_COMMUNE && "commune" in sanitized) {
+      // Sortie explicite du circuit relais : le marqueur ne doit pas survivre.
+      sanitized.deliveryNote = stripRelayMarker(nextNote) ?? "";
+    } else if ("deliveryNote" in sanitized && getRelayMarkerLine(order.deliveryNote) && !getRelayMarkerLine(nextNote)) {
+      // Colis depose en boutique hors commune "Boutique" (conversion au depot) :
+      // l'edition de la note ne doit pas effacer le rattachement au gerant.
+      const rest = stripRelayMarker(nextNote);
+      const markerLine = getRelayMarkerLine(order.deliveryNote) as string;
+      sanitized.deliveryNote = rest ? `${markerLine}\n${rest}` : markerLine;
     }
   }
 

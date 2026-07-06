@@ -6,6 +6,7 @@ export async function getActiveRelayPoints() {
     where: {
       role: Role.POINT_RELAIS,
       serviceLabel: { not: null },
+      isPaused: false,
     },
     select: { serviceLabel: true },
     orderBy: { serviceLabel: "asc" },

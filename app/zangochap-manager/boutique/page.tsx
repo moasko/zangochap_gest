@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { OrderStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/modules/auth/actions";
+import { getActiveRelayPoints } from "@/modules/boutique/relay-queries";
 import BoutiqueRelayClient, { type RelayOrder } from "./BoutiqueRelayClient";
 
 const RELAY_MARKER = "[POINT_RELAIS]";
@@ -57,6 +58,8 @@ export default async function BoutiqueRelayPage() {
   }
 
   const assignedRelay = String(session.serviceLabel || "").trim();
+  const canDeposit = ["admin", "developer", "collection"].includes(role);
+  const relayPoints = canDeposit ? await getActiveRelayPoints() : [];
 
   const orders = await prisma.order.findMany({
     where: {
@@ -89,6 +92,7 @@ export default async function BoutiqueRelayPage() {
       commune: true,
       total: true,
       deliveryFee: true,
+      discount: true,
       status: true,
       deliveryNote: true,
       returnReason: true,
@@ -139,6 +143,7 @@ export default async function BoutiqueRelayPage() {
       commune: order.commune,
       total: order.total,
       deliveryFee: order.deliveryFee,
+      discount: order.discount,
       status: order.status,
       boutiqueName: meta.boutiqueName,
       shelfCode: meta.shelfCode,
@@ -168,6 +173,7 @@ export default async function BoutiqueRelayPage() {
   return (
     <BoutiqueRelayClient
       initialOrders={relayOrders}
+      relayPoints={relayPoints}
       user={{
         name: String(session.name || "Equipe"),
         role,

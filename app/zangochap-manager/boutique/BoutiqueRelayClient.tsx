@@ -38,6 +38,7 @@ export type RelayOrder = {
   commune: string | null;
   total: number;
   deliveryFee: number;
+  discount: number;
   status: string;
   boutiqueName: string;
   shelfCode: string | null;
@@ -124,9 +125,11 @@ function formatDate(value?: string | null) {
 
 export default function BoutiqueRelayClient({
   initialOrders,
+  relayPoints,
   user,
 }: {
   initialOrders: RelayOrder[];
+  relayPoints: string[];
   user: { name: string; role: string; relayName: string | null };
 }) {
   const router = useRouter();
@@ -138,7 +141,7 @@ export default function BoutiqueRelayClient({
   const [depositOpen, setDepositOpen] = useState(false);
   const [historyOrder, setHistoryOrder] = useState<RelayOrder | null>(null);
   const [depositRef, setDepositRef] = useState("");
-  const [depositBoutique, setDepositBoutique] = useState("Boutique principale");
+  const [depositBoutique, setDepositBoutique] = useState(relayPoints[0] || "");
   const [depositShelf, setDepositShelf] = useState("");
   const [depositNote, setDepositNote] = useState("");
   const [pickupReceiver, setPickupReceiver] = useState("");
@@ -147,6 +150,9 @@ export default function BoutiqueRelayClient({
   const [cancelOutcome, setCancelOutcome] = useState(CANCEL_OUTCOMES[0]);
   const [cancelReason, setCancelReason] = useState("");
   const canDeposit = ["admin", "developer", "collection"].includes(user.role);
+  // Les actions de sortie (recuperation / cloture) sont reservees au gerant et aux admins :
+  // les memes roles que cote serveur, pour ne pas afficher de boutons voues a l'echec.
+  const canManageParcel = ["admin", "developer", "point_relais"].includes(user.role);
 
   const counts = useMemo(() => {
     return {
@@ -244,7 +250,7 @@ export default function BoutiqueRelayClient({
 
   const openPickup = (order: RelayOrder) => {
     setPickupReceiver(order.customerName);
-    setPickupAmount(String(order.total + order.deliveryFee));
+    setPickupAmount(String(Math.max(0, order.total + order.deliveryFee - (order.discount || 0))));
     setPickupNote("");
     setActivePanel({ kind: "pickup", order });
   };
@@ -363,9 +369,9 @@ export default function BoutiqueRelayClient({
             <div className={styles.cardFooter}>
               <div>
                 <span>Total</span>
-                <strong>{formatPrice(order.total + order.deliveryFee)}</strong>
+                <strong>{formatPrice(Math.max(0, order.total + order.deliveryFee - (order.discount || 0)))}</strong>
               </div>
-              {isAvailable(order) ? (
+              {isAvailable(order) && canManageParcel ? (
                 <div className={styles.actions}>
                   <button type="button" className={styles.historyButton} onClick={() => setHistoryOrder(order)}>
                     <History size={16} />
@@ -378,6 +384,14 @@ export default function BoutiqueRelayClient({
                   <button type="button" className={styles.primaryButton} onClick={() => openPickup(order)}>
                     <CheckCircle2 size={16} />
                     <span>Récupéré OK</span>
+                  </button>
+                </div>
+              ) : isAvailable(order) ? (
+                <div className={styles.inactiveActions}>
+                  <p className={styles.closedReason}>Sortie gérée par le gérant de la boutique</p>
+                  <button type="button" className={styles.historyButton} onClick={() => setHistoryOrder(order)}>
+                    <History size={16} />
+                    <span>Historique</span>
                   </button>
                 </div>
               ) : (
@@ -420,7 +434,12 @@ export default function BoutiqueRelayClient({
               <div className={styles.formRow}>
                 <label>
                   <span>Boutique</span>
-                  <input value={depositBoutique} onChange={(event) => setDepositBoutique(event.target.value)} placeholder="Nom boutique" />
+                  <select value={depositBoutique} onChange={(event) => setDepositBoutique(event.target.value)} required>
+                    <option value="">Choisir un point relais...</option>
+                    {relayPoints.map((relayPoint) => (
+                      <option key={relayPoint} value={relayPoint}>{relayPoint}</option>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   <span>Casier ou emplacement</span>

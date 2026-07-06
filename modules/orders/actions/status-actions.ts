@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/modules/auth/actions";
 import { checkOrderAccess, generateUniqueRef, isRole } from "../helpers";
 import { decrementStockForOrder, InsufficientStockError, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
+import { checkLowStockAfterOrder, triggerAutomations } from "@/modules/automations/engine";
 
 type UpdateOrderStatusResult = {
   success: true;
@@ -178,6 +179,14 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       return { success: false, code: error.code, error: error.message };
     }
     throw error;
+  }
+
+  // Automatisations (best-effort : n'affectent jamais le changement de statut).
+  if (updatedOrder && normalizedStatus !== order.status) {
+    await triggerAutomations({ type: 'order.status_changed', order: updatedOrder, fromStatus: order.status, toStatus: normalizedStatus });
+  }
+  if (updatedOrder && normalizedStatus === 'PACKED') {
+    await checkLowStockAfterOrder(updatedOrder);
   }
 
   revalidatePath("/zangochap-manager/orders");
@@ -391,7 +400,7 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
     byName: session.name,
   });
 
-  await prisma.order.update({
+  const partiallyDelivered = await prisma.order.update({
     where: { id: orderId },
     data: {
       status: 'PARTIALLY_DELIVERED',
@@ -399,8 +408,12 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
       deliveryFee: finalDeliveryFee,
       amountReceived: finalAmountReceived,
       history,
-    }
+    },
+    include: { items: true },
   });
+
+  // Automatisations (best-effort).
+  await triggerAutomations({ type: 'order.status_changed', order: partiallyDelivered, fromStatus: order.status, toStatus: 'PARTIALLY_DELIVERED' });
 
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/dashboard");

@@ -7,6 +7,18 @@ import { ensureAuth } from "@/lib/auth";
 import { isRole } from "../helpers";
 import type { Prisma } from "@prisma/client";
 
+// Commandes livrees via point relais : l'argent est encaisse par la boutique,
+// jamais par le livreur. Elles sont exclues des montants a regler.
+// NB: le OR explicite est necessaire car les filtres NOT/notIn de Prisma
+// excluent aussi les lignes ou le champ est null (commandes livrees normales).
+const BOUTIQUE_CASHED_STATUSES = ["BOUTIQUE_PICKED_UP", "BOUTIQUE_DELIVERED_OTHER"];
+const NOT_BOUTIQUE_CASHED: Prisma.OrderWhereInput = {
+  OR: [
+    { lastDeliveryAttemptStatus: null },
+    { lastDeliveryAttemptStatus: { notIn: BOUTIQUE_CASHED_STATUSES } },
+  ],
+};
+
 type SettlementAmountOrder = {
   total: number | null;
   deliveryFee: number | null;
@@ -210,7 +222,10 @@ export async function getPendingSettlements() {
     where: {
       status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
       settlementId: null,
-      deliverymanId: { not: null }
+      deliverymanId: { not: null },
+      // L'encaissement en point relais est fait par la boutique, pas par le
+      // livreur : ces commandes ne doivent jamais entrer dans son reglement.
+      ...NOT_BOUTIQUE_CASHED,
     },
     include: {
       items: { select: { name: true, qty: true, price: true } },
@@ -266,6 +281,7 @@ export async function createSettlement(deliverymanId: string, orderIds: string[]
       deliverymanId,
       settlementId: null,
       status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
+      ...NOT_BOUTIQUE_CASHED,
     }
   });
   if (orders.length !== orderIds.length) {
@@ -371,6 +387,7 @@ export async function getDeliverySettlementDashboard(from?: string, to?: string,
         ...riderFilter,
         status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
         settlementId: null,
+        ...NOT_BOUTIQUE_CASHED,
         ...(deliveryDateRange ? { deliveryDate: deliveryDateRange } : {}),
       },
       select: deliverySettlementOrderSelect,
@@ -493,6 +510,7 @@ export async function getRiderSettlementStats(from?: string, to?: string, riderI
       ...(riderId ? { deliverymanId: riderId } : { deliverymanId: { not: null } }),
       status: { in: ['DELIVERED', 'PARTIALLY_DELIVERED'] },
       settlementId: null,
+      ...NOT_BOUTIQUE_CASHED,
     },
     {
       ...getDeliveryIssueRiderWhere(riderId),

@@ -141,8 +141,6 @@ export default async function RootLayout({
             {children}
           </Providers>
         </StyledJsxRegistry>
-
-
       </body>
     </html>
   );

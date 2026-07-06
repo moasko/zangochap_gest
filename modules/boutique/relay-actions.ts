@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { OrderStatus, type Prisma } from "@prisma/client";
+import { OrderStatus, Role, type Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { ensureAuth } from "@/lib/auth";
 
@@ -41,9 +41,17 @@ function getHistory(history: Prisma.JsonValue | null | undefined) {
   return Array.isArray(history) ? [...history] : [];
 }
 
+// Le marqueur relais vit sur une seule ligne parsee par regex : on neutralise
+// les separateurs (| et retours ligne) dans les valeurs injectees.
+function sanitizeMarkerValue(value?: string) {
+  return String(value || "").replace(/[|\r\n]+/g, " ").trim();
+}
+
 function appendRelayNote(currentNote: string | null | undefined, boutiqueName: string, shelfCode?: string, note?: string) {
   const cleanCurrent = currentNote?.trim();
-  const relayLine = `${RELAY_MARKER} Boutique: ${boutiqueName}${shelfCode ? ` | Emplacement: ${shelfCode}` : ""}${note ? ` | Note: ${note}` : ""}`;
+  const cleanShelf = sanitizeMarkerValue(shelfCode);
+  const cleanNote = sanitizeMarkerValue(note);
+  const relayLine = `${RELAY_MARKER} Boutique: ${sanitizeMarkerValue(boutiqueName)}${cleanShelf ? ` | Emplacement: ${cleanShelf}` : ""}${cleanNote ? ` | Note: ${cleanNote}` : ""}`;
   if (!cleanCurrent) return relayLine;
   if (cleanCurrent.includes(RELAY_MARKER)) {
     return cleanCurrent
@@ -90,20 +98,35 @@ export async function depositRelayParcelAction(data: {
   note?: string;
 }) {
   const session = await ensureAuth(["admin", "developer", "collection"]);
-  const orderRef = normalizeText(data.orderRef).toUpperCase();
-  const boutiqueName = normalizeText(data.boutiqueName);
+  const rawRef = normalizeText(data.orderRef);
+  const orderRef = rawRef.toUpperCase();
+  const requestedBoutique = normalizeText(data.boutiqueName);
   const shelfCode = normalizeText(data.shelfCode);
   const note = normalizeText(data.note);
 
-  if (!orderRef) return { success: false, error: "Reference de colis obligatoire." };
-  if (!boutiqueName) return { success: false, error: "Nom de la boutique obligatoire." };
+  if (!rawRef) return { success: false, error: "Reference de colis obligatoire." };
+  if (!requestedBoutique) return { success: false, error: "Nom de la boutique obligatoire." };
+
+  // Le rattachement au gerant se fait par egalite exacte sur serviceLabel :
+  // on valide et canonise le nom pour eviter les colis orphelins (faute de frappe).
+  const relayAccount = await prisma.user.findFirst({
+    where: {
+      role: Role.POINT_RELAIS,
+      serviceLabel: { equals: requestedBoutique, mode: "insensitive" },
+    },
+    select: { serviceLabel: true },
+  });
+  const boutiqueName = relayAccount?.serviceLabel?.trim();
+  if (!boutiqueName) {
+    return { success: false, error: `Aucun point relais nomme "${requestedBoutique}". Verifiez le nom de la boutique.` };
+  }
 
   const order = await prisma.order.findFirst({
     where: {
       deletedAt: null,
       OR: [
         { ref: orderRef },
-        { id: orderRef },
+        { id: rawRef },
       ],
     },
     select: {
@@ -113,6 +136,8 @@ export async function depositRelayParcelAction(data: {
       history: true,
       deliveryNote: true,
       customerName: true,
+      deliverymanId: true,
+      deliverymanName: true,
     },
   });
 
@@ -135,6 +160,15 @@ export async function depositRelayParcelAction(data: {
       ...actor,
     });
   }
+  // Le depot met fin a la mission du livreur : l'encaissement se fera en boutique,
+  // la commande ne doit plus entrer dans son reglement.
+  if (order.deliverymanId) {
+    history.push({
+      at: new Date().toISOString(),
+      action: `Colis remis en boutique par le livreur ${order.deliverymanName || ""} : fin de mission livraison`.trim(),
+      ...actor,
+    });
+  }
 
   const updated = await prisma.order.update({
     where: { id: order.id },
@@ -143,6 +177,8 @@ export async function depositRelayParcelAction(data: {
       history,
       deliveryNote: appendRelayNote(order.deliveryNote, boutiqueName, shelfCode, note),
       deliveryDate: new Date(),
+      deliverymanId: null,
+      deliverymanName: null,
       lastDeliveryAttemptAt: new Date(),
       lastDeliveryAttemptStatus: "BOUTIQUE_AVAILABLE",
       lastDeliveryAttemptReason: note || null,
@@ -169,7 +205,7 @@ export async function markRelayParcelPickedUpAction(data: {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true, ref: true, status: true, history: true, deliveryNote: true },
+    select: { id: true, ref: true, status: true, history: true, deliveryNote: true, total: true, deliveryFee: true, discount: true },
   });
 
   if (!order) return { success: false, error: "Colis introuvable." };
@@ -179,6 +215,12 @@ export async function markRelayParcelPickedUpAction(data: {
     return { success: false, error: "Ce colis n'est pas marque disponible en boutique." };
   }
 
+  // La compta se base sur l'encaisse : jamais de livraison relais sans montant.
+  // Champ vide = montant attendu ; un 0 explicite reste possible.
+  const finalAmountReceived = amountReceived !== undefined
+    ? amountReceived
+    : Math.max(0, order.total + order.deliveryFee - (order.discount || 0));
+
   const actor = actorFromSession(session);
   const history = getHistory(order.history);
   history.push({
@@ -186,13 +228,11 @@ export async function markRelayParcelPickedUpAction(data: {
     action: `Point relais : colis recupere par ${receiverName}`,
     ...actor,
   });
-  if (amountReceived !== undefined) {
-    history.push({
-      at: new Date().toISOString(),
-      action: `Montant recu boutique : ${amountReceived} F`,
-      ...actor,
-    });
-  }
+  history.push({
+    at: new Date().toISOString(),
+    action: `Montant recu boutique : ${finalAmountReceived} F`,
+    ...actor,
+  });
   if (note) {
     history.push({
       at: new Date().toISOString(),
@@ -207,7 +247,7 @@ export async function markRelayParcelPickedUpAction(data: {
       status: OrderStatus.DELIVERED,
       history,
       deliveredAt: new Date().toISOString(),
-      amountReceived,
+      amountReceived: finalAmountReceived,
       lastDeliveryAttemptAt: new Date(),
       lastDeliveryAttemptStatus: "BOUTIQUE_PICKED_UP",
       lastDeliveryAttemptReason: note || null,

@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { getSession } from "@/modules/auth/actions";
 import { isRole } from "../helpers";
 import { decrementStockForOrder } from "./stock";
+import { triggerAutomations } from "@/modules/automations/engine";
 
 const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
 const READY_FOR_DELIVERY_STATUSES = ["PACKED", "REPRO_DISPO"] as const;
@@ -49,6 +50,21 @@ async function ensureDeliveryStock(order: DeliveryAssignmentOrderWithItems, sess
   if (order.stockDecremented) return;
   if (!READY_FOR_DELIVERY_STATUSES.includes(order.status as typeof READY_FOR_DELIVERY_STATUSES[number])) return;
   await decrementStockForOrder(order, session, tx);
+}
+
+// L'attribution fait passer la commande en livraison ici (et non via
+// updateOrderStatus) : on emet donc l'evenement d'automatisation nous-memes.
+// Best-effort : ne doit jamais faire echouer l'attribution.
+async function emitOnDeliveryAutomations(orders: DeliveryAssignmentOrderWithItems[]) {
+  const transitioned = orders.filter((order) =>
+    READY_FOR_DELIVERY_STATUSES.includes(order.status as typeof READY_FOR_DELIVERY_STATUSES[number])
+  );
+  for (const order of transitioned) {
+    const updated = await prisma.order.findUnique({ where: { id: order.id }, include: { items: true } });
+    if (updated?.status === "ON_DELIVERY") {
+      await triggerAutomations({ type: "order.status_changed", order: updated, fromStatus: order.status, toStatus: "ON_DELIVERY" });
+    }
+  }
 }
 
 function revalidateDeliveryAssignmentPaths() {
@@ -108,6 +124,10 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
       },
     });
   });
+
+  if (!isUnassigning) {
+    await emitOnDeliveryAutomations([order]);
+  }
 
   revalidateDeliveryAssignmentPaths();
   return { success: true };
@@ -169,6 +189,10 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
       });
     });
   }));
+
+  if (!isUnassigning) {
+    await emitOnDeliveryAutomations(orders);
+  }
 
   revalidateDeliveryAssignmentPaths();
   return { success: true };
@@ -267,6 +291,8 @@ export async function autoAssignDeliveryOrders(orderIds: string[]) {
       });
     });
   }));
+
+  await emitOnDeliveryAutomations(unassignedOrders);
 
   revalidateDeliveryAssignmentPaths();
   return {
