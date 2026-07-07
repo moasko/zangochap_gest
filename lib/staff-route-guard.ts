@@ -2,9 +2,26 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "zangochap-super-secret-key-change-me-in-prod"
-);
+// Meme politique que modules/auth/actions.ts : jamais de repli sur l'ancien
+// secret fuite. En production sans JWT_SECRET valide, on echoue ferme (aucune
+// session acceptee) plutot que de verifier avec un secret connu de tous.
+const LEAKED_DEFAULT_SECRET = "zangochap-super-secret-key-change-me-in-prod";
+
+let cachedJwtSecret: Uint8Array | null = null;
+
+function getJwtSecret(): Uint8Array | null {
+  if (cachedJwtSecret) return cachedJwtSecret;
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret !== LEAKED_DEFAULT_SECRET) {
+    cachedJwtSecret = new TextEncoder().encode(secret);
+    return cachedJwtSecret;
+  }
+  if (process.env.NODE_ENV === "production") return null;
+  cachedJwtSecret = new TextEncoder().encode(
+    "dev-only-insecure-secret-do-not-use-in-production"
+  );
+  return cachedJwtSecret;
+}
 
 const LOGIN_PATH = "/zangochap-manager";
 const STAFF_PRIVATE_PREFIX = "/zangochap-manager/";
@@ -14,8 +31,11 @@ async function hasValidStaffSession(request: NextRequest) {
   const sessionToken = request.cookies.get("zc_session")?.value;
   if (!sessionToken) return false;
 
+  const secret = getJwtSecret();
+  if (!secret) return false;
+
   try {
-    await jwtVerify(sessionToken, JWT_SECRET);
+    await jwtVerify(sessionToken, secret);
     return true;
   } catch {
     return false;

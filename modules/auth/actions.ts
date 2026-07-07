@@ -26,7 +26,17 @@ function resolveJwtSecret() {
   return "dev-only-insecure-secret-do-not-use-in-production";
 }
 
-const JWT_SECRET = new TextEncoder().encode(resolveJwtSecret());
+// Resolution paresseuse : `next build` importe ce module (NODE_ENV=production)
+// sans disposer des secrets d'exploitation. La verification ne doit donc
+// s'executer qu'au premier usage reel (login / lecture de session), pas a l'import.
+let cachedJwtSecret: Uint8Array | null = null;
+
+function getJwtSecret() {
+  if (!cachedJwtSecret) {
+    cachedJwtSecret = new TextEncoder().encode(resolveJwtSecret());
+  }
+  return cachedJwtSecret;
+}
 
 export async function loginAction(formData: FormData) {
   const email = formData.get("email")?.toString().trim().toLowerCase();
@@ -61,7 +71,7 @@ export async function loginAction(formData: FormData) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 
   (await cookies()).set("zc_session", sessionToken, {
     httpOnly: true,
@@ -91,7 +101,7 @@ export async function getSession() {
   try {
     const sessionToken = (await cookies()).get("zc_session")?.value;
     if (!sessionToken) return null;
-    const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
+    const { payload } = await jwtVerify(sessionToken, getJwtSecret());
 
     const sessionId = typeof payload.id === "string" ? payload.id : "";
     const sessionEmail = typeof payload.email === "string"
