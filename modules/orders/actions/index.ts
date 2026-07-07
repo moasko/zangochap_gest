@@ -18,6 +18,10 @@ export async function createOrder(data: Parameters<typeof actions.createOrder>[0
   return actions.createOrder(data);
 }
 
+export async function createPublicOrder(data: Parameters<typeof actions.createPublicOrder>[0]) {
+  return actions.createPublicOrder(data);
+}
+
 export async function deleteOrder(orderId: string) {
   return actions.deleteOrder(orderId);
 }

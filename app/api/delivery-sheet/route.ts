@@ -1,11 +1,22 @@
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/modules/auth/actions";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Feuille de livraison : contient les coordonnees clients (nom, telephone,
+// adresse). Reservee au staff logistique/commercial ; jamais accessible en anonyme.
+const ALLOWED_ROLES = ["admin", "developer", "collection", "commercial", "packing", "stock"];
+
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  const role = String(session?.role || "").toLowerCase();
+  if (!session || !ALLOWED_ROLES.includes(role)) {
+    return NextResponse.json({ error: "Non autorise" }, { status: 401 });
+  }
+
   const date = req.nextUrl.searchParams.get('date');
   if (!date) return NextResponse.json([]);
 

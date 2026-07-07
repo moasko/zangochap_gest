@@ -10,10 +10,12 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Calendar,
+  ChevronLeft,
   ChevronRight,
   Download,
   Edit3,
   FileText,
+  History,
   Landmark,
   Plus,
   Printer,
@@ -24,6 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "@/components/Modal";
+import ReasonModal from "@/components/ReasonModal";
 import AmountInput from "@/components/AmountInput";
 import { EmptyState, TableCard } from "@/components/UI";
 import { useToast } from "@/components/Toast";
@@ -79,9 +82,9 @@ function sourceLabel(source: string) {
 }
 
 function operationTone(type: string) {
-  if (type === "INCOME") return "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]";
-  if (type === "EXPENSE") return "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]";
-  return "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]";
+  if (type === "INCOME") return "border-[var(--green-soft)] bg-[var(--green-soft)] text-[var(--green)]";
+  if (type === "EXPENSE") return "border-[var(--red-soft)] bg-[var(--red-soft)] text-[var(--red)]";
+  return "border-[var(--orange-soft)] bg-[var(--orange-soft)] text-[var(--orange)]";
 }
 
 export default function AccountingClient({ workspace }: AccountingClientProps) {
@@ -95,6 +98,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [deletingOperation, setDeletingOperation] = useState<any>(null);
 
   const incomeCategories = workspace.categories.filter((category: any) => category.type === "INCOME");
   const expenseCategories = workspace.categories.filter((category: any) => category.type === "EXPENSE");
@@ -171,31 +175,56 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
     router.push(`?${params.toString()}`);
   };
 
+  // Navigation jour precedent / suivant sans passer par le date picker.
+  const shiftDate = (days: number) => {
+    const date = new Date(`${sessionDate}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    changeDate(dateInputValue(date));
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-6 md:py-6">
-      <section className="mb-5 overflow-hidden rounded-lg border border-[#D8CBBB] bg-[#101820] text-white shadow-sm">
+      <section className="mb-5 overflow-hidden rounded-lg border border-[var(--line-2)] bg-[var(--navy)] text-white shadow-sm">
         <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between md:p-5">
           <div>
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-black uppercase text-[#FFB38A]">
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase text-[var(--orange-light)]">
               <Landmark size={14} /> Comptabilite generale
             </div>
             <h1 className="text-[22px] font-black md:text-[26px]">Journal de caisse</h1>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <label className="flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3">
-              <Calendar size={15} className="text-white/70" />
-              <input
-                type="date"
-                value={sessionDate}
-                onChange={(event) => changeDate(event.target.value)}
-                className="bg-transparent text-[13px] font-black text-white outline-none [color-scheme:dark]"
-              />
-            </label>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#FF6B2C] px-3 text-[12px] font-black text-white hover:bg-[#D4541C]" onClick={() => openOperationModal("INCOME")}>
+            <div className="flex h-10 items-center overflow-hidden rounded-md border border-white/15 bg-white/10">
+              <button
+                type="button"
+                onClick={() => shiftDate(-1)}
+                aria-label="Jour precedent"
+                className="flex h-full w-9 items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <label className="flex h-full items-center gap-2 border-x border-white/15 px-3">
+                <Calendar size={15} className="text-white/70" />
+                <input
+                  type="date"
+                  value={sessionDate}
+                  onChange={(event) => changeDate(event.target.value)}
+                  className="bg-transparent text-[13px] font-black text-white outline-none [color-scheme:dark]"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => shiftDate(1)}
+                aria-label="Jour suivant"
+                className="flex h-full w-9 items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[var(--orange)] px-3 text-[12px] font-black text-white hover:bg-[var(--orange-dark)]" onClick={() => openOperationModal("INCOME")}>
               <ArrowUpCircle size={15} /> Entree
             </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[#101820] hover:bg-[#F8FAFC]" onClick={() => openOperationModal("EXPENSE")}>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white px-3 text-[12px] font-black text-[var(--navy)] hover:bg-[var(--cream)]" onClick={() => openOperationModal("EXPENSE")}>
               <ArrowDownCircle size={15} /> Sortie
             </button>
             <Link href="/zangochap-manager/accounting/bilan" className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15">
@@ -209,31 +238,31 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
       </section>
 
       {isClosed && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-2.5 text-[12px] font-bold text-[#166534]">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--green-soft)] bg-[var(--green-soft)] px-4 py-2.5 text-[12px] font-bold text-[var(--green)]">
           <span>Session cloturee : les ecritures sont verrouillees.</span>
-          <Link href={`/zangochap-manager/accounting/sessions/${workspace.session.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#BBF7D0] bg-white px-3 py-1.5 font-black hover:bg-[#ECFDF5]">
+          <Link href={`/zangochap-manager/accounting/sessions/${workspace.session.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--green-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--green-soft)]">
             Gerer la cloture
           </Link>
         </div>
       )}
 
       {staleOpenSessions.length > 0 && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#F4C7B8] bg-[#FFF7ED] px-4 py-2.5 text-[12px] font-bold text-[#9A3412]">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--orange-soft)] bg-[var(--orange-soft)] px-4 py-2.5 text-[12px] font-bold text-[var(--red)]">
           <span className="inline-flex items-center gap-1.5">
             <AlertTriangle size={14} /> {staleOpenSessions.length} session(s) d&apos;autres jours encore ouverte(s) a cloturer.
           </span>
-          <Link href={`/zangochap-manager/accounting/sessions/${staleOpenSessions[0].id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#F4C7B8] bg-white px-3 py-1.5 font-black hover:bg-[#FFF1E6]">
+          <Link href={`/zangochap-manager/accounting/sessions/${staleOpenSessions[0].id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--orange-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--orange-soft)]">
             Traiter ({dateInputValue(staleOpenSessions[0].date)})
           </Link>
         </div>
       )}
 
-      <section className="mb-5 rounded-lg border border-[#E8DED4] bg-white p-4 shadow-sm">
+      <section className="mb-5 rounded-lg border border-[var(--line)] bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase text-[#806A58]">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase text-[var(--brown-soft)]">
             <Landmark size={13} /> Flux de caisse du jour
           </div>
-          <span className="text-[10px] font-bold text-[#806A58]">{workspace.totals.count} operation(s)</span>
+          <span className="text-[11px] font-semibold text-[var(--brown-soft)]">{workspace.totals.count} operation(s)</span>
         </div>
         <div className="grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
           <FlowTile label="Total entrees" value={formatPrice(workspace.totals.totalIncome)} chip={{ text: "credit", tone: "ok" }} />
@@ -249,26 +278,26 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           title="Grand livre de la session"
           meta={`${filteredOperations.length}/${workspace.operations.length} ecriture(s)`}
           actions={
-            <div className="hidden items-center gap-2 text-[10px] font-black uppercase text-[#806A58] md:flex">
+            <div className="hidden items-center gap-2 text-[11px] font-bold uppercase text-[var(--brown-soft)] md:flex">
               <SlidersHorizontal size={13} />
               Controle
             </div>
           }
         >
-          <div className="grid gap-2 border-b border-[#E8DED4] bg-[#FCFAF7] p-3 lg:grid-cols-[minmax(220px,1fr)_150px_190px]">
-            <label className="flex h-10 items-center gap-2 rounded-md border border-[#E8DED4] bg-white px-3">
-              <Search size={15} className="text-[#8B735E]" />
+          <div className="grid gap-2 border-b border-[var(--line)] bg-[var(--cream)] p-3 lg:grid-cols-[minmax(220px,1fr)_150px_190px]">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3">
+              <Search size={15} className="text-[var(--brown-soft)]" />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Rechercher libelle, client, livreur, reference..."
-                className="min-w-0 flex-1 bg-transparent text-[12px] font-bold text-[#1A1410] outline-none"
+                className="min-w-0 flex-1 bg-transparent text-[12px] font-bold text-[var(--ink)] outline-none"
               />
             </label>
             <select
               value={typeFilter}
               onChange={(event) => setTypeFilter(event.target.value)}
-              className="h-10 rounded-md border border-[#E8DED4] bg-white px-3 text-[12px] font-black text-[#1A1410] outline-none"
+              className="h-10 rounded-md border border-[var(--line)] bg-white px-3 text-[12px] font-black text-[var(--ink)] outline-none"
             >
               <option value="ALL">Tous types</option>
               <option value="INCOME">Entrees</option>
@@ -278,7 +307,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             <select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
-              className="h-10 rounded-md border border-[#E8DED4] bg-white px-3 text-[12px] font-black text-[#1A1410] outline-none"
+              className="h-10 rounded-md border border-[var(--line)] bg-white px-3 text-[12px] font-black text-[var(--ink)] outline-none"
             >
               <option value="ALL">Toutes categories</option>
               {workspace.categories.map((category: any) => (
@@ -287,13 +316,13 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             </select>
           </div>
           {hasActiveFilters && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8DED4] bg-white px-4 py-2">
-              <div className="text-[11px] font-bold text-[#806A58]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-white px-4 py-2">
+              <div className="text-[11px] font-bold text-[var(--brown-soft)]">
                 Vue filtree: credit {formatPrice(filteredTotals.credit)} / debit {formatPrice(filteredTotals.debit)}
               </div>
               <button
                 type="button"
-                className="inline-flex h-8 items-center rounded-md border border-[#E8DED4] px-2 text-[11px] font-black text-[#6B4F3B] hover:bg-[#FCFAF7]"
+                className="inline-flex h-8 items-center rounded-md border border-[var(--line)] px-2 text-[11px] font-black text-[var(--brown-soft)] hover:bg-[var(--cream)]"
                 onClick={() => {
                   setSearchTerm("");
                   setTypeFilter("ALL");
@@ -305,14 +334,78 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             </div>
           )}
           {workspace.operations.length === 0 ? (
-            <EmptyState icon="$" title="Aucune operation" description="Les livraisons du jour seront ajoutees automatiquement apres synchronisation." />
+            <EmptyState icon={<Landmark size={22} />} title="Aucune operation" description="Les livraisons du jour seront ajoutees automatiquement apres synchronisation." />
           ) : filteredOperations.length === 0 ? (
-            <EmptyState icon="0" title="Aucune ecriture trouvee" description="Ajustez la recherche, le type ou la categorie." />
+            <EmptyState icon={<Search size={22} />} title="Aucune ecriture trouvee" description="Ajustez la recherche, le type ou la categorie." />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Vue cartes mobile : le tableau 8 colonnes est illisible sous md. */}
+            <div className="divide-y divide-[var(--cream-2)] md:hidden">
+              {displayedOperations.map((operation: any) => {
+                const value = signedValue(operation);
+                const isDebit = value < 0;
+                const runningBalance = balanceById[operation.id] ?? 0;
+                return (
+                  <div key={operation.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-black text-[var(--ink)]">{operation.description || operationLabel(operation.type)}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[var(--brown-soft)]">
+                          <span className={`inline-flex rounded-sm border px-1.5 py-0.5 ${operationTone(operation.type)}`}>
+                            {operationLabel(operation.type)}
+                          </span>
+                          <span>{operation.category?.name || "Sans categorie"}</span>
+                          {operation.deliveryOrderRef && <span className="font-mono">Ref {operation.deliveryOrderRef}</span>}
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">
+                          {dateInputValue(operation.createdAt)} {new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · {operation.createdByName || "Systeme"}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className={`font-mono text-[14px] font-black ${isDebit ? "text-[var(--red)]" : "text-[var(--green)]"}`}>
+                          {isDebit ? "-" : "+"}{formatPrice(Math.abs(value))}
+                        </div>
+                        <div className={`mt-0.5 font-mono text-[11px] font-semibold ${runningBalance < 0 ? "text-[var(--red)]" : "text-[var(--brown-soft)]"}`}>
+                          solde {formatPrice(runningBalance)}
+                        </div>
+                        <div className="mt-2 flex justify-end gap-1">
+                          <button
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--brown-soft)]"
+                            title="Modifier ou regulariser"
+                            aria-label="Modifier ou regulariser l'ecriture"
+                            onClick={() => setEditingOperation(operation)}
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          {operation.source !== "DELIVERY" && (
+                            <button
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--orange-soft)] bg-[var(--orange-soft)] text-[var(--orange)]"
+                              title="Supprimer"
+                              aria-label="Supprimer l'ecriture"
+                              onClick={() => setDeletingOperation(operation)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between gap-3 border-t-2 border-[var(--line)] bg-[var(--cream)] px-4 py-3 text-[12px] font-black">
+                <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Totaux</span>
+                <span className="font-mono">
+                  <span className="text-[var(--green)]">+{formatPrice(filteredTotals.credit)}</span>
+                  <span className="mx-1 text-[var(--line-2)]">/</span>
+                  <span className="text-[var(--red)]">-{formatPrice(filteredTotals.debit)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full">
                 <thead>
-                  <tr className="border-b border-[#E8DED4] text-left text-[10px] font-black uppercase text-[#806A58]">
+                  <tr className="border-b border-[var(--line)] text-left text-[11px] font-bold uppercase text-[var(--brown-soft)]">
                     <th className="w-[110px] px-4 py-3">Date</th>
                     <th className="min-w-[320px] px-3 py-3">Libelle</th>
                     <th className="min-w-[170px] px-3 py-3">Categorie</th>
@@ -329,14 +422,14 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                     const isDebit = value < 0;
                     const runningBalance = balanceById[operation.id] ?? 0;
                     return (
-                    <tr key={operation.id} className="border-b border-[#F1E8DF] text-[12px] last:border-b-0 hover:bg-[#FCFAF7] transition-colors">
+                    <tr key={operation.id} className="border-b border-[var(--cream-2)] text-[12px] last:border-b-0 hover:bg-[var(--cream)] transition-colors">
                       <td className="px-4 py-3 align-top">
-                        <div className="font-mono text-[11px] font-black text-[#1A1410]">{dateInputValue(operation.createdAt)}</div>
-                        <div className="text-[10px] font-bold text-[#806A58]">{new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+                        <div className="font-mono text-[11px] font-black text-[var(--ink)]">{dateInputValue(operation.createdAt)}</div>
+                        <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <div className="font-black text-[#1A1410]">{operation.description || operationLabel(operation.type)}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-[#806A58]">
+                        <div className="font-black text-[var(--ink)]">{operation.description || operationLabel(operation.type)}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[var(--brown-soft)]">
                           <span className={`inline-flex rounded-sm border px-1.5 py-0.5 ${operationTone(operation.type)}`}>
                             {operationLabel(operation.type)}
                           </span>
@@ -346,42 +439,39 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                         </div>
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <span className="inline-flex rounded-md bg-[#F1E8DF] px-2 py-1 text-[10px] font-black text-[#6B4F3B]">
+                        <span className="inline-flex rounded-md bg-[var(--cream-2)] px-2 py-1 text-[11px] font-bold text-[var(--brown-soft)]">
                           {operation.category?.name || "Sans categorie"}
                         </span>
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <div className="text-[12px] font-black text-[#1A1410]">{sourceLabel(operation.source)}</div>
-                        <div className="text-[10px] font-bold text-[#806A58]">{operation.createdByName || "Systeme"}</div>
+                        <div className="text-[12px] font-black text-[var(--ink)]">{sourceLabel(operation.source)}</div>
+                        <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{operation.createdByName || "Systeme"}</div>
                       </td>
-                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#991B1B]">
-                        {isDebit ? formatPrice(-value) : <span className="text-[#C9BBAA]">·</span>}
+                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[var(--red)]">
+                        {isDebit ? formatPrice(-value) : <span className="text-[var(--line-2)]">·</span>}
                       </td>
-                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[#166534]">
-                        {!isDebit ? formatPrice(value) : <span className="text-[#C9BBAA]">·</span>}
+                      <td className="px-3 py-3 text-right align-top font-mono text-[12px] font-black text-[var(--green)]">
+                        {!isDebit ? formatPrice(value) : <span className="text-[var(--line-2)]">·</span>}
                       </td>
-                      <td className={`px-3 py-3 text-right align-top font-mono text-[12px] font-black ${runningBalance < 0 ? "text-[#991B1B]" : "text-[#1A1410]"}`}>
+                      <td className={`px-3 py-3 text-right align-top font-mono text-[12px] font-black ${runningBalance < 0 ? "text-[var(--red)]" : "text-[var(--ink)]"}`}>
                         {formatPrice(runningBalance)}
                       </td>
                       <td className="px-4 py-3 align-top">
                         <div className="flex justify-end gap-1">
                           <button
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E8DED4] bg-white text-[#6B4F3B] hover:bg-[#F1E8DF]"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)] bg-white text-[var(--brown-soft)] hover:bg-[var(--cream-2)]"
                             title="Modifier ou regulariser"
+                            aria-label="Modifier ou regulariser l'ecriture"
                             onClick={() => setEditingOperation(operation)}
                           >
                             <Edit3 size={14} />
                           </button>
                           {operation.source !== "DELIVERY" && (
                             <button
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#F4C7B8] bg-[#FFF7ED] text-[#C2410C] hover:bg-[#FEE2E2]"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--orange-soft)] bg-[var(--orange-soft)] text-[var(--orange)] hover:bg-[var(--red-soft)]"
                               title="Supprimer"
-                              onClick={async () => {
-                                if (!confirm("Supprimer cette operation ?")) return;
-                                await deleteAccountingOperation(operation.id, "Suppression depuis la session");
-                                showToast("Operation supprimee", "success");
-                                router.refresh();
-                              }}
+                              aria-label="Supprimer l'ecriture"
+                              onClick={() => setDeletingOperation(operation)}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -393,45 +483,46 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-[#E8DED4] bg-[#FCFAF7] text-[12px] font-black">
-                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] uppercase text-[#806A58]">
+                  <tr className="border-t-2 border-[var(--line)] bg-[var(--cream)] text-[12px] font-black">
+                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] uppercase text-[var(--brown-soft)]">
                       Totaux ({displayedOperations.length} ecriture(s))
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-[#991B1B]">{formatPrice(filteredTotals.debit)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-[#166534]">{formatPrice(filteredTotals.credit)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-[#D4541C]">{formatPrice(filteredTotals.credit - filteredTotals.debit)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-[var(--red)]">{formatPrice(filteredTotals.debit)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-[var(--green)]">{formatPrice(filteredTotals.credit)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-[var(--orange)]">{formatPrice(filteredTotals.credit - filteredTotals.debit)}</td>
                     <td className="px-4 py-3" />
                   </tr>
                 </tfoot>
               </table>
             </div>
+            </>
           )}
         </TableCard>
 
         <div className="flex flex-col gap-4">
           <TableCard title="Grand livre des sessions" meta={`${workspace.openSessionsCount || 0} ouverte(s)`}>
-            <div className="divide-y divide-[#F1E8DF]">
+            <div className="divide-y divide-[var(--cream-2)]">
               {workspace.sessions.map((session: any) => {
                 const open = session.status !== "CLOSED";
                 return (
                   <Link
                     key={session.id}
-                    className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#FCFAF7] ${open ? "border-l-2 border-[#FF6B2C]" : "border-l-2 border-transparent"}`}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--cream)] ${open ? "border-l-2 border-[var(--orange)]" : "border-l-2 border-transparent"}`}
                     href={`/zangochap-manager/accounting/sessions/${session.id}`}
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-black text-[#1A1410]">{dateInputValue(session.date)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${open ? "bg-[#FFF7ED] text-[#C2410C]" : "bg-[#F0FDF4] text-[#166534]"}`}>
+                        <span className="text-[13px] font-black text-[var(--ink)]">{dateInputValue(session.date)}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${open ? "bg-[var(--orange-soft)] text-[var(--orange)]" : "bg-[var(--green-soft)] text-[var(--green)]"}`}>
                           {open ? "Ouverte" : "Cloturee"}
                         </span>
                         {session.pendingDelivery && (
-                          <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[9px] font-black uppercase text-[#92400E]">A valider</span>
+                          <span className="rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase text-[var(--amber)]">A valider</span>
                         )}
                       </div>
-                      <div className="text-[10px] font-bold text-[#806A58]">{session.summary.count} operation(s)</div>
+                      <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{session.summary.count} operation(s)</div>
                     </div>
-                    <div className="text-right text-[12px] font-black text-[#D4541C]">{formatPrice(session.summary.balance)}</div>
+                    <div className="text-right text-[12px] font-black text-[var(--orange)]">{formatPrice(session.summary.balance)}</div>
                   </Link>
                 );
               })}
@@ -443,23 +534,23 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <TableCard title="Bilans sauvegardes" meta={`${workspace.reports.length} bilan(s)`}>
           {workspace.reports.length === 0 ? (
-            <EmptyState icon="B" title="Aucun bilan sauvegarde" description="Creez un bilan journalier, hebdomadaire, mensuel ou filtre libre." />
+            <EmptyState icon={<FileText size={22} />} title="Aucun bilan sauvegarde" description="Creez un bilan journalier, hebdomadaire, mensuel ou filtre libre." />
           ) : (
-            <div className="divide-y divide-[#F1E8DF]">
+            <div className="divide-y divide-[var(--cream-2)]">
               {workspace.reports.map((report: any) => (
                 <div key={report.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <div className="text-[13px] font-black text-[#1A1410]">{report.name}</div>
-                    <div className="text-[10px] font-bold text-[#806A58]">
+                    <div className="text-[13px] font-black text-[var(--ink)]">{report.name}</div>
+                    <div className="text-[11px] font-semibold text-[var(--brown-soft)]">
                       {dateInputValue(report.dateFrom)} - {dateInputValue(report.dateTo)} · {report.operationsCount} operation(s)
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-black text-[#1A1410]">{formatPrice(report.balance)}</span>
-                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E8DED4]" title="Imprimer" onClick={() => window.print()}>
+                    <span className="text-[13px] font-black text-[var(--ink)]">{formatPrice(report.balance)}</span>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)]" title="Imprimer" aria-label={`Imprimer le bilan ${report.name}`} onClick={() => printReport(report)}>
                       <Printer size={13} />
                     </button>
-                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E8DED4]" title="Exporter CSV" onClick={() => exportReportCsv(report)}>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)]" title="Exporter CSV" aria-label={`Exporter le bilan ${report.name} en CSV`} onClick={() => exportReportCsv(report)}>
                       <Download size={13} />
                     </button>
                   </div>
@@ -471,19 +562,19 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
 
         <TableCard title="Historique et regularisations" meta={`${workspace.audits.length} trace(s)`}>
           {workspace.audits.length === 0 ? (
-            <EmptyState icon="H" title="Aucun historique" description="Les creations, modifications et regularisations seront listees ici." />
+            <EmptyState icon={<History size={22} />} title="Aucun historique" description="Les creations, modifications et regularisations seront listees ici." />
           ) : (
-            <div className="divide-y divide-[#F1E8DF]">
+            <div className="divide-y divide-[var(--cream-2)]">
               {workspace.audits.map((audit: any) => (
                 <div key={audit.id} className="px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[12px] font-black text-[#1A1410]">{accountingActionLabel(audit.action)}</div>
-                    <div className="text-[10px] font-bold text-[#806A58]">{formatDay(audit.createdAt)}</div>
+                    <div className="text-[12px] font-black text-[var(--ink)]">{accountingActionLabel(audit.action)}</div>
+                    <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{formatDay(audit.createdAt)}</div>
                   </div>
-                  <div className="mt-1 text-[11px] font-semibold text-[#806A58]">
+                  <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">
                     {audit.actorName || "Systeme"}{audit.previousAmount !== null && audit.newAmount !== null ? ` · ${formatPrice(audit.previousAmount)} vers ${formatPrice(audit.newAmount)}` : ""}
                   </div>
-                  {audit.reason && <div className="mt-1 text-[11px] text-[#6B4F3B]">{audit.reason}</div>}
+                  {audit.reason && <div className="mt-1 text-[11px] text-[var(--brown-soft)]">{audit.reason}</div>}
                 </div>
               ))}
             </div>
@@ -515,6 +606,26 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           }}
         />
       )}
+      {deletingOperation && (
+        <ReasonModal
+          title="Supprimer l'ecriture"
+          description={`Suppression de "${deletingOperation.description || operationLabel(deletingOperation.type)}" (${formatPrice(deletingOperation.amount)}). Cette action est journalisee.`}
+          confirmLabel="Supprimer l'ecriture"
+          danger
+          placeholder="Ex. doublon de saisie, erreur de montant..."
+          onConfirm={async (reason) => {
+            try {
+              await deleteAccountingOperation(deletingOperation.id, reason);
+              showToast("Operation supprimee", "success");
+              setDeletingOperation(null);
+              router.refresh();
+            } catch (error: any) {
+              showToast(error.message || "Suppression impossible", "error");
+            }
+          }}
+          onClose={() => setDeletingOperation(null)}
+        />
+      )}
       {activeModal === "categoryPlan" && (
         <CategoryPlanModal
           incomeCategories={incomeCategories}
@@ -543,40 +654,40 @@ function FlowTile({ label, value, sub, chip, accent }: {
   accent?: boolean;
 }) {
   const chipClasses: Record<string, string> = {
-    ok: "bg-[#F0FDF4] text-[#166534]",
-    dang: "bg-[#FEF2F2] text-[#991B1B]",
-    info: "bg-[#EFF6FF] text-[#1D4ED8]",
+    ok: "bg-[var(--green-soft)] text-[var(--green)]",
+    dang: "bg-[var(--red-soft)] text-[var(--red)]",
+    info: "bg-[var(--blue-soft)] text-[var(--blue)]",
   };
   return (
-    <div className="rounded-md border border-[#F1E8DF] bg-[#FCFAF7] px-3 py-3">
-      <div className="text-[10px] font-black uppercase text-[#806A58]">{label}</div>
-      <div className={`mt-1 text-[19px] font-black ${accent ? "text-[#D4541C]" : "text-[#1A1410]"}`}>{value}</div>
-      {chip && <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[10px] font-black ${chipClasses[chip.tone]}`}>{chip.text}</span>}
-      {sub && <div className="mt-1 text-[10px] font-bold text-[#806A58]">{sub}</div>}
+    <div className="rounded-md border border-[var(--cream-2)] bg-[var(--cream)] px-3 py-3">
+      <div className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">{label}</div>
+      <div className={`mt-1 text-[19px] font-black ${accent ? "text-[var(--orange)]" : "text-[var(--ink)]"}`}>{value}</div>
+      {chip && <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${chipClasses[chip.tone]}`}>{chip.text}</span>}
+      {sub && <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">{sub}</div>}
     </div>
   );
 }
 
 function FlowArrow() {
-  return <div className="hidden items-center justify-center text-[#C9BBAA] md:flex" aria-hidden="true"><ChevronRight size={18} /></div>;
+  return <div className="hidden items-center justify-center text-[var(--line-2)] md:flex" aria-hidden="true"><ChevronRight size={18} /></div>;
 }
 
 function CategoryList({ title, categories, onEdit, onDelete }: { title: string; categories: any[]; onEdit: (category: any) => void; onDelete: (category: any) => void }) {
   return (
-    <div className="border-b border-[#F1E8DF] last:border-b-0">
-      <div className="bg-[#FCFAF7] px-4 py-2 text-[10px] font-black uppercase text-[#806A58]">{title}</div>
+    <div className="border-b border-[var(--cream-2)] last:border-b-0">
+      <div className="bg-[var(--cream)] px-4 py-2 text-[11px] font-bold uppercase text-[var(--brown-soft)]">{title}</div>
       {categories.map((category) => (
         <div key={category.id} className="flex items-center justify-between gap-2 px-4 py-2">
           <div>
-            <div className="text-[12px] font-black text-[#1A1410]">{category.name}</div>
-            <div className="text-[10px] font-bold text-[#806A58]">{category.isDefault ? "Par defaut" : "Personnalisee"}</div>
+            <div className="text-[12px] font-black text-[var(--ink)]">{category.name}</div>
+            <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{category.isDefault ? "Par defaut" : "Personnalisee"}</div>
           </div>
           <div className="flex gap-1">
-            <button className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#E8DED4]" onClick={() => onEdit(category)} title="Modifier">
+            <button className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--line)]" onClick={() => onEdit(category)} title="Modifier" aria-label={`Modifier la categorie ${category.name}`}>
               <Edit3 size={12} />
             </button>
             {!category.isDefault && (
-              <button className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F4C7B8] text-[#C2410C]" onClick={() => onDelete(category)} title="Supprimer">
+              <button className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--orange-soft)] text-[var(--orange)]" onClick={() => onDelete(category)} title="Supprimer" aria-label={`Supprimer la categorie ${category.name}`}>
                 <Trash2 size={12} />
               </button>
             )}
@@ -605,18 +716,18 @@ function CategoryPlanModal({
   return (
     <Modal isOpen onClose={onClose} title="Plan de categories" xl>
       <div className="grid gap-4">
-        <div className="flex flex-col gap-3 rounded-lg border border-[#E8DED4] bg-[#FCFAF7] p-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-[var(--line)] bg-[var(--cream)] p-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-[13px] font-black text-[#1A1410]">Categories comptables</div>
-            <div className="text-[11px] font-bold text-[#806A58]">
+            <div className="text-[13px] font-black text-[var(--ink)]">Categories comptables</div>
+            <div className="text-[11px] font-bold text-[var(--brown-soft)]">
               Classez chaque ecriture pour obtenir des bilans fiables.
             </div>
           </div>
-          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#1A1410] px-3 text-[12px] font-black text-white" onClick={onNewCategory}>
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[var(--ink)] px-3 text-[12px] font-black text-white" onClick={onNewCategory}>
             <Plus size={14} /> Nouvelle categorie
           </button>
         </div>
-        <div className="grid overflow-hidden rounded-lg border border-[#E8DED4] lg:grid-cols-2">
+        <div className="grid overflow-hidden rounded-lg border border-[var(--line)] lg:grid-cols-2">
           <CategoryList title="Categories d'entree" categories={incomeCategories} onEdit={onEdit} onDelete={onDelete} />
           <CategoryList title="Categories de sortie" categories={expenseCategories} onEdit={onEdit} onDelete={onDelete} />
         </div>
@@ -632,6 +743,14 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
   const [type, setType] = useState<OperationType>(operation?.type || initialType || "INCOME");
   const categories = type === "EXPENSE" ? expenseCategories : incomeCategories;
   const [categoryId, setCategoryId] = useState(operation?.categoryId || categories[0]?.id || "");
+
+  // Changer de type invalide la categorie courante (une categorie d'entree ne peut
+  // pas porter une sortie) : on la realigne sur la liste du nouveau type.
+  const switchType = (next: OperationType) => {
+    setType(next);
+    const list = next === "EXPENSE" ? expenseCategories : incomeCategories;
+    setCategoryId(operation && operation.type === next ? operation.categoryId : list[0]?.id || "");
+  };
   const [amount, setAmount] = useState(operation?.amount || "");
   const [description, setDescription] = useState(operation?.description || "");
   const [proofUrl, setProofUrl] = useState(operation?.proofUrl || "");
@@ -675,31 +794,31 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
     <Modal isOpen onClose={onClose} title={operation ? "Modifier / regulariser" : "Ajouter une operation"}>
       <form onSubmit={submit} className="grid gap-3">
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Type</span>
-          <select className="field-input" value={type} onChange={(event) => setType(event.target.value as OperationType)} disabled={Boolean(operation?.source === "DELIVERY")}>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Type</span>
+          <select className="field-input" value={type} onChange={(event) => switchType(event.target.value as OperationType)} disabled={Boolean(operation?.source === "DELIVERY")}>
             <option value="INCOME">Entree</option>
             <option value="EXPENSE">Sortie</option>
             <option value="CORRECTION">Correction</option>
           </select>
         </label>
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Categorie</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Categorie</span>
           <select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} required>
             {categories.map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select>
         </label>
         <div className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Montant {operation?.source === "DELIVERY" ? "recu" : ""}</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Montant {operation?.source === "DELIVERY" ? "recu" : ""}</span>
           <div className="flex items-center gap-2">
             <AmountInput className="field-input flex-1" allowNegative={isCorrection} value={amount} onChange={setAmount} required />
             {operation?.source === "DELIVERY" && operation.originalAmount && (
-              <button type="button" className="inline-flex h-10 items-center justify-center rounded-md border border-[#E8DED4] bg-white px-3 text-[11px] font-black text-[#6B4F3B] whitespace-nowrap hover:bg-[#FCFAF7]" onClick={() => setAmount(operation.originalAmount)}>
+              <button type="button" className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--line)] bg-white px-3 text-[11px] font-black text-[var(--brown-soft)] whitespace-nowrap hover:bg-[var(--cream)]" onClick={() => setAmount(operation.originalAmount)}>
                 Matcher ({formatPrice(operation.originalAmount)})
               </button>
             )}
           </div>
           {operation?.source === "DELIVERY" && operation.originalAmount !== undefined && operation.originalAmount !== null && (
-            <div className={`mt-1 text-[11px] font-bold ${Number(amount) === operation.originalAmount ? 'text-[#166534]' : 'text-[#991B1B]'}`}>
+            <div className={`mt-1 text-[11px] font-bold ${Number(amount) === operation.originalAmount ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
               {Number(amount) === operation.originalAmount
                 ? "OK - Le montant correspond au total attendu"
                 : `Ecart : ${Number(amount) > operation.originalAmount ? '+' : ''}${formatPrice(Number(amount) - operation.originalAmount)} (Attendu: ${formatPrice(operation.originalAmount)})`
@@ -707,18 +826,18 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
             </div>
           )}
           {isCorrection && (
-            <div className="mt-1 text-[11px] font-bold text-[#C2410C]">
+            <div className="mt-1 text-[11px] font-bold text-[var(--orange)]">
               Montant negatif autorise pour diminuer la caisse (ex. -5000).
             </div>
           )}
         </div>
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Description</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Description</span>
           <textarea className="field-input" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
         </label>
         {showCustomer && (
           <label className="grid gap-1">
-            <span className="text-[11px] font-black uppercase text-[#806A58]">Client (optionnel)</span>
+            <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Client (optionnel)</span>
             <select className="field-input" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
               <option value="">Aucun client</option>
               {customers.map((customer: any) => (
@@ -728,21 +847,21 @@ function OperationModal({ sessionId, operation, initialType, incomeCategories, e
           </label>
         )}
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Piece justificative</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Piece justificative</span>
           <input className="field-input" value={proofUrl} onChange={(event) => setProofUrl(event.target.value)} placeholder="URL ou reference interne" />
         </label>
         {operation && (
           <label className="grid gap-1">
-            <span className="text-[11px] font-black uppercase text-[#806A58]">Raison de la modification</span>
+            <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Raison de la modification</span>
             <input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Ex. Regularisation montant livreur" />
           </label>
         )}
         {requiresNegativeReason && (
-          <div className="grid gap-1 rounded-md border border-[#FECACA] bg-[#FEF2F2] p-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-black text-[#991B1B]">
+          <div className="grid gap-1 rounded-md border border-[var(--red-soft)] bg-[var(--red-soft)] p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-black text-[var(--red)]">
               <AlertTriangle size={13} /> Solde de caisse negatif ({formatPrice(projectedBalance)})
             </div>
-            <span className="text-[11px] font-black uppercase text-[#806A58]">Motif obligatoire</span>
+            <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Motif obligatoire</span>
             <textarea className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} rows={2} required placeholder="Ex. avance sur recette, depense urgente couverte demain..." />
           </div>
         )}
@@ -787,11 +906,11 @@ function CategoryModal({ category, onClose }: any) {
     <Modal isOpen onClose={onClose} title={category ? "Modifier la categorie" : "Nouvelle categorie"}>
       <form onSubmit={submit} className="grid gap-3">
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Nom</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Nom</span>
           <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} required />
         </label>
         <label className="grid gap-1">
-          <span className="text-[11px] font-black uppercase text-[#806A58]">Type</span>
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Type</span>
           <select className="field-input" value={type} onChange={(event) => setType(event.target.value as CategoryType)} disabled={Boolean(category)}>
             <option value="INCOME">Entree</option>
             <option value="EXPENSE">Sortie</option>
@@ -812,6 +931,63 @@ function csvCell(value: unknown) {
   const text = String(value ?? "");
   const risky = /^[=+@-]/.test(text) && Number.isNaN(Number(text));
   return `"${(risky ? `'${text}` : text).replace(/"/g, '""')}"`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] as string
+  ));
+}
+
+// Impression dediee : window.print() sur la page imprimait tout le back office.
+// On genere un document minimal contenant uniquement le bilan demande.
+async function printReport(report: any) {
+  let operations: any[] = [];
+  try {
+    operations = await getAccountingReportOperations(report.id);
+  } catch {
+    operations = [];
+  }
+  const rows = operations.map((op) => `
+    <tr>
+      <td>${escapeHtml(dateInputValue(op.date))}</td>
+      <td>${escapeHtml(operationLabel(op.type))}</td>
+      <td>${escapeHtml(op.categoryName || "")}</td>
+      <td>${escapeHtml((op.description || "").replace(/\s+/g, " "))}</td>
+      <td class="num">${escapeHtml(formatPrice(op.amount))}</td>
+    </tr>
+  `).join("");
+  const html = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(report.name)}</title>
+<style>
+  body { font-family: system-ui, sans-serif; color: #1A1410; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .meta { font-size: 12px; color: #6B4838; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border-bottom: 1px solid #E8DDD0; padding: 6px 8px; text-align: left; }
+  th { text-transform: uppercase; font-size: 10px; color: #6B4838; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td { font-weight: 700; border-top: 2px solid #E8DDD0; }
+</style>
+</head>
+<body>
+<h1>${escapeHtml(report.name)}</h1>
+<div class="meta">Du ${escapeHtml(dateInputValue(report.dateFrom))} au ${escapeHtml(dateInputValue(report.dateTo))} · ${escapeHtml(String(report.operationsCount))} operation(s)</div>
+<table>
+<thead><tr><th>Date</th><th>Type</th><th>Categorie</th><th>Libelle</th><th class="num">Montant</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr><td colspan="4">Solde</td><td class="num">${escapeHtml(formatPrice(report.balance))}</td></tr></tfoot>
+</table>
+<script>window.onload = function () { window.print(); };</script>
+</body>
+</html>`;
+  const printWindow = window.open("", "_blank", "width=900,height=700");
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
 }
 
 async function exportReportCsv(report: any) {

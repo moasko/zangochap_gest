@@ -287,11 +287,34 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
       },
     },
   });
+
+  // Interventions call center : commandes traitees apres une alerte livreur
+  // (recordCommercialContactReport / acceptOrderAfterCommercialIntervention).
+  // L'attribution se fait par commercialContactedByName, seul champ disponible.
+  const interventionOrders = await prisma.order.findMany({
+    where: {
+      deletedAt: null,
+      isCommercialContacted: true,
+      commercialContactedAt: whereDate,
+      commercialContactedByName: { not: null },
+    },
+    select: { commercialContactedByName: true, status: true },
+  });
+  const interventionsByName = new Map<string, { total: number; delivered: number }>();
+  for (const order of interventionOrders) {
+    const key = String(order.commercialContactedByName).trim().toLowerCase();
+    const entry = interventionsByName.get(key) || { total: 0, delivered: 0 };
+    entry.total += 1;
+    if (order.status === 'DELIVERED') entry.delivered += 1;
+    interventionsByName.set(key, entry);
+  }
+
   const commercialsStats = commercials.map(c => {
     const delivered = c.orders.filter(o => o.status === 'DELIVERED');
     const cancelled = c.orders.filter(o => o.status === 'CANCELLED' || o.status === 'RETURNED');
     const revenue = delivered.reduce((sum, o) => sum + o.total, 0);
     const convRate = c.orders.length > 0 ? Math.round((delivered.length / c.orders.length) * 100) : 0;
+    const interventions = interventionsByName.get(String(c.name || '').trim().toLowerCase()) || { total: 0, delivered: 0 };
     return {
       id: c.id,
       name: c.name,
@@ -301,6 +324,8 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
       revenue,
       convRate,
       prime: Math.round(revenue * 0.01),
+      interventions: interventions.total,
+      interventionsDelivered: interventions.delivered,
     };
   });
 
@@ -402,6 +427,8 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
 
 // ============ USER PERFORMANCE DETAILS ============
 export async function getUserPerformanceDetails(userId: string, role: string, dateFrom?: string, dateTo?: string) {
+  // Meme restriction que getPerformanceStats : detail de performance = admin only.
+  await ensureAuth(["admin"]);
   const start = dateFrom ? new Date(dateFrom) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const end = dateTo ? new Date(dateTo + 'T23:59:59') : new Date();
   const whereDate: Prisma.DateTimeFilter = { gte: start, lte: end };
@@ -422,6 +449,21 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
     });
     const delivered = orders.filter(o => o.status === 'DELIVERED');
     const revenue = delivered.reduce((sum, o) => sum + o.total, 0);
+
+    // Interventions sur alerte livreur, attribuees par commercialContactedByName.
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const interventionOrders = user?.name
+      ? await prisma.order.findMany({
+        where: {
+          deletedAt: null,
+          isCommercialContacted: true,
+          commercialContactedAt: whereDate,
+          commercialContactedByName: { equals: user.name.trim(), mode: 'insensitive' },
+        },
+        select: { status: true },
+      })
+      : [];
+
     return {
       orders,
       summary: {
@@ -429,6 +471,8 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
         delivered: delivered.length,
         revenue,
         convRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0,
+        interventions: interventionOrders.length,
+        interventionsDelivered: interventionOrders.filter(o => o.status === 'DELIVERED').length,
       }
     };
   }

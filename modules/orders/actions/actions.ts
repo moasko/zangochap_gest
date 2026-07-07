@@ -42,6 +42,7 @@ export async function getOrCreateDefaultWarehouse() {
 // ── Order CRUD ──
 export async function getOrder(id: string) { return orderActions.getOrder(id); }
 export async function createOrder(data: Parameters<typeof orderActions.createOrder>[0]) { return orderActions.createOrder(data); }
+export async function createPublicOrder(data: Parameters<typeof orderActions.createPublicOrder>[0]) { return orderActions.createPublicOrder(data); }
 export async function deleteOrder(orderId: string) { return orderActions.deleteOrder(orderId); }
 export async function updateOrderDetails(orderId: string, data: Parameters<typeof orderActions.updateOrderDetails>[1]) { return orderActions.updateOrderDetails(orderId, data); }
 export async function addOrderHistoryEntry(orderId: string, action: string) { return orderActions.addOrderHistoryEntry(orderId, action); }

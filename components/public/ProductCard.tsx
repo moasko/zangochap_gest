@@ -17,11 +17,24 @@ export default function ProductCard({ p }: { p: Product }) {
   const [modalType, setModalType] = useState<"cart" | "buy" | null>(null);
 
   const discount = p.oldPrice ? Math.round((1 - Number(p.price) / Number(p.oldPrice)) * 100) : 0;
+  // Produit sans choix a faire (une seule variante) : on evite le modal et on
+  // agit directement, exactement comme un vrai "ajout rapide".
+  const soleVariant = p.variants?.length === 1 ? p.variants[0] : null;
 
-  const handleQuickAdd = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setModalType("cart");
+  const doAddToCart = (variant: any, qty: number) => {
+    addToCart({
+      productId: p.id,
+      variantId: variant.id,
+      name: p.name,
+      price: Number(p.price),
+      qty,
+      size: variant.size,
+      color: variant.color,
+      image: getImageUrl(variant.image || p.images?.[0]?.url),
+    });
+    setModalType(null);
+    setAdded(true);
+    setTimeout(() => setAdded(false), 2000);
   };
 
   const handleBuyNow = (variant: any, qty: number) => {
@@ -37,6 +50,20 @@ export default function ProductCard({ p }: { p: Product }) {
     }));
     setModalType(null);
     router.push("/cart?buyNow=1");
+  };
+
+  const handleQuickAdd = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (soleVariant) doAddToCart(soleVariant, 1);
+    else setModalType("cart");
+  };
+
+  const handleBuyClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (soleVariant) handleBuyNow(soleVariant, 1);
+    else setModalType("buy");
   };
 
   return (
@@ -89,11 +116,7 @@ export default function ProductCard({ p }: { p: Product }) {
             </span>
           </button>
           <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setModalType("buy");
-            }}
+            onClick={handleBuyClick}
             disabled={!p.variants?.length}
             className="min-h-10 bg-[#D4541C] px-2 text-[10px] font-bold tracking-[0.1em] text-white transition-colors hover:bg-[#B33D0E]"
           >
@@ -104,21 +127,7 @@ export default function ProductCard({ p }: { p: Product }) {
       <PublicVariantModal
         product={modalType ? p : null}
         onClose={() => setModalType(null)}
-        onConfirm={modalType === "buy" ? handleBuyNow : (variant, qty) => {
-          addToCart({
-            productId: p.id,
-            variantId: variant.id,
-            name: p.name,
-            price: Number(p.price),
-            qty,
-            size: variant.size,
-            color: variant.color,
-            image: getImageUrl(variant.image || p.images?.[0]?.url),
-          });
-          setModalType(null);
-          setAdded(true);
-          setTimeout(() => setAdded(false), 2000);
-        }}
+        onConfirm={modalType === "buy" ? handleBuyNow : doAddToCart}
         title={modalType === "buy" ? "Acheter ce produit" : "Choisir la variante"}
         actionLabel={modalType === "buy" ? "Acheter" : "Valider le panier"}
       />

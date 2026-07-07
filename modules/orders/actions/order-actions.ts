@@ -430,6 +430,22 @@ export async function createOrder(data: {
   return { order: JSON.parse(JSON.stringify(order)) };
 }
 
+// ============ CREATE PUBLIC ORDER (checkout site) ============
+// Enveloppe le checkout public : capture l'erreur COTE SERVEUR et la renvoie comme
+// donnee. Sans ca, Next.js masque en production le message des erreurs jetees par
+// une Server Action (message generique + digest), et le client voyait une erreur
+// opaque "Erreur lors de la commande" sans savoir quoi corriger.
+export async function createPublicOrder(
+  data: Omit<Parameters<typeof createOrder>[0], "source" | "status">,
+) {
+  try {
+    const result = await createOrder({ ...data, source: "public", status: "TO_PROCESS" });
+    return { success: true as const, order: result.order };
+  } catch (e: any) {
+    return { success: false as const, error: e?.message || "Impossible d'enregistrer la commande. Reessayez." };
+  }
+}
+
 // ============ DELETE ORDER (SOFT DELETE) ============
 export async function deleteOrder(orderId: string) {
   const session = await getSession();

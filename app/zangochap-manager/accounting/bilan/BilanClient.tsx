@@ -12,6 +12,7 @@ import {
   Save,
 } from "lucide-react";
 import { EmptyState, TableCard } from "@/components/UI";
+import ReasonModal from "@/components/ReasonModal";
 import { useToast } from "@/components/Toast";
 import { formatPrice } from "@/lib/constants";
 import { createAccountingReport, getAccountingBilan } from "@/modules/accounting/actions";
@@ -71,6 +72,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
   const [riderId, setRiderId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [source, setSource] = useState("ALL");
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   const run = (override: Partial<{ from: string; to: string; scope: Scope; categoryId: string; riderId: string; customerId: string; source: string }> = {}) => {
     const category = override.categoryId ?? categoryId;
@@ -135,9 +137,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
     URL.revokeObjectURL(url);
   };
 
-  const saveReport = () => {
-    const name = window.prompt("Nom du bilan a enregistrer :", `Bilan ${from} - ${to}`);
-    if (!name?.trim()) return;
+  const saveReport = (name: string) => {
     const operationTypes = scope === "INCOME" ? ["INCOME"] : scope === "EXPENSE" ? ["EXPENSE"] : ["INCOME", "EXPENSE", "CORRECTION"];
     startTransition(async () => {
       try {
@@ -152,6 +152,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           operationTypes: operationTypes as any,
         });
         showToast("Bilan enregistre dans le journal", "success");
+        setSaveModalOpen(false);
       } catch (error: any) {
         showToast(error.message || "Enregistrement impossible", "error");
       }
@@ -162,13 +163,13 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-6 md:py-6">
-      <section className="mb-4 overflow-hidden rounded-lg border border-[#D8CBBB] bg-[#101820] text-white shadow-sm">
+      <section className="mb-4 overflow-hidden rounded-lg border border-[var(--line-2)] bg-[var(--navy)] text-white shadow-sm">
         <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between md:p-5">
           <div>
             <Link href="/zangochap-manager/accounting" className="mb-2 inline-flex items-center gap-2 text-[12px] font-black text-white/70 hover:text-white">
               <ArrowLeft size={15} /> Retour au journal
             </Link>
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-black uppercase text-[#FFB38A]">
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase text-[var(--orange-light)]">
               <Landmark size={14} /> Comptabilite generale
             </div>
             <h1 className="text-[22px] font-black md:text-[26px]">Bilan par periode</h1>
@@ -177,28 +178,28 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
             <button onClick={exportCsv} className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15">
               <Download size={15} /> Export CSV
             </button>
-            <button onClick={saveReport} disabled={isPending} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#FF6B2C] px-3 text-[12px] font-black text-white hover:bg-[#D4541C] disabled:opacity-60">
+            <button onClick={() => setSaveModalOpen(true)} disabled={isPending} className="inline-flex h-10 items-center gap-2 rounded-md bg-[var(--orange)] px-3 text-[12px] font-black text-white hover:bg-[var(--orange-dark)] disabled:opacity-60">
               <Save size={15} /> Enregistrer
             </button>
           </div>
         </div>
       </section>
 
-      <div className="mb-4 rounded-lg border border-[#E8DED4] bg-white p-3 shadow-sm">
+      <div className="mb-4 rounded-lg border border-[var(--line)] bg-white p-3 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {PRESETS.map((option) => (
               <button
                 key={option.id}
                 onClick={() => applyPreset(option.id)}
-                className={`rounded-md border px-2.5 py-1 text-[11px] font-black ${preset === option.id ? "border-[#FF6B2C] bg-[#FFF7ED] text-[#C2410C]" : "border-[#E8DED4] bg-white text-[#806A58] hover:bg-[#FCFAF7]"}`}
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-black ${preset === option.id ? "border-[var(--orange)] bg-[var(--orange-soft)] text-[var(--orange)]" : "border-[var(--line)] bg-white text-[var(--brown-soft)] hover:bg-[var(--cream)]"}`}
               >
                 {option.label}
               </button>
             ))}
           </div>
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#806A58]">
-            {isPending ? <span className="text-[#C2410C]">Calcul...</span> : <><Calendar size={12} /> {data.range?.from} → {data.range?.to} · {data.operationsCount} ecriture(s)</>}
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--brown-soft)]">
+            {isPending ? <span className="text-[var(--orange)]">Calcul...</span> : <><Calendar size={12} /> {data.range?.from} → {data.range?.to} · {data.operationsCount} ecriture(s)</>}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
@@ -243,19 +244,19 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           {(data.byCategory || []).length === 0 ? (
             <EmptyState icon="C" title="Aucune donnee" description="Aucune ecriture sur cette periode avec ces filtres." />
           ) : (
-            <div className="divide-y divide-[#F1E8DF]">
+            <div className="divide-y divide-[var(--cream-2)]">
               {data.byCategory.map((cat: any) => {
                 const total = cat.income + cat.expense;
                 return (
                   <div key={cat.categoryId} className="px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-[12px] font-black text-[#1A1410]">{cat.name}</span>
-                      <span className={`shrink-0 text-[12px] font-black ${cat.type === "EXPENSE" ? "text-[#991B1B]" : "text-[#166534]"}`}>{formatPrice(total)}</span>
+                      <span className="truncate text-[12px] font-black text-[var(--ink)]">{cat.name}</span>
+                      <span className={`shrink-0 text-[12px] font-black ${cat.type === "EXPENSE" ? "text-[var(--red)]" : "text-[var(--green)]"}`}>{formatPrice(total)}</span>
                     </div>
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#F1E8DF]">
-                      <div className={`h-full ${cat.type === "EXPENSE" ? "bg-[#991B1B]" : "bg-[#166534]"}`} style={{ width: `${Math.round((total / maxCategory) * 100)}%` }} />
+                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[var(--cream-2)]">
+                      <div className={`h-full ${cat.type === "EXPENSE" ? "bg-[var(--red)]" : "bg-[var(--green)]"}`} style={{ width: `${Math.round((total / maxCategory) * 100)}%` }} />
                     </div>
-                    <div className="mt-1 text-[10px] font-bold text-[#806A58]">{cat.count} ecriture(s)</div>
+                    <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">{cat.count} ecriture(s)</div>
                   </div>
                 );
               })}
@@ -267,16 +268,16 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           {(data.byDay || []).length === 0 ? (
             <EmptyState icon="J" title="Aucune donnee" description="Aucune ecriture sur cette periode." />
           ) : (
-            <div className="divide-y divide-[#F1E8DF]">
+            <div className="divide-y divide-[var(--cream-2)]">
               {data.byDay.map((day: any) => (
                 <div key={day.date} className="px-4 py-2.5">
-                  <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-[#806A58]">
+                  <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-[var(--brown-soft)]">
                     <span>{day.date}</span>
-                    <span><span className="text-[#166534]">+{formatPrice(day.income)}</span> / <span className="text-[#991B1B]">-{formatPrice(day.expense)}</span></span>
+                    <span><span className="text-[var(--green)]">+{formatPrice(day.income)}</span> / <span className="text-[var(--red)]">-{formatPrice(day.expense)}</span></span>
                   </div>
                   <div className="mt-1 flex gap-1">
-                    <div className="h-1.5 rounded-full bg-[#166534]" style={{ width: `${Math.round((day.income / maxDay) * 50)}%` }} />
-                    <div className="h-1.5 rounded-full bg-[#991B1B]" style={{ width: `${Math.round((day.expense / maxDay) * 50)}%` }} />
+                    <div className="h-1.5 rounded-full bg-[var(--green)]" style={{ width: `${Math.round((day.income / maxDay) * 50)}%` }} />
+                    <div className="h-1.5 rounded-full bg-[var(--red)]" style={{ width: `${Math.round((day.expense / maxDay) * 50)}%` }} />
                   </div>
                 </div>
               ))}
@@ -293,7 +294,7 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr className="border-b border-[#E8DED4] text-left text-[10px] font-black uppercase text-[#806A58]">
+                  <tr className="border-b border-[var(--line)] text-left text-[11px] font-bold uppercase text-[var(--brown-soft)]">
                     <th className="w-[100px] px-4 py-3">Date</th>
                     <th className="min-w-[260px] px-3 py-3">Libelle</th>
                     <th className="min-w-[150px] px-3 py-3">Categorie</th>
@@ -305,18 +306,18 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
                   {data.operations.map((op: any) => {
                     const expense = op.type === "EXPENSE" || (op.type === "CORRECTION" && Number(op.amount) < 0);
                     return (
-                      <tr key={op.id} className="border-b border-[#F1E8DF] text-[12px] last:border-b-0 hover:bg-[#FCFAF7]">
-                        <td className="px-4 py-2.5 align-top font-mono text-[11px] font-black text-[#1A1410]">{fmt(new Date(op.date))}</td>
+                      <tr key={op.id} className="border-b border-[var(--cream-2)] text-[12px] last:border-b-0 hover:bg-[var(--cream)]">
+                        <td className="px-4 py-2.5 align-top font-mono text-[11px] font-black text-[var(--ink)]">{fmt(new Date(op.date))}</td>
                         <td className="px-3 py-2.5 align-top">
-                          <div className="font-black text-[#1A1410]">{op.description || (expense ? "Sortie" : "Entree")}</div>
-                          {op.riderName && <div className="text-[10px] font-bold text-[#806A58]">Livreur: {op.riderName}</div>}
-                          {op.clientName && <div className="text-[10px] font-bold text-[#806A58]">Client: {op.clientName}</div>}
+                          <div className="font-black text-[var(--ink)]">{op.description || (expense ? "Sortie" : "Entree")}</div>
+                          {op.riderName && <div className="text-[11px] font-semibold text-[var(--brown-soft)]">Livreur: {op.riderName}</div>}
+                          {op.clientName && <div className="text-[11px] font-semibold text-[var(--brown-soft)]">Client: {op.clientName}</div>}
                         </td>
                         <td className="px-3 py-2.5 align-top">
-                          <span className="inline-flex rounded-md bg-[#F1E8DF] px-2 py-1 text-[10px] font-black text-[#6B4F3B]">{op.categoryName || "Sans categorie"}</span>
+                          <span className="inline-flex rounded-md bg-[var(--cream-2)] px-2 py-1 text-[11px] font-bold text-[var(--brown-soft)]">{op.categoryName || "Sans categorie"}</span>
                         </td>
-                        <td className="px-3 py-2.5 align-top text-[11px] font-bold text-[#806A58]">{SOURCE_LABELS[op.source] || op.source}</td>
-                        <td className={`px-4 py-2.5 text-right align-top font-mono text-[12px] font-black ${expense ? "text-[#991B1B]" : "text-[#166534]"}`}>{expense ? "-" : "+"}{formatPrice(op.amount)}</td>
+                        <td className="px-3 py-2.5 align-top text-[11px] font-bold text-[var(--brown-soft)]">{SOURCE_LABELS[op.source] || op.source}</td>
+                        <td className={`px-4 py-2.5 text-right align-top font-mono text-[12px] font-black ${expense ? "text-[var(--red)]" : "text-[var(--green)]"}`}>{expense ? "-" : "+"}{formatPrice(op.amount)}</td>
                       </tr>
                     );
                   })}
@@ -326,20 +327,33 @@ export default function BilanClient({ initial, defaultRange, defaultPreset }: {
           )}
         </TableCard>
       </div>
+
+      {saveModalOpen && (
+        <ReasonModal
+          title="Enregistrer le bilan"
+          description={`Periode du ${from} au ${to} · ${data.operationsCount || 0} ecriture(s). Le bilan sera disponible dans le journal de caisse.`}
+          confirmLabel="Enregistrer le bilan"
+          label="Nom du bilan"
+          singleLine
+          initialValue={`Bilan ${from} - ${to}`}
+          onConfirm={saveReport}
+          onClose={() => setSaveModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 function BilanTile({ label, value, tone }: { label: string; value: string; tone: "green" | "red" | "accent" | "ink" }) {
   const valueClasses: Record<string, string> = {
-    green: "text-[#166534]",
-    red: "text-[#991B1B]",
-    accent: "text-[#D4541C]",
-    ink: "text-[#1A1410]",
+    green: "text-[var(--green)]",
+    red: "text-[var(--red)]",
+    accent: "text-[var(--orange)]",
+    ink: "text-[var(--ink)]",
   };
   return (
-    <div className="rounded-md border border-[#F1E8DF] bg-[#FCFAF7] px-3 py-2.5">
-      <div className="text-[10px] font-black uppercase text-[#806A58]">{label}</div>
+    <div className="rounded-md border border-[var(--cream-2)] bg-[var(--cream)] px-3 py-2.5">
+      <div className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">{label}</div>
       <div className={`mt-0.5 text-[18px] font-black ${valueClasses[tone]}`}>{value}</div>
     </div>
   );

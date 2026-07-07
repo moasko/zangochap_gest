@@ -5,7 +5,7 @@ import { CartItem, useCart } from "@/lib/CartContext";
 import { formatPrice } from "@/lib/constants";
 import { Trash2, ShoppingBag, ArrowRight, CheckCircle2, ShieldCheck, ChevronLeft, Tag } from "lucide-react";
 import Link from "next/link";
-import { createOrder } from "@/modules/orders/actions";
+import { createPublicOrder } from "@/modules/orders/actions";
 import { getAutomaticDiscountAction, validatePromoCodeAction } from "@/modules/products/actions";
 import { useToast } from "@/components/Toast";
 import { useSearchParams } from "next/navigation";
@@ -157,15 +157,13 @@ export default function CartPageClient({ communes = [], relayPoints = [] }: { co
 
     startTransition(async () => {
       try {
-        await createOrder({
+        const res = await createPublicOrder({
           customerName: name,
           customerPhone: phone,
           customerPhone2: phone2 || undefined,
           customerLocation: address,
           commune,
           deliveryFee,
-          status: 'TO_PROCESS',
-          source: 'public',
           promoCode: discount.code || undefined,
           discount: discount.amount,
           items: checkoutItems.map(item => ({
@@ -179,7 +177,13 @@ export default function CartPageClient({ communes = [], relayPoints = [] }: { co
             image: item.image,
           }))
         });
-        
+
+        if (!res.success) {
+          // Le vrai motif remonte du serveur (rupture, promo expiree, point relais...).
+          showToast(res.error, "error");
+          return;
+        }
+
         showToast("Commande validée avec succès !", "success");
         if (directItem) {
           sessionStorage.removeItem("zangochap_buy_now");
@@ -187,8 +191,8 @@ export default function CartPageClient({ communes = [], relayPoints = [] }: { co
           clearCart();
         }
         setOrderSuccess(true);
-      } catch (e: any) {
-        showToast(e.message || "Erreur lors de la commande", "error");
+      } catch {
+        showToast("Erreur reseau. Verifiez votre connexion et reessayez.", "error");
       }
     });
   };
@@ -207,11 +211,21 @@ export default function CartPageClient({ communes = [], relayPoints = [] }: { co
   }
 
   if (checkoutItems.length === 0) {
+    // L'achat direct s'appuie sur sessionStorage : en navigation privee ou apres
+    // un vidage, l'article peut etre perdu. On l'explique au lieu de laisser croire
+    // a un panier vide inexplicable.
+    const buyNowLost = isBuyNow;
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] px-6 py-20 text-center animate-[fadeUp_0.5s_ease]">
         <ShoppingBag size={56} color="#ddd" strokeWidth={1.2} />
-        <h1 className="text-xl font-light tracking-[0.2em] mt-6 mb-3 text-[#1A1614]">VOTRE PANIER EST VIDE</h1>
-        <p className="text-sm text-[#999] mb-8">Parcourez notre collection et trouvez la pièce parfaite.</p>
+        <h1 className="text-xl font-light tracking-[0.2em] mt-6 mb-3 text-[#1A1614]">
+          {buyNowLost ? "ARTICLE INDISPONIBLE" : "VOTRE PANIER EST VIDE"}
+        </h1>
+        <p className="text-sm text-[#999] mb-8">
+          {buyNowLost
+            ? "Nous n'avons pas pu retrouver l'article. Retournez sur la boutique et cliquez a nouveau sur Acheter."
+            : "Parcourez notre collection et trouvez la pièce parfaite."}
+        </p>
         <Link href="/" className="inline-block px-12 py-4 bg-[#1A1614] text-white no-underline text-[11px] font-semibold tracking-[0.15em] transition-all hover:bg-[#333]">DÉCOUVRIR LA BOUTIQUE</Link>
       </div>
     );

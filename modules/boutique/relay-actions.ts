@@ -205,15 +205,18 @@ export async function markRelayParcelPickedUpAction(data: {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true, ref: true, status: true, history: true, deliveryNote: true, total: true, deliveryFee: true, discount: true },
+    select: { id: true, ref: true, status: true, history: true, deliveryNote: true, total: true, deliveryFee: true, discount: true, deliverymanId: true, deliverymanName: true },
   });
 
   if (!order) return { success: false, error: "Colis introuvable." };
   const assignmentError = getRelayAssignmentError(session, order.deliveryNote);
   if (assignmentError) return { success: false, error: assignmentError };
-  if (order.status !== OrderStatus.COLLECTED) {
-    return { success: false, error: "Ce colis n'est pas marque disponible en boutique." };
+  // Le gerant peut confirmer la remise meme si le depot n'a pas ete enregistre
+  // par la gestion livraison : le colis attribue au relais suffit.
+  if (!ALLOWED_DROP_STATUSES.includes(order.status as typeof ALLOWED_DROP_STATUSES[number])) {
+    return { success: false, error: `Ce colis ne peut pas etre marque recupere depuis le statut ${order.status}.` };
   }
+  const skippedDeposit = order.status !== OrderStatus.COLLECTED;
 
   // La compta se base sur l'encaisse : jamais de livraison relais sans montant.
   // Champ vide = montant attendu ; un 0 explicite reste possible.
@@ -223,6 +226,22 @@ export async function markRelayParcelPickedUpAction(data: {
 
   const actor = actorFromSession(session);
   const history = getHistory(order.history);
+  if (skippedDeposit) {
+    history.push({
+      at: new Date().toISOString(),
+      action: "Point relais : remise directe en boutique (depot non enregistre par la gestion livraison)",
+      ...actor,
+    });
+    // Comme pour le depot, la remise en boutique met fin a la mission du livreur :
+    // la commande ne doit pas entrer dans son reglement.
+    if (order.deliverymanId) {
+      history.push({
+        at: new Date().toISOString(),
+        action: `Colis remis en boutique par le livreur ${order.deliverymanName || ""} : fin de mission livraison`.trim(),
+        ...actor,
+      });
+    }
+  }
   history.push({
     at: new Date().toISOString(),
     action: `Point relais : colis recupere par ${receiverName}`,
@@ -248,6 +267,10 @@ export async function markRelayParcelPickedUpAction(data: {
       history,
       deliveredAt: new Date().toISOString(),
       amountReceived: finalAmountReceived,
+      // Sans depot prealable, deliveryDate n'a jamais ete posee par le depot :
+      // on la fixe a aujourd'hui pour que l'encaissement tombe dans la session
+      // comptable du jour (et pas dans un jour deja cloture).
+      ...(skippedDeposit ? { deliverymanId: null, deliverymanName: null, deliveryDate: new Date() } : {}),
       lastDeliveryAttemptAt: new Date(),
       lastDeliveryAttemptStatus: "BOUTIQUE_PICKED_UP",
       lastDeliveryAttemptReason: note || null,
@@ -263,11 +286,13 @@ export async function cancelRelayParcelAction(data: {
   orderId: string;
   reason: string;
   outcome?: string;
+  amountReceived?: number | string;
 }) {
   const session = await ensureAuth(["admin", "developer", "point_relais"]);
   const orderId = normalizeText(data.orderId);
   const reason = normalizeText(data.reason);
   const outcome = normalizeText(data.outcome) || RELAY_EXIT_OUTCOMES[0];
+  const amountReceived = normalizeAmount(data.amountReceived);
 
   if (!RELAY_EXIT_OUTCOMES.includes(outcome as typeof RELAY_EXIT_OUTCOMES[number])) {
     return { success: false, error: "Issue de colis invalide." };
@@ -276,25 +301,55 @@ export async function cancelRelayParcelAction(data: {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true, ref: true, status: true, history: true, deliveryNote: true },
+    select: { id: true, ref: true, status: true, history: true, deliveryNote: true, deliverymanId: true, deliverymanName: true },
   });
 
   if (!order) return { success: false, error: "Colis introuvable." };
   const assignmentError = getRelayAssignmentError(session, order.deliveryNote);
   if (assignmentError) return { success: false, error: assignmentError };
-  if (order.status !== OrderStatus.COLLECTED) {
-    return { success: false, error: "Seuls les colis disponibles en boutique peuvent être clôturés ici." };
+  // Meme regle que la recuperation : le gerant peut cloturer un colis attribue
+  // au relais meme si le depot n'a pas ete enregistre par la gestion livraison.
+  if (!ALLOWED_DROP_STATUSES.includes(order.status as typeof ALLOWED_DROP_STATUSES[number])) {
+    return { success: false, error: `Ce colis ne peut pas etre cloture en boutique depuis le statut ${order.status}.` };
   }
+  const skippedDeposit = order.status !== OrderStatus.COLLECTED;
 
   const isDeliveredElsewhere = outcome === "Livré autrement";
+  // La compta base la caisse sur amountReceived : sans saisie explicite, un colis
+  // "livré autrement" doit compter 0 encaissé en boutique (l'argent n'y est pas
+  // passé), jamais retomber sur le montant théorique.
+  const finalAmountReceived = isDeliveredElsewhere ? (amountReceived ?? 0) : undefined;
 
   const actor = actorFromSession(session);
   const history = getHistory(order.history);
+  if (skippedDeposit) {
+    history.push({
+      at: new Date().toISOString(),
+      action: "Point relais : cloture directe en boutique (depot non enregistre par la gestion livraison)",
+      ...actor,
+    });
+    // La sortie du colis en boutique met fin a la mission du livreur :
+    // la commande ne doit pas entrer dans son reglement.
+    if (order.deliverymanId) {
+      history.push({
+        at: new Date().toISOString(),
+        action: `Colis remis en boutique par le livreur ${order.deliverymanName || ""} : fin de mission livraison`.trim(),
+        ...actor,
+      });
+    }
+  }
   history.push({
     at: new Date().toISOString(),
     action: `Point relais : ${isDeliveredElsewhere ? "colis livré autrement" : `sortie du colis (${outcome})`}`,
     ...actor,
   });
+  if (isDeliveredElsewhere) {
+    history.push({
+      at: new Date().toISOString(),
+      action: `Montant recu boutique : ${finalAmountReceived} F`,
+      ...actor,
+    });
+  }
   history.push({
     at: new Date().toISOString(),
     action: `Motif boutique : ${reason}`,
@@ -308,6 +363,9 @@ export async function cancelRelayParcelAction(data: {
       history,
       returnReason: isDeliveredElsewhere ? null : `${outcome} - ${reason}`,
       deliveredAt: isDeliveredElsewhere ? new Date().toISOString() : undefined,
+      amountReceived: finalAmountReceived,
+      // Meme logique que la recuperation : rattacher la sortie a la session du jour.
+      ...(skippedDeposit ? { deliverymanId: null, deliverymanName: null, deliveryDate: new Date() } : {}),
       lastDeliveryAttemptAt: new Date(),
       lastDeliveryAttemptStatus: isDeliveredElsewhere ? "BOUTIQUE_DELIVERED_OTHER" : "BOUTIQUE_CLOSED_OTHER",
       lastDeliveryAttemptReason: reason,

@@ -172,7 +172,7 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
               <div className="perf-empty"><div className="perf-empty-icon">📞</div><p>Aucun commercial trouvé</p></div>
             ) : (
               <table>
-                <thead><tr><th>#</th><th>Commercial</th><th>Total</th><th>Livrées</th><th>Annulées</th><th>CA Livré</th><th>Taux</th><th>Prime 1%</th><th style={{ width: 36 }}></th></tr></thead>
+                <thead><tr><th>#</th><th>Commercial</th><th>Total</th><th>Livrées</th><th>Annulées</th><th title="Alertes livreur traitées puis commande livrée">Interv. & livré</th><th>CA Livré</th><th>Taux</th><th>Prime 1%</th><th style={{ width: 36 }}></th></tr></thead>
                 <tbody>
                   {filtered.commercials.map((c, i) => (
                     <tr key={c.id}>
@@ -181,6 +181,10 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
                       <td>{c.sales}</td>
                       <td><span style={{ color: 'var(--green)', fontWeight: 600 }}>{c.delivered}</span></td>
                       <td><span style={{ color: c.cancelled > 0 ? 'var(--red)' : 'var(--brown-soft)' }}>{c.cancelled}</span></td>
+                      <td title={`${c.interventions || 0} intervention(s) sur alerte livreur, dont ${c.interventionsDelivered || 0} livrée(s)`}>
+                        <span style={{ color: 'var(--green)', fontWeight: 600 }}>{c.interventionsDelivered || 0}</span>
+                        <span style={{ color: 'var(--brown-soft)', fontSize: 11 }}> / {c.interventions || 0}</span>
+                      </td>
                       <td><span className="cell-price">{formatPrice(c.revenue)}</span></td>
                       <td><ProgressBar value={c.convRate} color={rateColor(c.convRate)} /></td>
                       <td><span style={{ color: 'var(--orange)', fontWeight: 700, fontSize: 12 }}>{formatPrice(c.prime)}</span></td>
@@ -339,6 +343,10 @@ function DetailSummary({ summary, role }: { summary: any; role: string }) {
         <div className="detail-stat-box"><div className="detail-stat-label">Commandes</div><div className="detail-stat-value">{summary.total}</div></div>
         <div className="detail-stat-box"><div className="detail-stat-label">Livrées</div><div className="detail-stat-value" style={{ color: 'var(--green)' }}>{summary.delivered}</div></div>
         <div className="detail-stat-box"><div className="detail-stat-label">Taux</div><div className="detail-stat-value">{summary.convRate}%</div></div>
+        <div className="detail-stat-box" title={`${summary.interventions || 0} intervention(s) sur alerte livreur, dont ${summary.interventionsDelivered || 0} livrée(s)`}>
+          <div className="detail-stat-label">Interv. & livré</div>
+          <div className="detail-stat-value" style={{ color: 'var(--green)' }}>{summary.interventionsDelivered || 0}<span style={{ fontSize: 12, color: 'var(--brown-soft)', fontWeight: 500 }}> / {summary.interventions || 0}</span></div>
+        </div>
         <div className="detail-stat-box accent"><div className="detail-stat-label">CA Livré</div><div className="detail-stat-value">{formatPrice(summary.revenue)}</div></div>
       </div>
     );

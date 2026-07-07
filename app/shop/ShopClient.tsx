@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatPrice } from "@/lib/constants";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Filter, X, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Filter, X, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { Product, Category } from "@/lib/types";
 import ProductCard from "@/components/public/ProductCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,6 +56,27 @@ export default function ShopClient({ initialProducts, categories }: {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  // Pagination fenetree : premiere, derniere, page courante +/-1, avec ellipses.
+  // Evite qu'une longue rangee de numeros deborde de l'ecran sur mobile.
+  const pageItems = useMemo<(number | "…")[]>(() => {
+    if (totalPages <= 1) return [];
+    const items: (number | "…")[] = [];
+    let last = 0;
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        if (last && i - last > 1) items.push("…");
+        items.push(i);
+        last = i;
+      }
+    }
+    return items;
+  }, [totalPages, currentPage]);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo(0, 0);
+  };
 
   return (
     <div className="bg-white min-h-screen py-10 font-body w-full">
@@ -179,31 +200,39 @@ export default function ShopClient({ initialProducts, categories }: {
               ))}
             </div>
 
-            {/* PAGINATION UI */}
+            {/* PAGINATION UI — fenetree, fleches compactes, ne deborde pas sur mobile */}
             {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-2 mt-[60px] pt-10 border-t border-[#eee]">
-                <button 
-                  className="min-w-[40px] h-[40px] bg-none border border-[#eee] text-[11px] font-semibold cursor-pointer transition-colors hover:enabled:border-[#1A1614] disabled:opacity-30 disabled:cursor-not-allowed"
+              <div className="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 mt-[60px] pt-10 border-t border-[#eee]">
+                <button
+                  className="w-10 h-10 flex items-center justify-center bg-none border border-[#eee] cursor-pointer transition-colors hover:enabled:border-[#1A1614] disabled:opacity-30 disabled:cursor-not-allowed"
                   disabled={currentPage === 1}
-                  onClick={() => { setCurrentPage(prev => prev - 1); window.scrollTo(0, 0); }}
+                  onClick={() => goToPage(currentPage - 1)}
+                  aria-label="Page précédente"
                 >
-                  PRÉC.
+                  <ChevronLeft size={16} />
                 </button>
-                {[...Array(totalPages)].map((_, i) => (
-                  <button 
-                    key={i} 
-                    className={`min-w-[40px] h-[40px] border text-[11px] font-semibold cursor-pointer transition-colors ${currentPage === i + 1 ? "bg-[#1A1614] text-white border-[#1A1614]" : "bg-none border-[#eee] hover:border-[#1A1614]"}`}
-                    onClick={() => { setCurrentPage(i + 1); window.scrollTo(0, 0); }}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button 
-                  className="min-w-[40px] h-[40px] bg-none border border-[#eee] text-[11px] font-semibold cursor-pointer transition-colors hover:enabled:border-[#1A1614] disabled:opacity-30 disabled:cursor-not-allowed"
+                {pageItems.map((item, idx) =>
+                  item === "…" ? (
+                    <span key={`dots-${idx}`} className="w-6 h-10 flex items-center justify-center text-[12px] text-[#bbb] select-none">…</span>
+                  ) : (
+                    <button
+                      key={item}
+                      className={`min-w-[40px] h-[40px] border text-[11px] font-semibold cursor-pointer transition-colors ${currentPage === item ? "bg-[#1A1614] text-white border-[#1A1614]" : "bg-none border-[#eee] hover:border-[#1A1614]"}`}
+                      onClick={() => goToPage(item)}
+                      aria-label={`Page ${item}`}
+                      aria-current={currentPage === item ? "page" : undefined}
+                    >
+                      {item}
+                    </button>
+                  )
+                )}
+                <button
+                  className="w-10 h-10 flex items-center justify-center bg-none border border-[#eee] cursor-pointer transition-colors hover:enabled:border-[#1A1614] disabled:opacity-30 disabled:cursor-not-allowed"
                   disabled={currentPage === totalPages}
-                  onClick={() => { setCurrentPage(prev => prev + 1); window.scrollTo(0, 0); }}
+                  onClick={() => goToPage(currentPage + 1)}
+                  aria-label="Page suivante"
                 >
-                  SUIV.
+                  <ChevronRight size={16} />
                 </button>
               </div>
             )}

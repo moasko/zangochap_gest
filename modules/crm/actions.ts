@@ -1,12 +1,17 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { ensureAuth } from "@/lib/auth";
+
+// Donnees clients (PII) : reservees au staff. Sans garde, ces server actions
+// exposees etaient invocables anonymement (l'ID d'action se lit dans le bundle).
+const STAFF_ROLES = ["admin", "developer", "commercial", "collection", "packing", "stock", "comptable"];
 
 /**
  * Récupère les clients avec recherche par nom ou téléphone
  */
 export async function getCustomers(query?: string) {
+  await ensureAuth(STAFF_ROLES);
   const where: any = {};
   if (query) {
     where.OR = [
@@ -33,6 +38,7 @@ export async function upsertCustomerFromOrder(data: {
   commune?: string;
   orderAmount: number;
 }) {
+  await ensureAuth(STAFF_ROLES);
   const customer = await prisma.customer.upsert({
     where: { phone: data.phone },
     update: {

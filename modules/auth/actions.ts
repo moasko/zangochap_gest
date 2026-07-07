@@ -8,9 +8,25 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "zangochap-super-secret-key-change-me-in-prod"
-);
+// Le secret de signature ne doit JAMAIS retomber sur une valeur connue : l'ancien
+// fallback etait present dans le repo, donc n'importe qui pouvait forger un cookie
+// de session admin. On accepte tout secret defini par l'exploitant (sa longueur est
+// son choix) ; on refuse seulement l'absence de secret ou l'ancienne valeur fuitee.
+const LEAKED_DEFAULT_SECRET = "zangochap-super-secret-key-change-me-in-prod";
+
+function resolveJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret !== LEAKED_DEFAULT_SECRET) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET manquant ou egal a l'ancienne valeur par defaut compromise. Definissez un secret unique avant de demarrer en production.",
+    );
+  }
+  console.warn("[auth] JWT_SECRET absent : secret de developpement ephemere utilise. Ne pas utiliser en production.");
+  return "dev-only-insecure-secret-do-not-use-in-production";
+}
+
+const JWT_SECRET = new TextEncoder().encode(resolveJwtSecret());
 
 export async function loginAction(formData: FormData) {
   const email = formData.get("email")?.toString().trim().toLowerCase();

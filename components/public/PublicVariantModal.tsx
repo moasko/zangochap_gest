@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import { Product, ProductVariant } from "@/lib/types";
 import { formatPrice } from "@/lib/constants";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import { getImageUrl } from "@/lib/utils";
+import { useVariantSelection } from "@/lib/useVariantSelection";
 
 type PublicVariantModalProps = {
   product: Product | null;
@@ -22,31 +23,25 @@ export default function PublicVariantModal({
   actionLabel,
   title,
 }: PublicVariantModalProps) {
-  const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState("");
+  const {
+    sizes,
+    colors,
+    selectedSize,
+    selectedColor,
+    selectSize,
+    selectColor,
+    isSizeEnabled,
+    isColorEnabled,
+    currentVariant: selectedVariant,
+    hasSingleSize,
+    hasSingleColor,
+  } = useVariantSelection(product?.variants);
   const [qty, setQty] = useState(1);
 
   useEffect(() => {
-    if (!product) return;
-    setSelectedSize("");
-    setSelectedColor("");
-    setQty(1);
+    if (product) setQty(1);
   }, [product]);
 
-  const sizes = useMemo(
-    () => Array.from(new Set(product?.variants.map((variant) => variant.size) || [])),
-    [product],
-  );
-  const colors = useMemo(
-    () =>
-      product?.variants
-        .filter((variant) => variant.size === selectedSize)
-        .map((variant) => variant.color) || [],
-    [product, selectedSize],
-  );
-  const selectedVariant = product?.variants.find(
-    (variant) => variant.size === selectedSize && variant.color === selectedColor,
-  );
   const previewImage = selectedVariant?.image || product?.images?.[0]?.url;
 
   if (!product) return null;
@@ -86,50 +81,63 @@ export default function PublicVariantModal({
           </div>
         </div>
 
-        <div>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#777]">Taille</div>
-          <div className="flex flex-wrap gap-2">
-            {sizes.map((size) => (
-              <button
-                key={size}
-                className={`min-h-10 min-w-12 border px-3 text-xs font-semibold ${
-                  selectedSize === size
-                    ? "border-[#1A1614] bg-[#1A1614] text-white"
-                    : "border-[#E6E1D9] bg-white text-[#1A1614]"
-                }`}
-                onClick={() => {
-                  setSelectedSize(size);
-                  setSelectedColor("");
-                }}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#777]">Couleur</div>
-          {selectedSize ? (
-            <div className="flex flex-wrap gap-2">
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  className={`min-h-10 border px-3 text-xs font-semibold ${
-                    selectedColor === color
-                      ? "border-[#D4541C] bg-[#D4541C] text-white"
-                      : "border-[#E6E1D9] bg-white text-[#1A1614]"
-                  }`}
-                  onClick={() => setSelectedColor(color)}
-                >
-                  {color}
-                </button>
-              ))}
+        {/* On masque une dimension entierement quand elle n'offre aucun choix
+            (taille ou couleur unique) : elle est deja auto-selectionnee. */}
+        {!hasSingleSize && (
+          <div>
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-[#777]">
+              <span>Taille</span>
+              {selectedSize && <span className="text-[#1A1614]">{selectedSize}</span>}
             </div>
-          ) : (
-            <div className="text-sm text-[#AAA]">Selectionnez une taille pour voir les couleurs.</div>
-          )}
-        </div>
+            <div className="flex flex-wrap gap-2">
+              {sizes.map((size) => {
+                const enabled = isSizeEnabled(size);
+                return (
+                  <button
+                    key={size}
+                    disabled={!enabled}
+                    className={`min-h-10 min-w-12 border px-3 text-xs font-semibold transition-colors ${
+                      selectedSize === size
+                        ? "border-[#1A1614] bg-[#1A1614] text-white"
+                        : "border-[#E6E1D9] bg-white text-[#1A1614] hover:enabled:border-[#1A1614]"
+                    } ${!enabled ? "cursor-not-allowed opacity-40 line-through" : "cursor-pointer"}`}
+                    onClick={() => selectSize(size)}
+                  >
+                    {size}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!hasSingleColor && (
+          <div>
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-[#777]">
+              <span>Couleur</span>
+              {selectedColor && <span className="text-[#1A1614]">{selectedColor}</span>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {colors.map((color) => {
+                const enabled = isColorEnabled(color);
+                return (
+                  <button
+                    key={color}
+                    disabled={!enabled}
+                    className={`min-h-10 border px-3 text-xs font-semibold transition-colors ${
+                      selectedColor === color
+                        ? "border-[#D4541C] bg-[#D4541C] text-white"
+                        : "border-[#E6E1D9] bg-white text-[#1A1614] hover:enabled:border-[#D4541C]"
+                    } ${!enabled ? "cursor-not-allowed opacity-40 line-through" : "cursor-pointer"}`}
+                    onClick={() => selectColor(color)}
+                  >
+                    {color}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between border-t border-[#EEE8DF] pt-4">
           <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#777]">Quantite</span>

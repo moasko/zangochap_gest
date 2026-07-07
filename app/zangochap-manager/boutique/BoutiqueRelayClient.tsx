@@ -149,6 +149,7 @@ export default function BoutiqueRelayClient({
   const [pickupNote, setPickupNote] = useState("");
   const [cancelOutcome, setCancelOutcome] = useState(CANCEL_OUTCOMES[0]);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelAmount, setCancelAmount] = useState("0");
   const canDeposit = ["admin", "developer", "collection"].includes(user.role);
   // Les actions de sortie (recuperation / cloture) sont reservees au gerant et aux admins :
   // les memes roles que cote serveur, pour ne pas afficher de boutons voues a l'echec.
@@ -237,6 +238,7 @@ export default function BoutiqueRelayClient({
         orderId: activePanel.order.id,
         outcome: cancelOutcome,
         reason: cancelReason,
+        amountReceived: cancelOutcome === "Livré autrement" ? cancelAmount : undefined,
       });
       if (res.success) {
         showToast(res.message || "Colis annule.", "success");
@@ -258,6 +260,7 @@ export default function BoutiqueRelayClient({
   const openCancel = (order: RelayOrder) => {
     setCancelOutcome(CANCEL_OUTCOMES[0]);
     setCancelReason("");
+    setCancelAmount("0");
     setActivePanel({ kind: "cancel", order });
   };
 
@@ -267,6 +270,7 @@ export default function BoutiqueRelayClient({
     setPickupAmount("");
     setPickupNote("");
     setCancelReason("");
+    setCancelAmount("0");
   };
 
   return (
@@ -371,7 +375,7 @@ export default function BoutiqueRelayClient({
                 <span>Total</span>
                 <strong>{formatPrice(Math.max(0, order.total + order.deliveryFee - (order.discount || 0)))}</strong>
               </div>
-              {isAvailable(order) && canManageParcel ? (
+              {(isAvailable(order) || isIncoming(order)) && canManageParcel ? (
                 <div className={styles.actions}>
                   <button type="button" className={styles.historyButton} onClick={() => setHistoryOrder(order)}>
                     <History size={16} />
@@ -386,7 +390,7 @@ export default function BoutiqueRelayClient({
                     <span>Récupéré OK</span>
                   </button>
                 </div>
-              ) : isAvailable(order) ? (
+              ) : isAvailable(order) || isIncoming(order) ? (
                 <div className={styles.inactiveActions}>
                   <p className={styles.closedReason}>Sortie gérée par le gérant de la boutique</p>
                   <button type="button" className={styles.historyButton} onClick={() => setHistoryOrder(order)}>
@@ -499,6 +503,12 @@ export default function BoutiqueRelayClient({
                     ))}
                   </select>
                 </label>
+                {cancelOutcome === "Livré autrement" && (
+                  <label>
+                    <span>Montant reçu en boutique</span>
+                    <input inputMode="numeric" value={cancelAmount} onChange={(event) => setCancelAmount(event.target.value)} placeholder="0 si l'argent n'est pas passé par la boutique" />
+                  </label>
+                )}
                 <label>
                   <span>Précision obligatoire</span>
                   <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Expliquez clairement la situation et la destination du colis..." />

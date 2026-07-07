@@ -63,7 +63,7 @@ export const StatCard = ({
   </div>
 );
 
-export const EmptyState = ({ icon, title, description }: { icon: string; title: string; description?: string }) => (
+export const EmptyState = ({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) => (
   <div className="empty">
     <div className="empty-icon">{icon}</div>
     <h4>{title}</h4>
