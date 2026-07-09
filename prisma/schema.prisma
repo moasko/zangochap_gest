@@ -177,6 +177,10 @@ model AccountingSession {
   date        DateTime                @unique
   status      AccountingSessionStatus @default(OPEN)
   notes       String?                 @db.Text
+  // Date de traitement saisie manuellement a la cloture : le jour ou la caisse a
+  // ete reellement traitee/rapprochee (peut differer du jour comptable "date").
+  processedAt   DateTime?
+  processedByName String?
   operations  AccountingOperation[]
   audits      AccountingAuditLog[]
   reports     AccountingReport[]      @relation("AccountingReportSessions")

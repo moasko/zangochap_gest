@@ -10,6 +10,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Calendar,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -17,6 +18,7 @@ import {
   FileText,
   History,
   Landmark,
+  Lock,
   Plus,
   Printer,
   Save,
@@ -32,6 +34,7 @@ import { EmptyState, TableCard } from "@/components/UI";
 import { useToast } from "@/components/Toast";
 import { accountingActionLabel, formatDay, formatPrice } from "@/lib/constants";
 import {
+  closeAccountingSession,
   createAccountingCategory,
   createAccountingOperation,
   deleteAccountingCategory,
@@ -99,16 +102,46 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [deletingOperation, setDeletingOperation] = useState<any>(null);
+  // Grand livre unique a deux vues : les ecritures du jour, ou l'historique des
+  // sessions. Choisir une session recharge le journal sur sa date.
+  const [ledgerView, setLedgerView] = useState<"journal" | "sessions">("journal");
+  // Cloture directement depuis le journal (sans passer par le detail session).
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closePending, setClosePending] = useState(false);
 
   const incomeCategories = workspace.categories.filter((category: any) => category.type === "INCOME");
   const expenseCategories = workspace.categories.filter((category: any) => category.type === "EXPENSE");
   const sessionDate = dateInputValue(workspace.session.date);
+  const todayValue = dateInputValue();
   const isClosed = workspace.session.status === "CLOSED";
   const hasActiveFilters = Boolean(searchTerm.trim() || typeFilter !== "ALL" || categoryFilter !== "ALL");
   // Sessions d'autres jours encore ouvertes : on les remonte pour ne pas les oublier.
   const staleOpenSessions = workspace.sessions.filter(
     (session: any) => session.status !== "CLOSED" && dateInputValue(session.date) !== sessionDate,
   );
+  // Entrees livreurs encore a valider sur la session affichee : l'ecriture groupee
+  // (source DELIVERY, sans riderId, montant > 0) signale ce reste a valider.
+  const hasPendingDelivery = workspace.operations.some(
+    (operation: any) => operation.source === "DELIVERY" && !operation.riderId && Number(operation.amount) > 0,
+  );
+  // Sessions deja cloturees, listees directement sur le premier ecran (plus recentes d'abord).
+  const closedSessions = workspace.sessions
+    .filter((session: any) => session.status === "CLOSED")
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const closeSession = async (processedAt: string) => {
+    setClosePending(true);
+    try {
+      await closeAccountingSession(workspace.session.id, { processedAt });
+      showToast("Session cloturee", "success");
+      setCloseModalOpen(false);
+      router.refresh();
+    } catch (error: any) {
+      showToast(error.message || "Cloture impossible", "error");
+    } finally {
+      setClosePending(false);
+    }
+  };
 
   const openOperationModal = (type: OperationType) => {
     if (isClosed) {
@@ -176,9 +209,11 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   };
 
   // Navigation jour precedent / suivant sans passer par le date picker.
+  // Le dimanche est chome : on le saute dans le sens du deplacement.
   const shiftDate = (days: number) => {
     const date = new Date(`${sessionDate}T12:00:00`);
     date.setDate(date.getDate() + days);
+    if (date.getDay() === 0) date.setDate(date.getDate() + (days >= 0 ? 1 : -1));
     changeDate(dateInputValue(date));
   };
 
@@ -233,13 +268,21 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-[12px] font-black text-white hover:bg-white/15" onClick={() => setActiveModal("categoryPlan")}>
               <Tag size={15} /> Categories
             </button>
+            {!isClosed && (
+              <button className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-[12px] font-black text-[var(--navy)] hover:bg-[var(--cream)]" onClick={() => setCloseModalOpen(true)}>
+                <Lock size={15} /> Cloturer
+              </button>
+            )}
           </div>
         </div>
       </section>
 
       {isClosed && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--green-soft)] bg-[var(--green-soft)] px-4 py-2.5 text-[12px] font-bold text-[var(--green)]">
-          <span>Session cloturee : les ecritures sont verrouillees.</span>
+          <span>
+            Session cloturee : les ecritures sont verrouillees.
+            {workspace.session.processedAt ? ` Traitee le ${dateInputValue(workspace.session.processedAt)}.` : ""}
+          </span>
           <Link href={`/zangochap-manager/accounting/sessions/${workspace.session.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--green-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--green-soft)]">
             Gerer la cloture
           </Link>
@@ -251,14 +294,23 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           <span className="inline-flex items-center gap-1.5">
             <AlertTriangle size={14} /> {staleOpenSessions.length} session(s) d&apos;autres jours encore ouverte(s) a cloturer.
           </span>
-          <Link href={`/zangochap-manager/accounting/sessions/${staleOpenSessions[0].id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--orange-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--orange-soft)]">
-            Traiter ({dateInputValue(staleOpenSessions[0].date)})
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLedgerView("sessions")}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--orange-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--orange-soft)]"
+            >
+              Voir les sessions
+            </button>
+            <Link href={`/zangochap-manager/accounting/sessions/${staleOpenSessions[0].id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--orange-soft)] bg-white px-3 py-1.5 font-black hover:bg-[var(--orange-soft)]">
+              Traiter ({dateInputValue(staleOpenSessions[0].date)})
+            </Link>
+          </div>
         </div>
       )}
 
-      <section className="mb-5 rounded-lg border border-[var(--line)] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-2">
+      <section className="mb-5 rounded-lg border border-[var(--line)] bg-white p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-[11px] font-bold uppercase text-[var(--brown-soft)]">
             <Landmark size={13} /> Flux de caisse du jour
           </div>
@@ -273,17 +325,37 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-        <TableCard
-          title="Grand livre de la session"
-          meta={`${filteredOperations.length}/${workspace.operations.length} ecriture(s)`}
-          actions={
-            <div className="hidden items-center gap-2 text-[11px] font-bold uppercase text-[var(--brown-soft)] md:flex">
-              <SlidersHorizontal size={13} />
-              Controle
-            </div>
-          }
-        >
+      <TableCard
+        title="Grand livre"
+        meta={ledgerView === "journal"
+          ? `Session du ${sessionDate}${sessionDate === todayValue ? " (aujourd'hui)" : ""} · ${isClosed ? "cloturee" : "ouverte"} · ${filteredOperations.length}/${workspace.operations.length} ecriture(s)`
+          : `${workspace.sessions.length} session(s) · ${workspace.openSessionsCount || 0} ouverte(s)`}
+        actions={
+          <div className="flex items-center gap-1 rounded-md border border-[var(--line)] bg-[var(--cream)] p-1">
+            <button
+              type="button"
+              onClick={() => setLedgerView("journal")}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-[5px] px-3 text-[11px] font-black transition-colors ${ledgerView === "journal" ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--brown-soft)] hover:text-[var(--ink)]"}`}
+            >
+              <SlidersHorizontal size={13} /> Ecritures du jour
+            </button>
+            <button
+              type="button"
+              onClick={() => setLedgerView("sessions")}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-[5px] px-3 text-[11px] font-black transition-colors ${ledgerView === "sessions" ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--brown-soft)] hover:text-[var(--ink)]"}`}
+            >
+              <History size={13} /> Sessions
+              {(workspace.openSessionsCount || 0) > 0 && (
+                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--orange)] px-1.5 py-0.5 text-[10px] font-black leading-none text-white">
+                  {workspace.openSessionsCount}
+                </span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        {ledgerView === "journal" ? (
+          <>
           <div className="grid gap-2 border-b border-[var(--line)] bg-[var(--cream)] p-3 lg:grid-cols-[minmax(220px,1fr)_150px_190px]">
             <label className="flex h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3">
               <Search size={15} className="text-[var(--brown-soft)]" />
@@ -497,38 +569,144 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             </div>
             </>
           )}
-        </TableCard>
-
-        <div className="flex flex-col gap-4">
-          <TableCard title="Grand livre des sessions" meta={`${workspace.openSessionsCount || 0} ouverte(s)`}>
+          </>
+        ) : (
+          <>
+            <div className="border-b border-[var(--line)] bg-[var(--cream)] px-4 py-2.5 text-[11px] font-bold text-[var(--brown-soft)]">
+              Cliquez sur une journee pour afficher ses ecritures. Le bouton Detail ouvre la cloture et la validation des livreurs.
+            </div>
             <div className="divide-y divide-[var(--cream-2)]">
               {workspace.sessions.map((session: any) => {
                 const open = session.status !== "CLOSED";
+                const isCurrent = session.id === workspace.session.id;
+                const isToday = dateInputValue(session.date) === todayValue;
                 return (
-                  <Link
+                  <div
                     key={session.id}
-                    className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--cream)] ${open ? "border-l-2 border-[var(--orange)]" : "border-l-2 border-transparent"}`}
-                    href={`/zangochap-manager/accounting/sessions/${session.id}`}
+                    className={`flex items-center gap-2 pr-3 ${open ? "border-l-2 border-[var(--orange)]" : "border-l-2 border-transparent"} ${isCurrent ? "bg-[var(--orange-soft)]" : "hover:bg-[var(--cream)]"}`}
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-black text-[var(--ink)]">{dateInputValue(session.date)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${open ? "bg-[var(--orange-soft)] text-[var(--orange)]" : "bg-[var(--green-soft)] text-[var(--green)]"}`}>
-                          {open ? "Ouverte" : "Cloturee"}
-                        </span>
-                        {session.pendingDelivery && (
-                          <span className="rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase text-[var(--amber)]">A valider</span>
-                        )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        changeDate(dateInputValue(session.date));
+                        setLedgerView("journal");
+                      }}
+                      className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3 text-left"
+                      title="Afficher les ecritures de cette journee"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-[13px] font-black text-[var(--ink)]">{dateInputValue(session.date)}</span>
+                          {isToday && (
+                            <span className="rounded-full bg-[var(--navy)] px-2 py-0.5 text-[10px] font-black uppercase text-white">Aujourd&apos;hui</span>
+                          )}
+                          {isCurrent && !isToday && (
+                            <span className="rounded-full bg-[var(--orange)] px-2 py-0.5 text-[10px] font-black uppercase text-white">Affichee</span>
+                          )}
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${open ? "bg-[var(--orange-soft)] text-[var(--orange)]" : "bg-[var(--green-soft)] text-[var(--green)]"}`}>
+                            {open ? "Ouverte" : "Cloturee"}
+                          </span>
+                          {!open && session.processedAt && (
+                            <span className="rounded-full bg-[var(--cream-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--brown-soft)]">
+                              Traitee le {dateInputValue(session.processedAt)}
+                            </span>
+                          )}
+                          {session.pendingDelivery && (
+                            <span className="rounded-full bg-[var(--amber-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase text-[var(--amber)]">A valider</span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[11px] font-semibold text-[var(--brown-soft)]">
+                          {session.summary.count} operation(s) ·{" "}
+                          <span className="text-[var(--green)]">+{formatPrice(session.summary.totalIncome)}</span>
+                          {" / "}
+                          <span className="text-[var(--red)]">-{formatPrice(session.summary.totalExpense)}</span>
+                        </div>
                       </div>
-                      <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{session.summary.count} operation(s)</div>
-                    </div>
-                    <div className="text-right text-[12px] font-black text-[var(--orange)]">{formatPrice(session.summary.balance)}</div>
-                  </Link>
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold uppercase text-[var(--brown-soft)]">Solde</div>
+                        <div className={`font-mono text-[13px] font-black ${session.summary.balance < 0 ? "text-[var(--red)]" : "text-[var(--orange)]"}`}>
+                          {formatPrice(session.summary.balance)}
+                        </div>
+                      </div>
+                    </button>
+                    <Link
+                      href={`/zangochap-manager/accounting/sessions/${session.id}`}
+                      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--line)] bg-white px-2.5 text-[11px] font-black text-[var(--brown-soft)] hover:bg-[var(--cream-2)]"
+                      title="Detail de la session (cloture, validation livreurs)"
+                      aria-label={`Detail de la session du ${dateInputValue(session.date)}`}
+                    >
+                      Detail <ChevronRight size={13} />
+                    </Link>
+                  </div>
                 );
               })}
             </div>
-          </TableCard>
-        </div>
+          </>
+        )}
+      </TableCard>
+
+      <div className="mt-4">
+        <TableCard title="Sessions cloturees" meta={`${closedSessions.length} session(s) cloturee(s)`}>
+          {closedSessions.length === 0 ? (
+            <EmptyState icon={<Lock size={22} />} title="Aucune session cloturee" description="Les journees verrouillees apparaitront ici avec leur date de traitement." />
+          ) : (
+            <div className="divide-y divide-[var(--cream-2)]">
+              {closedSessions.map((session: any) => {
+                const isCurrent = session.id === workspace.session.id;
+                return (
+                  <div
+                    key={session.id}
+                    className={`flex items-center gap-2 border-l-2 border-[var(--green)] pr-3 ${isCurrent ? "bg-[var(--green-soft)]" : "hover:bg-[var(--cream)]"}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        changeDate(dateInputValue(session.date));
+                        setLedgerView("journal");
+                      }}
+                      className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3 text-left"
+                      title="Afficher les ecritures de cette journee"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-[13px] font-black text-[var(--ink)]">{dateInputValue(session.date)}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--green-soft)] px-2 py-0.5 text-[11px] font-semibold uppercase text-[var(--green)]">
+                            <Lock size={11} /> Cloturee
+                          </span>
+                          {session.processedAt && (
+                            <span className="rounded-full bg-[var(--cream-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--brown-soft)]">
+                              Traitee le {dateInputValue(session.processedAt)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[11px] font-semibold text-[var(--brown-soft)]">
+                          {session.summary.count} operation(s) ·{" "}
+                          <span className="text-[var(--green)]">+{formatPrice(session.summary.totalIncome)}</span>
+                          {" / "}
+                          <span className="text-[var(--red)]">-{formatPrice(session.summary.totalExpense)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold uppercase text-[var(--brown-soft)]">Solde</div>
+                        <div className={`font-mono text-[13px] font-black ${session.summary.balance < 0 ? "text-[var(--red)]" : "text-[var(--orange)]"}`}>
+                          {formatPrice(session.summary.balance)}
+                        </div>
+                      </div>
+                    </button>
+                    <Link
+                      href={`/zangochap-manager/accounting/sessions/${session.id}`}
+                      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--line)] bg-white px-2.5 text-[11px] font-black text-[var(--brown-soft)] hover:bg-[var(--cream-2)]"
+                      title="Detail de la session"
+                      aria-label={`Detail de la session du ${dateInputValue(session.date)}`}
+                    >
+                      Detail <ChevronRight size={13} />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TableCard>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -642,7 +820,102 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           onClose={() => setActiveModal(null)}
         />
       )}
+      {closeModalOpen && (
+        <CloseSessionModal
+          sessionDate={sessionDate}
+          cashBalance={workspace.totals.balance}
+          hasPendingDelivery={hasPendingDelivery}
+          detailHref={`/zangochap-manager/accounting/sessions/${workspace.session.id}`}
+          pending={closePending}
+          onConfirm={closeSession}
+          onClose={() => setCloseModalOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+// Cloture rapide depuis le journal : date de traitement obligatoire (saisie
+// manuelle) et alerte si des entrees livreurs restent a valider. Le controle
+// livreur detaille reste sur la page detail de session.
+function CloseSessionModal({ sessionDate, cashBalance, hasPendingDelivery, detailHref, pending, onConfirm, onClose }: {
+  sessionDate: string;
+  cashBalance: number;
+  hasPendingDelivery: boolean;
+  detailHref: string;
+  pending: boolean;
+  onConfirm: (processedAt: string) => void;
+  onClose: () => void;
+}) {
+  const [processedAt, setProcessedAt] = useState(() => dateInputValue());
+  const [acknowledged, setAcknowledged] = useState(false);
+  const canConfirm = Boolean(processedAt) && (!hasPendingDelivery || acknowledged);
+
+  return (
+    <Modal isOpen onClose={onClose} title="Cloturer la session">
+      <div className="grid gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--cream)] px-3 py-2.5">
+          <div>
+            <div className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Session du {sessionDate}</div>
+            <div className="text-[12px] font-semibold text-[var(--brown-soft)]">Les ecritures seront verrouillees.</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Solde de caisse</div>
+            <div className="text-[17px] font-black text-[var(--orange)]">{formatPrice(cashBalance)}</div>
+          </div>
+        </div>
+
+        <label className="grid gap-1.5 rounded-md border border-[var(--line)] bg-white px-3 py-2.5">
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Date de traitement</span>
+          <input
+            type="date"
+            value={processedAt}
+            onChange={(event) => setProcessedAt(event.target.value)}
+            required
+            className="field-input"
+          />
+          <span className="text-[11px] font-semibold text-[var(--brown-soft)]">Jour ou la caisse a ete reellement traitee avant verrouillage.</span>
+        </label>
+
+        {hasPendingDelivery ? (
+          <div className="flex items-start gap-2 rounded-md border border-[var(--orange-soft)] bg-[var(--orange-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--red)]">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>
+              Des entrees livreurs restent a valider : leur encaisse restera dans l&apos;ecriture groupee.{" "}
+              <Link href={detailHref} className="font-black underline">Valider dans le detail</Link>.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-md border border-[var(--green-soft)] bg-[var(--green-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--green)]">
+            <CheckCircle2 size={14} className="shrink-0" /> Toutes les entrees livreurs sont validees.
+          </div>
+        )}
+
+        {hasPendingDelivery && (
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-[var(--line)] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(event) => setAcknowledged(event.target.checked)}
+              className="h-4 w-4 accent-[var(--orange)]"
+            />
+            <span className="text-[12px] font-bold text-[var(--ink)]">J&apos;ai verifie ces points, je cloture quand meme.</span>
+          </label>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={pending}>Annuler</button>
+          <button
+            type="button"
+            onClick={() => onConfirm(processedAt)}
+            disabled={pending || !canConfirm}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--ink)] px-4 text-[12px] font-black text-white hover:bg-[var(--navy-2)] disabled:opacity-60"
+          >
+            <Lock size={14} /> {pending ? "Cloture..." : "Cloturer la session"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -659,11 +932,12 @@ function FlowTile({ label, value, sub, chip, accent }: {
     info: "bg-[var(--blue-soft)] text-[var(--blue)]",
   };
   return (
-    <div className="rounded-md border border-[var(--cream-2)] bg-[var(--cream)] px-3 py-3">
-      <div className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">{label}</div>
-      <div className={`mt-1 text-[19px] font-black ${accent ? "text-[var(--orange)]" : "text-[var(--ink)]"}`}>{value}</div>
-      {chip && <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${chipClasses[chip.tone]}`}>{chip.text}</span>}
-      {sub && <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">{sub}</div>}
+    <div className="rounded-md border border-[var(--cream-2)] bg-[var(--cream)] px-3 py-2" title={sub}>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase text-[var(--brown-soft)]">
+        {label}
+        {chip && <span className={`rounded-md px-1.5 py-px text-[10px] font-bold normal-case ${chipClasses[chip.tone]}`}>{chip.text}</span>}
+      </div>
+      <div className={`mt-0.5 text-[17px] font-black ${accent ? "text-[var(--orange)]" : "text-[var(--ink)]"}`}>{value}</div>
     </div>
   );
 }

@@ -32,6 +32,15 @@ function startOfLocalDay(value: string | Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+// Le dimanche est chome : aucune session comptable ne doit etre generee
+// automatiquement ce jour-la. Une demande automatique tombant un dimanche est
+// rabattue sur le samedi (dernier jour ouvre) pour ne pas creer de session vide.
+function toWorkingDay(value: string | Date) {
+  const day = startOfLocalDay(value);
+  if (day.getDay() === 0) day.setDate(day.getDate() - 1);
+  return day;
+}
+
 function endOfLocalDay(value: string | Date) {
   const date = startOfLocalDay(value);
   date.setHours(23, 59, 59, 999);
@@ -140,7 +149,8 @@ async function getDeliveryIncomeCategory(tx = db) {
 }
 
 async function ensureSessionForDate(tx: any, date: string | Date, actor: any) {
-  const day = startOfLocalDay(date);
+  // Sessions automatiques : jamais le dimanche (rabattu sur le samedi).
+  const day = toWorkingDay(date);
   return tx.accountingSession.upsert({
     where: { date: day },
     update: {},
@@ -635,13 +645,30 @@ export async function validateAllRiders(sessionId: string) {
   return { success: true, count };
 }
 
-export async function closeAccountingSession(sessionId: string, reason?: string) {
+export async function closeAccountingSession(
+  sessionId: string,
+  options?: { processedAt?: string; reason?: string },
+) {
   const actor = await requireAccountingUser();
+  // Date de traitement obligatoire et saisie manuellement : le jour ou la caisse a
+  // ete reellement traitee/rapprochee avant verrouillage.
+  const rawProcessedAt = options?.processedAt?.trim();
+  if (!rawProcessedAt) {
+    throw new Error("La date de traitement est obligatoire pour cloturer la session.");
+  }
+  const processedAt = startOfLocalDay(rawProcessedAt);
+  if (Number.isNaN(processedAt.getTime())) {
+    throw new Error("Date de traitement invalide.");
+  }
+  const reason = options?.reason;
   await db.$transaction(async (tx: any) => {
     const session = await tx.accountingSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new Error("Session comptable introuvable.");
     if (session.status === "CLOSED") throw new Error("Cette session est deja cloturee.");
-    await tx.accountingSession.update({ where: { id: sessionId }, data: { status: "CLOSED" } });
+    await tx.accountingSession.update({
+      where: { id: sessionId },
+      data: { status: "CLOSED", processedAt, processedByName: actor.name },
+    });
     await audit(tx, {
       action: "SESSION_CLOSED",
       entityType: "AccountingSession",
@@ -649,6 +676,7 @@ export async function closeAccountingSession(sessionId: string, reason?: string)
       sessionId,
       reason: reason?.trim() || "Cloture de la session comptable",
       actor,
+      details: { processedAt: dateInputValue(processedAt) },
     });
   });
   revalidatePath(ACCOUNTING_PATH);

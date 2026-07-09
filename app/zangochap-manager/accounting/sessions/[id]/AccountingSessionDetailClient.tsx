@@ -131,10 +131,10 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
       : null,
   ].filter(Boolean) as string[];
 
-  const closeSession = async () => {
+  const closeSession = async (processedAt: string) => {
     setSessionPending(true);
     try {
-      await closeAccountingSession(workspace.session.id);
+      await closeAccountingSession(workspace.session.id, { processedAt });
       showToast("Session cloturee", "success");
       setCloseChecklistOpen(false);
       router.refresh();
@@ -223,6 +223,11 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
               <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-black ${isClosed ? "bg-[var(--green)]/30 text-[var(--green-soft)]" : "bg-white/10 text-white"}`}>
                 {isClosed ? <Lock size={12} /> : <LockOpen size={12} />} {isClosed ? "Cloturee" : "Ouverte"}
               </span>
+              {isClosed && workspace.session.processedAt && (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/90">
+                  Traitee le {dateInputValue(workspace.session.processedAt)}
+                </span>
+              )}
               {riderCount > 0 && (
                 <span className="inline-flex items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/90">
                   {validatedCount}/{riderCount} livreurs valides
@@ -465,11 +470,13 @@ function CloseSessionModal({ sessionDate, cashBalance, warnings, pending, onConf
   cashBalance: number;
   warnings: string[];
   pending: boolean;
-  onConfirm: () => void;
+  onConfirm: (processedAt: string) => void;
   onClose: () => void;
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
-  const canConfirm = warnings.length === 0 || acknowledged;
+  // Date de traitement saisie manuellement, pre-remplie avec aujourd'hui.
+  const [processedAt, setProcessedAt] = useState(() => dateInputValue());
+  const canConfirm = (warnings.length === 0 || acknowledged) && Boolean(processedAt);
 
   return (
     <Modal isOpen onClose={onClose} title="Cloturer la session">
@@ -484,6 +491,18 @@ function CloseSessionModal({ sessionDate, cashBalance, warnings, pending, onConf
             <div className="text-[17px] font-black text-[var(--orange)]">{formatPrice(cashBalance)}</div>
           </div>
         </div>
+
+        <label className="grid gap-1.5 rounded-md border border-[var(--line)] bg-white px-3 py-2.5">
+          <span className="text-[11px] font-bold uppercase text-[var(--brown-soft)]">Date de traitement</span>
+          <input
+            type="date"
+            value={processedAt}
+            onChange={(event) => setProcessedAt(event.target.value)}
+            required
+            className="field-input"
+          />
+          <span className="text-[11px] font-semibold text-[var(--brown-soft)]">Jour ou la caisse a ete reellement traitee avant verrouillage.</span>
+        </label>
 
         {warnings.length > 0 ? (
           <div className="grid gap-1.5">
@@ -516,7 +535,7 @@ function CloseSessionModal({ sessionDate, cashBalance, warnings, pending, onConf
           <button type="button" className="btn-secondary" onClick={onClose} disabled={pending}>Annuler</button>
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={() => onConfirm(processedAt)}
             disabled={pending || !canConfirm}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--ink)] px-4 text-[12px] font-black text-white hover:bg-[var(--navy-2)] disabled:opacity-60"
           >
