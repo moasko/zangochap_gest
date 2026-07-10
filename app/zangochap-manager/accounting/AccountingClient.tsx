@@ -432,6 +432,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                         <div className="mt-1 text-[11px] font-semibold text-[var(--brown-soft)]">
                           {dateInputValue(operation.createdAt)} {new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · {operation.createdByName || "Systeme"}
                         </div>
+                        <OperationReason reason={operation.reason} isDebit={isDebit} />
                       </div>
                       <div className="shrink-0 text-right">
                         <div className={`font-mono text-[14px] font-black ${isDebit ? "text-[var(--red)]" : "text-[var(--green)]"}`}>
@@ -509,6 +510,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                           {operation.clientName && <span>Client: {operation.clientName}</span>}
                           {operation.riderName && <span>Livreur: {operation.riderName}</span>}
                         </div>
+                        <OperationReason reason={operation.reason} isDebit={isDebit} />
                       </td>
                       <td className="px-3 py-3 align-top">
                         <span className="inline-flex rounded-md bg-[var(--cream-2)] px-2 py-1 text-[11px] font-bold text-[var(--brown-soft)]">
@@ -653,6 +655,13 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             <div className="divide-y divide-[var(--cream-2)]">
               {closedSessions.map((session: any) => {
                 const isCurrent = session.id === workspace.session.id;
+                // Solde de caisse negatif : on remonte les motifs des ecritures en
+                // debit (sortie ou correction negative) pour expliquer le decouvert.
+                const negativeMotifs = session.summary.balance < 0
+                  ? (session.operations || [])
+                      .filter((operation: any) => operation.reason && (operation.type === "EXPENSE" || (operation.type === "CORRECTION" && Number(operation.amount) < 0)))
+                      .map((operation: any) => operation.reason as string)
+                  : [];
                 return (
                   <div
                     key={session.id}
@@ -685,6 +694,16 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                           {" / "}
                           <span className="text-[var(--red)]">-{formatPrice(session.summary.totalExpense)}</span>
                         </div>
+                        {negativeMotifs.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {negativeMotifs.map((motif: string, index: number) => (
+                              <span key={index} className="inline-flex max-w-full items-start gap-1 rounded-md bg-[var(--red-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--red)]">
+                                <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                                <span className="break-words">Motif : {motif}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right">
                         <div className="text-[10px] font-bold uppercase text-[var(--brown-soft)]">Solde</div>
@@ -944,6 +963,20 @@ function FlowTile({ label, value, sub, chip, accent }: {
 
 function FlowArrow() {
   return <div className="hidden items-center justify-center text-[var(--line-2)] md:flex" aria-hidden="true"><ChevronRight size={18} /></div>;
+}
+
+// Motif d'un chiffre negatif (debit) : obligatoire quand l'operation rend la caisse
+// negative, ou pour une correction/regularisation qui diminue la caisse. Affiche en
+// rouge dans la liste pour tracer ces montants. On ne l'affiche que pour les debits :
+// les entrees (validations livreurs, etc.) portent aussi un "reason" purement technique.
+function OperationReason({ reason, isDebit }: { reason?: string | null; isDebit?: boolean }) {
+  if (!reason || !isDebit) return null;
+  return (
+    <div className="mt-1 inline-flex max-w-full items-start gap-1 rounded-md bg-[var(--red-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--red)]">
+      <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+      <span className="break-words">Motif : {reason}</span>
+    </div>
+  );
 }
 
 function CategoryList({ title, categories, onEdit, onDelete }: { title: string; categories: any[]; onEdit: (category: any) => void; onDelete: (category: any) => void }) {

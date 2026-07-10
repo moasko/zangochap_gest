@@ -870,6 +870,12 @@ function OperationRow({ operation, locked }: { operation: any; locked?: boolean 
             <span>·</span>
             <span>{operation.createdByName || "Systeme"}</span>
           </div>
+          {isExpense && operation.reason && (
+            <div className="mt-1 inline-flex max-w-full items-start gap-1 rounded-md bg-[var(--red-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--red)]">
+              <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+              <span className="break-words">Motif : {operation.reason}</span>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className={`text-right font-mono text-[12px] font-black ${isExpense ? "text-[var(--red)]" : "text-[var(--green)]"}`}>{isExpense ? "-" : "+"}{formatPrice(operation.amount)}</div>

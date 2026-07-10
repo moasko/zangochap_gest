@@ -234,7 +234,7 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
     db.accountingSession.findMany({
       orderBy: { date: "desc" },
       take: 30,
-      include: { operations: { select: { type: true, amount: true, source: true, riderId: true } } },
+      include: { operations: { select: { type: true, amount: true, source: true, riderId: true, reason: true } } },
     }),
     // Toutes les sessions encore ouvertes (a cloturer), meme hors fenetre recente,
     // pour qu'aucune session non cloturee oubliee n'echappe au journal.
@@ -242,7 +242,7 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
       where: { status: { not: "CLOSED" } },
       orderBy: { date: "desc" },
       take: 120,
-      include: { operations: { select: { type: true, amount: true, source: true, riderId: true } } },
+      include: { operations: { select: { type: true, amount: true, source: true, riderId: true, reason: true } } },
     }),
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
     db.accountingOperation.findMany({
