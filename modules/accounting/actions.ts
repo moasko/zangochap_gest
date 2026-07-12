@@ -322,17 +322,26 @@ function summarizeOperations(operations: Array<{ type: AccountingType; amount: n
   };
 }
 
-// Valeur theorique attendue d'une commande (total + frais - remise), avant prise
-// en compte de ce qui a reellement ete encaisse par le livreur.
+// Valeur theorique attendue EN CAISSE pour une commande : total - remise, HORS
+// frais de livraison. Le livreur retire ses frais avant le versement : seuls les
+// produits arrivent en caisse (les frais ne transitent jamais par le journal).
 function orderTheoreticalAmount(order: any) {
-  return Math.max(0, Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0));
+  return Math.max(0, Number(order.total || 0) - Number(order.discount || 0));
 }
 
-// Montant reellement encaisse : amountReceived s'il est renseigne, sinon la valeur
-// theorique. C'est la SEULE base utilisee pour le solde de caisse, partout (journal,
-// detail session, reglement livreur) afin d'eviter les ecarts entre modules.
+// Montant reellement verse en caisse : l'encaisse declare par le livreur
+// (amountReceived, frais de livraison INCLUS puisqu'il collecte tout chez le
+// client) moins les frais qu'il conserve. Si l'encaisse ne couvre pas les frais,
+// rien n'arrive en caisse (0). Sans declaration, on retombe sur le theorique
+// (deja hors frais). C'est la SEULE base utilisee pour le solde de caisse,
+// partout (journal, detail session), alignee sur la ventilation produits/frais
+// du module de reglement livreur (getOrderSettlementAmounts).
 function orderCollectedAmount(order: any) {
-  return Math.max(0, Number(order.amountReceived ?? orderTheoreticalAmount(order)));
+  if (order.amountReceived === null || order.amountReceived === undefined) {
+    return orderTheoreticalAmount(order);
+  }
+  const deliveryFee = Math.max(0, Number(order.deliveryFee || 0));
+  return Math.max(0, Number(order.amountReceived) - deliveryFee);
 }
 
 async function getSessionRiderSummaries(session: any) {

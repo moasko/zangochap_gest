@@ -116,7 +116,9 @@ async function main() {
         WITH expected AS (
           SELECT
             s.id AS session_id,
-            COALESCE(SUM(GREATEST(0, o.total + o."deliveryFee" - o.discount)), 0)::bigint AS expected_amount,
+            -- Hors frais de livraison : le livreur retire ses frais avant versement,
+            -- la caisse n'attend que la part produits (total - remise).
+            COALESCE(SUM(GREATEST(0, o.total - o.discount)), 0)::bigint AS expected_amount,
             COUNT(o.id)::int AS expected_orders
           FROM "AccountingSession" s
           LEFT JOIN "Order" o ON o."deletedAt" IS NULL

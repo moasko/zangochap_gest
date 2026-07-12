@@ -280,11 +280,12 @@ export default function AccountingSessionDetailClient({ workspace }: AccountingS
             <ClipboardCheck size={13} /> Controle livreurs
           </div>
           <div className="grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
-            <FlowTile label="Attendu" value={formatPrice(expectedRiderTotal)} sub={`${riderCount} livreur(s)`} />
+            <FlowTile label="Attendu" value={formatPrice(expectedRiderTotal)} sub={`${riderCount} livreur(s) · hors frais de livraison`} />
             <FlowArrow />
             <FlowTile
               label="Encaisse"
               value={formatPrice(collectedRiderTotal)}
+              sub="net des frais (le livreur retire ses frais avant versement)"
               chip={collectionGap !== 0
                 ? { text: `ecart ${collectionGap > 0 ? "+" : ""}${formatPrice(collectionGap)}`, tone: collectionGap < 0 ? "dang" : "info" }
                 : { text: "conforme", tone: "ok" }}
@@ -598,7 +599,7 @@ function RiderCard({ rider, amount, onAmountChange, onValidate, onCancelValidati
 
         <div className="mt-2.5 grid grid-cols-3 gap-2">
           <RiderStat label="Livraisons" value={`${rider.ordersCount}`} />
-          <RiderStat label="Attendu" value={formatPrice(rider.expectedAmount)} />
+          <RiderStat label="Attendu" value={formatPrice(rider.expectedAmount)} hint="hors frais livraison" />
           <RiderStat
             label="Encaisse"
             value={formatPrice(rider.collectedAmount)}
