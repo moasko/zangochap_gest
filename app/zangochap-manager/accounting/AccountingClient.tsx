@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -108,6 +108,33 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   // Cloture directement depuis le journal (sans passer par le detail session).
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [closePending, setClosePending] = useState(false);
+  // Pointage de verification : simple suivi visuel des ecritures deja controlees,
+  // persiste dans le navigateur (localStorage) par session. Aucun effet serveur
+  // ni comptable — juste pour ne pas se perdre pendant la verification.
+  const checksStorageKey = `zc-journal-checks:${workspace.session.id}`;
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(checksStorageKey);
+      setCheckedIds(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch {
+      setCheckedIds(new Set());
+    }
+  }, [checksStorageKey]);
+  const persistChecks = (next: Set<string>) => {
+    setCheckedIds(next);
+    try {
+      window.localStorage.setItem(checksStorageKey, JSON.stringify([...next]));
+    } catch {
+      // Stockage indisponible : le pointage reste en memoire pour la session en cours.
+    }
+  };
+  const toggleChecked = (operationId: string) => {
+    const next = new Set(checkedIds);
+    if (next.has(operationId)) next.delete(operationId);
+    else next.add(operationId);
+    persistChecks(next);
+  };
 
   const incomeCategories = workspace.categories.filter((category: any) => category.type === "INCOME");
   const expenseCategories = workspace.categories.filter((category: any) => category.type === "EXPENSE");
@@ -200,6 +227,11 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
       (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     ),
     [filteredOperations],
+  );
+  // Avancement du pointage sur les ecritures affichees (filtre inclus).
+  const checkedCount = useMemo(
+    () => displayedOperations.filter((operation: any) => checkedIds.has(operation.id)).length,
+    [displayedOperations, checkedIds],
   );
 
   const changeDate = (value: string) => {
@@ -405,6 +437,24 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
               </button>
             </div>
           )}
+          {displayedOperations.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-white px-4 py-2">
+              <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${checkedCount === displayedOperations.length ? "text-[var(--green)]" : "text-[var(--brown-soft)]"}`}>
+                <CheckCircle2 size={13} />
+                Pointage : {checkedCount}/{displayedOperations.length} ecriture(s) verifiee(s)
+                <span className="hidden font-semibold sm:inline">· suivi local, sans effet sur la caisse</span>
+              </div>
+              {checkedCount > 0 && (
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center rounded-md border border-[var(--line)] px-2 text-[11px] font-black text-[var(--brown-soft)] hover:bg-[var(--cream)]"
+                  onClick={() => persistChecks(new Set())}
+                >
+                  Tout decocher
+                </button>
+              )}
+            </div>
+          )}
           {workspace.operations.length === 0 ? (
             <EmptyState icon={<Landmark size={22} />} title="Aucune operation" description="Les livraisons du jour seront ajoutees automatiquement apres synchronisation." />
           ) : filteredOperations.length === 0 ? (
@@ -417,10 +467,19 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                 const value = signedValue(operation);
                 const isDebit = value < 0;
                 const runningBalance = balanceById[operation.id] ?? 0;
+                const isChecked = checkedIds.has(operation.id);
                 return (
-                  <div key={operation.id} className="px-4 py-3">
+                  <div key={operation.id} className={`px-4 py-3 ${isChecked ? "bg-[var(--green-soft)]" : ""}`}>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleChecked(operation.id)}
+                        title="Pointer comme verifiee (suivi local)"
+                        aria-label="Pointer l'ecriture comme verifiee"
+                        className="mt-1 h-4 w-4 shrink-0 accent-[var(--green)]"
+                      />
+                      <div className="min-w-0 flex-1">
                         <div className="text-[13px] font-black text-[var(--ink)]">{operation.description || operationLabel(operation.type)}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[var(--brown-soft)]">
                           <span className={`inline-flex rounded-sm border px-1.5 py-0.5 ${operationTone(operation.type)}`}>
@@ -479,6 +538,10 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-[var(--line)] text-left text-[11px] font-bold uppercase text-[var(--brown-soft)]">
+                    <th className="w-[40px] px-3 py-3 text-center" title="Pointage de verification (suivi local)">
+                      <span className="sr-only">Pointage</span>
+                      <CheckCircle2 size={13} className="inline-block" />
+                    </th>
                     <th className="w-[110px] px-4 py-3">Date</th>
                     <th className="min-w-[320px] px-3 py-3">Libelle</th>
                     <th className="min-w-[170px] px-3 py-3">Categorie</th>
@@ -494,8 +557,19 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                     const value = signedValue(operation);
                     const isDebit = value < 0;
                     const runningBalance = balanceById[operation.id] ?? 0;
+                    const isChecked = checkedIds.has(operation.id);
                     return (
-                    <tr key={operation.id} className="border-b border-[var(--cream-2)] text-[12px] last:border-b-0 hover:bg-[var(--cream)] transition-colors">
+                    <tr key={operation.id} className={`border-b border-[var(--cream-2)] text-[12px] last:border-b-0 transition-colors ${isChecked ? "bg-[var(--green-soft)]" : "hover:bg-[var(--cream)]"}`}>
+                      <td className="px-3 py-3 text-center align-top">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleChecked(operation.id)}
+                          title="Pointer comme verifiee (suivi local)"
+                          aria-label="Pointer l'ecriture comme verifiee"
+                          className="h-4 w-4 accent-[var(--green)]"
+                        />
+                      </td>
                       <td className="px-4 py-3 align-top">
                         <div className="font-mono text-[11px] font-black text-[var(--ink)]">{dateInputValue(operation.createdAt)}</div>
                         <div className="text-[11px] font-semibold text-[var(--brown-soft)]">{new Date(operation.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -558,7 +632,7 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-[var(--line)] bg-[var(--cream)] text-[12px] font-black">
-                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] uppercase text-[var(--brown-soft)]">
+                    <td colSpan={5} className="px-4 py-3 text-right text-[10px] uppercase text-[var(--brown-soft)]">
                       Totaux ({displayedOperations.length} ecriture(s))
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-[var(--red)]">{formatPrice(filteredTotals.debit)}</td>
