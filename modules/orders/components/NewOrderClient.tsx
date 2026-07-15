@@ -28,6 +28,8 @@ const ORDER_TYPE_DEFAULT_NOTES: Record<string, string> = {
   Express: '[EXPRESS] Livraison prioritaire',
 };
 
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
 export default function NewOrderClient({ products, user, categories, relayPoints }: NewOrderClientProps) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
@@ -190,7 +192,7 @@ export default function NewOrderClient({ products, user, categories, relayPoints
         const data = JSON.parse(savedCustomer);
         if (data && typeof data === 'object') {
           if (!searchParams.get('name')) setCustomerName(data.name || '');
-          if (!searchParams.get('phone')) setCustomerPhone(data.phone || '');
+          if (!searchParams.get('phone')) setCustomerPhone(onlyDigits(data.phone || ''));
           if (!searchParams.get('commune')) setCommune(data.commune || '');
           if (!searchParams.get('loc')) setCustomerLocation(data.location || '');
         }
@@ -222,7 +224,7 @@ export default function NewOrderClient({ products, user, categories, relayPoints
     const duplicateId = searchParams.get('duplicate');
 
     if (name) setCustomerName(name);
-    if (phone) setCustomerPhone(phone);
+    if (phone) setCustomerPhone(onlyDigits(phone));
     if (communeVal) setCommune(communeVal);
     if (loc) setCustomerLocation(loc);
     if (type) {
@@ -278,8 +280,8 @@ export default function NewOrderClient({ products, user, categories, relayPoints
   const selectCustomer = (c: any) => {
     setCustomerId(c.id);
     setCustomerName(c.name);
-    setCustomerPhone(c.phone);
-    if (c.phone2) setCustomerPhone2(c.phone2);
+    setCustomerPhone(onlyDigits(c.phone || ''));
+    if (c.phone2) setCustomerPhone2(onlyDigits(c.phone2));
     if (c.location) setCustomerLocation(c.location);
     if (c.commune) {
       setCommune(c.commune);
@@ -1000,13 +1002,13 @@ Ne passez pas à côté de cette belle surprise !`;
                 </div>
                 <div className="form-row" style={{ position: 'relative' }}>
                   <label className="field-label-sm">TÉLÉPHONE</label>
-                  <input className="field-input" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="07 07 07 07 07" autoComplete="off" />
+                  <input className="field-input" value={customerPhone} onChange={e => setCustomerPhone(onlyDigits(e.target.value))} placeholder="0707070707" autoComplete="off" inputMode="numeric" maxLength={15} />
 
 
                 </div>
                 <div className="form-row">
                   <label className="field-label-sm">TÉLÉPHONE SECONDAIRE</label>
-                  <input className="field-input" value={customerPhone2} onChange={e => setCustomerPhone2(e.target.value)} placeholder="Facultatif" />
+                  <input className="field-input" value={customerPhone2} onChange={e => setCustomerPhone2(onlyDigits(e.target.value))} placeholder="Facultatif" autoComplete="off" inputMode="numeric" maxLength={15} />
                 </div>
                 <div className="form-row">
                   <label className="field-label-sm">COMMUNE</label>

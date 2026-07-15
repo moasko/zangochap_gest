@@ -11,6 +11,8 @@ import { useToast } from "@/components/Toast";
 import { useSearchParams } from "next/navigation";
 import { Commune } from "@/lib/types";
 
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
 export default function CartPageClient({ communes = [], relayPoints = [] }: { communes?: Commune[]; relayPoints?: string[] }) {
   const { cart, removeFromCart, clearCart } = useCart();
   const { showToast } = useToast();
@@ -295,19 +297,25 @@ export default function CartPageClient({ communes = [], relayPoints = [] }: { co
             <div className="space-y-2">
               <label className="block text-[10px] font-medium tracking-[0.12em] text-[#999] uppercase">TÉLÉPHONE</label>
               <input 
-                value={phone} 
-                onChange={e => setPhone(e.target.value)} 
-                placeholder="07 00 00 00 00" 
-                required 
+                value={phone}
+                onChange={e => setPhone(onlyDigits(e.target.value))}
+                placeholder="0700000000"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
+                required
                 className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614]"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-[10px] font-medium tracking-[0.12em] text-[#999] uppercase">DEUXIÈME TÉLÉPHONE (FACULTATIF)</label>
               <input 
-                value={phone2} 
-                onChange={e => setPhone2(e.target.value)} 
-                placeholder="05 00 00 00 00" 
+                value={phone2}
+                onChange={e => setPhone2(onlyDigits(e.target.value))}
+                placeholder="0500000000"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
                 className="w-full p-3.5 border border-[#e8e8e4] bg-white text-sm text-[#1A1614] outline-none transition-colors focus:border-[#1A1614]"
               />
             </div>
