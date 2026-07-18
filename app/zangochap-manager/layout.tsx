@@ -1,5 +1,7 @@
 import Sidebar from "@/components/Sidebar";
 import GlobalChatAccess from "@/components/GlobalChatAccess";
+import GlobalNotesAccess from "@/components/GlobalNotesAccess";
+import WhatsNewModal from "@/components/WhatsNewModal";
 import "./manager-layout.css";
 import "./chat/chat.css";
 import { getSession } from "@/modules/auth/actions";
@@ -46,6 +48,10 @@ export default async function ManagerLayout({
         </div>
       </main>
       <GlobalChatAccess />
+      {["ADMIN", "COMMERCIAL", "DEVELOPER"].includes(String(user.role).toUpperCase()) && (
+        <GlobalNotesAccess />
+      )}
+      <WhatsNewModal role={user.role} />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { useToast } from "@/components/Toast";
 import RiderMessageAlertOverlay, { type RiderMessageAlert } from "@/components/RiderMessageAlertOverlay";
 import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
 import { openTeamChat } from "@/components/GlobalChatAccess";
+import { openStaffNotes, NOTES_DUE_COUNT_EVENT } from "@/components/GlobalNotesAccess";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 
 import {
@@ -19,7 +20,7 @@ import {
   Upload, FileText, LogOut, ClipboardList,
   AlertTriangle, Settings, ChevronRight, ChevronLeft, History, Wallet, Warehouse,
   Image as ImageIcon, Menu, X, Bell, WifiOff, Landmark,
-  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap
+  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap, StickyNote
 } from "lucide-react";
 
 interface SidebarProps {
@@ -149,6 +150,16 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   const [isNarrowDesktop, setIsNarrowDesktop] = useState(false);
   const { activeAlert, pendingCount, enqueueAlert, closeActiveAlert } = useRiderAlertQueue();
   const { showToast } = useToast();
+  const [notesDueCount, setNotesDueCount] = useState(0);
+
+  // Badge des rappels dus, publié par GlobalNotesAccess
+  useEffect(() => {
+    const handleDueCount = (event: Event) => {
+      setNotesDueCount(Number((event as CustomEvent).detail) || 0);
+    };
+    window.addEventListener(NOTES_DUE_COUNT_EVENT, handleDueCount);
+    return () => window.removeEventListener(NOTES_DUE_COUNT_EVENT, handleDueCount);
+  }, []);
 
   const defaultCounts: SidebarCounts = { orders: 0, packing: 0, collection: 0, toProcess: 0, myDeliveries: 0, chatUnread: 0, riderChatUnread: 0 };
 
@@ -167,6 +178,7 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
   });
 
   const roleKey = user.role?.toLowerCase() || 'admin';
+  const canUseNotes = ['admin', 'commercial', 'developer'].includes(roleKey);
   const sections = useMemo(() => (NAV_FOR_ROLE[roleKey] || NAV_FOR_ROLE.admin)(counts), [roleKey, counts]);
   const roleLabel = ROLE_LABELS[user.role] || user.role;
   const effectiveCollapsed = isCollapsed || isNarrowDesktop;
@@ -267,6 +279,16 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
           {mounted && isOffline && <WifiOff size={14} color="#FF3B30" className="ml-2" />}
         </div>
         <div className="flex items-center">
+          {canUseNotes && (
+            <button className="bg-transparent border-none p-2 relative" onClick={openStaffNotes} aria-label="Ouvrir les notes et rappels" title="Notes & rappels (Alt+N)">
+              <StickyNote size={22} color={mounted && notesDueCount > 0 ? 'var(--orange)' : '#8E8E93'} />
+              {mounted && notesDueCount > 0 && (
+                <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 px-0.5 bg-[#FF3B30] rounded-full border-2 border-white text-white text-[9px] font-black flex items-center justify-center leading-none">
+                  {notesDueCount}
+                </span>
+              )}
+            </button>
+          )}
           <button className="bg-transparent border-none p-2 relative" onClick={openTeamChat} aria-label="Ouvrir le chat equipe" title="Chat equipe (Alt+C)">
             <MessageCircle size={22} color={mounted && counts.chatUnread > 0 ? 'var(--orange)' : '#8E8E93'} />
             {mounted && counts.chatUnread > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF3B30] rounded-full border-2 border-white" />}
@@ -315,6 +337,25 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
               <div className="bg-red-500/10 text-red-500 w-8 h-8 rounded-[10px] flex items-center justify-center" title="Mode hors-ligne">
                 <WifiOff size={16} />
               </div>
+            )}
+            {canUseNotes && (
+              <button
+                className={`
+                  bg-white/5 border-none w-9 h-9 rounded-[10px] flex items-center justify-center relative cursor-pointer transition-all duration-200
+                  hover:bg-white/10 hover:text-white
+                  ${mounted && notesDueCount > 0 ? 'text-[#FF6B2C] bg-white/10' : 'text-white/40'}
+                `}
+                onClick={openStaffNotes}
+                aria-label="Ouvrir les notes et rappels"
+                title="Notes & rappels (Alt+N)"
+              >
+                <StickyNote size={20} />
+                {mounted && notesDueCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-[#FF3B30] rounded-full border-2 border-[#0F1115] text-white text-[9px] font-black flex items-center justify-center leading-none">
+                    {notesDueCount}
+                  </span>
+                )}
+              </button>
             )}
             <button
               className={`
