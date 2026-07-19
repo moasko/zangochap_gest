@@ -560,6 +560,18 @@ export async function updateOrderDetails(orderId: string, data: any) {
   history.push({ at: new Date().toISOString(), action: "Détails modifiés", by: session.email, byName: session.name });
 
   try {
+    // Uploads R2 AVANT la transaction : les appels réseau lents feraient expirer la tx
+    if (data.items && Array.isArray(data.items)) {
+      for (const item of data.items) {
+        if (item.isCustom && !item.image) {
+          throw new Error("Une image est obligatoire pour chaque article personnalisé.");
+        }
+        if (item.image && item.image.startsWith('data:image')) {
+          item.image = await uploadImage(item.image, `order-item-${Date.now()}`);
+        }
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       const shouldReconcileStock = !!(data.items && Array.isArray(data.items) && order.stockDecremented);
       if (shouldReconcileStock) {
@@ -587,16 +599,9 @@ export async function updateOrderDetails(orderId: string, data: any) {
           await tx.orderItem.deleteMany({ where: { id: { in: toDelete } } });
         }
 
-        // Process images for new items and Upsert
+        // Upsert items (images déjà uploadées avant la transaction)
         for (const item of data.items) {
-          if (item.isCustom && !item.image) {
-            throw new Error("Une image est obligatoire pour chaque article personnalisé.");
-          }
-
-          let imageUrl = item.image;
-          if (imageUrl && imageUrl.startsWith('data:image')) {
-            imageUrl = await uploadImage(imageUrl, `order-item-${Date.now()}`);
-          }
+          const imageUrl = item.image;
 
           const isExisting = item.id && existingIds.includes(item.id);
           const itemData = {
@@ -637,7 +642,7 @@ export async function updateOrderDetails(orderId: string, data: any) {
           await decrementStockForOrder(updatedOrder, session, tx);
         }
       }
-    });
+    }, { timeout: 15000 });
     revalidatePath("/zangochap-manager/orders");
   } catch (e: any) {
     console.error("Order Details Update Error:", e);

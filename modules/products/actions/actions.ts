@@ -263,6 +263,8 @@ export async function updateProductVariants(productId: string, variants: Array<{
     // Delete removed variants
     const toDelete = existingIds.filter(id => !incomingIds.includes(id));
     if (toDelete.length > 0) {
+      // Les mouvements de stock bloquent la suppression (FK RESTRICT) : purge d'abord
+      await tx.stockMovement.deleteMany({ where: { variantId: { in: toDelete } } });
       await tx.productVariant.deleteMany({ where: { id: { in: toDelete } } });
     }
 
@@ -293,7 +295,7 @@ export async function updateProductVariants(productId: string, variants: Array<{
         });
       }
     }
-  });
+  }, { timeout: 15000 });
 
   // Synchronize stock totals
   await syncProductStock(productId);
@@ -628,79 +630,85 @@ export async function updateProduct(id: string, data: Partial<{
   // Handle Variants
   if (data.variants) {
     const targetWarehouseId = data.warehouseId || (await getOrCreateDefaultWarehouse()).id;
-    const existingVariants = await prisma.productVariant.findMany({
-      where: { productId: id },
-      include: { stockLevels: true },
-    });
 
+    // Uploads R2 AVANT la transaction (appels réseau lents, la tx doit rester courte)
     const variantsWithImages = await Promise.all(data.variants.map(async (v) => ({
       ...v,
       image: await resolveVariantImage(v.image, `${data.name || id}-${v.size}-${v.color}`),
     })));
 
-    const incomingIds = variantsWithImages.map(v => v.id).filter(Boolean);
-    const removedIds = existingVariants
-      .map(variant => variant.id)
-      .filter(variantId => !incomingIds.includes(variantId));
-
-    if (removedIds.length > 0) {
-      await prisma.productVariant.deleteMany({
-        where: { id: { in: removedIds }, productId: id },
+    await prisma.$transaction(async (tx) => {
+      const existingVariants = await tx.productVariant.findMany({
+        where: { productId: id },
+        include: { stockLevels: true },
       });
-    }
 
-    const activeExistingVariants = existingVariants.filter(variant => !removedIds.includes(variant.id));
+      const incomingIds = variantsWithImages.map(v => v.id).filter(Boolean);
+      const removedIds = existingVariants
+        .map(variant => variant.id)
+        .filter(variantId => !incomingIds.includes(variantId));
 
-    for (const v of variantsWithImages) {
-      const stock = cleanStock(v.stock);
-      const existing = (v.id && activeExistingVariants.find(variant => variant.id === v.id))
-        || activeExistingVariants.find(variant => variant.size === v.size && variant.color === v.color);
-
-      const targetVariant = existing
-        ? await prisma.productVariant.update({
-          where: { id: existing.id },
-          data: {
-            size: v.size,
-            color: v.color,
-            image: v.image || null,
-            stock,
-            location: v.location || '',
-          }
-        })
-        : await prisma.productVariant.create({
-          data: {
-            productId: id,
-            size: v.size,
-            color: v.color,
-            image: v.image || null,
-            stock,
-            location: v.location || '',
-          }
+      if (removedIds.length > 0) {
+        // Les mouvements de stock bloquent la suppression (FK RESTRICT) : purge d'abord
+        await tx.stockMovement.deleteMany({ where: { variantId: { in: removedIds } } });
+        await tx.productVariant.deleteMany({
+          where: { id: { in: removedIds }, productId: id },
         });
+      }
 
-      const otherWarehouseStock = existing
-        ? existing.stockLevels
-          .filter(level => level.warehouseId !== targetWarehouseId)
-          .reduce((sum, level) => sum + cleanStock(level.quantity), 0)
-        : 0;
-      const targetWarehouseStock = Math.max(0, stock - otherWarehouseStock);
+      const activeExistingVariants = existingVariants.filter(variant => !removedIds.includes(variant.id));
 
-      await prisma.stockLevel.upsert({
-        where: {
-          variantId_warehouseId: {
+      for (const v of variantsWithImages) {
+        const stock = cleanStock(v.stock);
+        const existing = (v.id && activeExistingVariants.find(variant => variant.id === v.id))
+          || activeExistingVariants.find(variant => variant.size === v.size && variant.color === v.color);
+
+        const targetVariant = existing
+          ? await tx.productVariant.update({
+            where: { id: existing.id },
+            data: {
+              size: v.size,
+              color: v.color,
+              image: v.image || null,
+              stock,
+              location: v.location || '',
+            }
+          })
+          : await tx.productVariant.create({
+            data: {
+              productId: id,
+              size: v.size,
+              color: v.color,
+              image: v.image || null,
+              stock,
+              location: v.location || '',
+            }
+          });
+
+        const otherWarehouseStock = existing
+          ? existing.stockLevels
+            .filter(level => level.warehouseId !== targetWarehouseId)
+            .reduce((sum, level) => sum + cleanStock(level.quantity), 0)
+          : 0;
+        const targetWarehouseStock = Math.max(0, stock - otherWarehouseStock);
+
+        await tx.stockLevel.upsert({
+          where: {
+            variantId_warehouseId: {
+              variantId: targetVariant.id,
+              warehouseId: targetWarehouseId,
+            },
+          },
+          update: { quantity: targetWarehouseStock, position: v.location || null },
+          create: {
             variantId: targetVariant.id,
             warehouseId: targetWarehouseId,
+            quantity: targetWarehouseStock,
+            position: v.location || null,
           },
-        },
-        update: { quantity: targetWarehouseStock, position: v.location || null },
-        create: {
-          variantId: targetVariant.id,
-          warehouseId: targetWarehouseId,
-          quantity: targetWarehouseStock,
-          position: v.location || null,
-        },
-      });
-    }
+        });
+      }
+    }, { timeout: 20000 });
 
     // Sync total stock
     const totalStock = variantsWithImages.reduce((sum, v) => sum + cleanStock(v.stock), 0);
@@ -708,14 +716,11 @@ export async function updateProduct(id: string, data: Partial<{
   }
 
   // Handle Images
+  let imageUrlsToCleanup: string[] = [];
   if (data.images) {
-    // 1. Get current images to cleanup R2 later
     const oldImages = await prisma.productImage.findMany({
       where: { productId: id }
     });
-
-    // Delete old image records
-    await prisma.productImage.deleteMany({ where: { productId: id } });
 
     const imageUrls = [];
     for (const img of data.images) {
@@ -727,33 +732,29 @@ export async function updateProduct(id: string, data: Partial<{
       }
     }
 
+    // Remplacement atomique des lignes d'images dans le même update produit
     updateData.images = {
+      deleteMany: {},
       create: imageUrls
     };
 
-    // 2. Cleanup R2 for removed images
     const newUrls = imageUrls.map(i => i.url);
-    for (const oldImg of oldImages) {
-      if (!newUrls.includes(oldImg.url)) {
-        // Check if this image URL is used by other products before deleting from R2
-        const isUsedElsewhere = await prisma.productImage.findFirst({
-          where: {
-            url: oldImg.url,
-            productId: { not: id }
-          }
-        });
-
-        if (!isUsedElsewhere) {
-          await deleteImageFromR2(oldImg.url);
-        }
-      }
-    }
+    imageUrlsToCleanup = oldImages
+      .map((img: { url: string }) => img.url)
+      .filter((url: string) => !newUrls.includes(url));
   }
 
   await prisma.product.update({
     where: { id },
     data: updateData,
   });
+
+  // Nettoyage R2 uniquement après mise à jour réussie en base
+  for (const url of imageUrlsToCleanup) {
+    if (!(await isImageUrlStillUsed(url, id))) {
+      await deleteImageFromR2(url);
+    }
+  }
 
   if (data.variants) {
     await syncProductStock(id);
@@ -764,33 +765,51 @@ export async function updateProduct(id: string, data: Partial<{
   return { success: true };
 }
 
+// Une URL d'image peut être partagée entre galeries, images de variantes et
+// articles de commandes (historique) : on ne la retire de R2 que si plus rien ne la référence.
+async function isImageUrlStillUsed(url: string, excludeProductId?: string) {
+  const [gallery, variantImage, orderItemImage] = await Promise.all([
+    prisma.productImage.findFirst({
+      where: { url, ...(excludeProductId ? { productId: { not: excludeProductId } } : {}) },
+      select: { id: true },
+    }),
+    prisma.productVariant.findFirst({ where: { image: url }, select: { id: true } }),
+    prisma.orderItem.findFirst({ where: { image: url }, select: { id: true } }),
+  ]);
+  return Boolean(gallery || variantImage || orderItemImage);
+}
+
 // ============ DELETE ============
 export async function deleteProduct(id: string) {
   await ensureAuth(["admin", "commercial"]);
 
-  // Fetch product with images to cleanup R2
   const product = await prisma.product.findUnique({
     where: { id },
-    include: { images: true }
+    include: { images: true, variants: { select: { id: true, image: true } } }
   });
+  if (!product) throw new Error("Produit introuvable.");
 
-  if (product) {
-    for (const img of product.images) {
-      // Check if this image URL is used by other products before deleting from R2
-      const isUsedElsewhere = await prisma.productImage.findFirst({
-        where: {
-          url: img.url,
-          productId: { not: id }
-        }
-      });
+  await prisma.$transaction(async (tx) => {
+    // Les mouvements de stock bloquent la suppression des variantes (FK RESTRICT) :
+    // on purge d'abord l'historique lié, puis la cascade fait le reste.
+    const variantIds = product.variants.map((v) => v.id);
+    if (variantIds.length > 0) {
+      await tx.stockMovement.deleteMany({ where: { variantId: { in: variantIds } } });
+    }
+    await tx.product.delete({ where: { id } });
+  }, { timeout: 20000 });
 
-      if (!isUsedElsewhere) {
-        await deleteImageFromR2(img.url);
-      }
+  // Nettoyage R2 uniquement après suppression réussie en base
+  const candidateUrls = new Set<string>([
+    ...product.images.map((img: { url: string }) => img.url),
+    ...product.variants.map((v: { image: string | null }) => v.image).filter((url: string | null): url is string => Boolean(url)),
+  ]);
+  for (const url of candidateUrls) {
+    if (!(await isImageUrlStillUsed(url))) {
+      await deleteImageFromR2(url);
     }
   }
 
-  await prisma.product.delete({ where: { id } });
   revalidatePath("/zangochap-manager/products");
   revalidatePath("/");
   return { success: true };
