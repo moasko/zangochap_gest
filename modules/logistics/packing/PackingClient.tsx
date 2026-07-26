@@ -20,6 +20,16 @@ import { PackingOrder, PackingOrderItem, PackingProductVariant, PackingUser, Pro
 // --- HOOKS ---
 type DatePreset = 'today' | 'yesterday' | 'custom' | 'all';
 
+const STATUS_FILTERS = [
+  { key: 'CONFIRMED', label: 'Confirmées' },
+  { key: 'PREPARING', label: 'Suivies' },
+  { key: 'ALTERNATIVE', label: 'Alternatives' },
+  { key: 'PARTIAL', label: 'Part. emballées' },
+  { key: 'UNAVAILABLE', label: 'Indisponibles' },
+  { key: 'PACKED', label: 'Emballées' },
+  { key: 'all', label: 'Toutes' },
+] as const;
+
 function toLocalDateInputValue(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -118,6 +128,10 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
         // Filtre Statut / Alternative
         if (filter === 'ALTERNATIVE') {
           if (!o.history?.some(h => h.action.includes('Alternative proposée'))) return false;
+        } else if (filter === 'PREPARING') {
+          // Suivies = commandes dont au moins un article a été coché, mais pas encore emballées
+          if (o.status === 'PACKED') return false;
+          if (!o.items.some(i => i.isVerified)) return false;
         } else if (filter !== 'all' && o.status !== filter) return false;
 
         // Filtre Recherche
@@ -414,13 +428,7 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
           </div>
 
           <div className="mobile-status-tabs">
-            {[
-              { key: 'CONFIRMED', label: 'Confirmées' },
-              { key: 'PREPARING', label: 'Suivies' },
-              { key: 'ALTERNATIVE', label: 'Alternatives' },
-              { key: 'PACKED', label: 'Emballées' },
-              { key: 'all', label: 'Toutes' },
-            ].map(f => (
+            {STATUS_FILTERS.map(f => (
               <button key={f.key} className={`status-tab ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
                 {f.label}
               </button>
@@ -573,14 +581,8 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
   return (
     <motion.div key="packing-desktop" className="content logistics-view-desktop" {...viewMotion}>
       <div className="filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', background: 'white', padding: '12px 16px', borderRadius: 12, marginBottom: 20, border: '1px solid var(--line)' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[
-            { key: 'CONFIRMED', label: 'Confirmées' },
-            { key: 'PREPARING', label: 'Suivies' },
-            { key: 'ALTERNATIVE', label: 'Alternatives' },
-            { key: 'PACKED', label: 'Emballées' },
-            { key: 'all', label: 'Toutes' },
-          ].map(f => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {STATUS_FILTERS.map(f => (
             <button key={f.key} className={`filter-chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
               {f.label}
             </button>
