@@ -199,6 +199,55 @@ export async function createOrder(data: {
   const calculatedTotal = processedItems.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
   const finalTotal = data.total !== undefined ? Number(data.total) : calculatedTotal;
 
+  // ============ ANTI-FRAUDE EXPÉDITION ============
+  // Bloque une expédition (Hors Abidjan) identique le même jour : même numéro
+  // + mêmes articles = ruse client fréquente pour se faire livrer deux fois.
+  // Les reprogrammations restent autorisées (flux légitime).
+  const isExpedition = data.commune?.trim().toLowerCase() === 'hors abidjan';
+  if (isExpedition && data.type !== 'Reprogrammé') {
+    const toSuffix = (p?: string | null) => {
+      const digits = String(p || '').replace(/\D/g, '');
+      return digits.length >= 8 ? digits.slice(-8) : '';
+    };
+    const newSuffixes = [toSuffix(data.customerPhone), toSuffix(data.customerPhone2)].filter(Boolean);
+
+    // Signature des articles : produit + taille + couleur + quantité (cadeaux promo exclus)
+    const itemSignature = (items: Array<{ productId?: string | null; name: string; size?: string | null; color?: string | null; qty: number; isGift?: boolean | null }>) =>
+      items
+        .filter(i => !i.isGift)
+        .map(i => `${i.productId || String(i.name).trim().toLowerCase()}|${String(i.size || '').trim().toLowerCase()}|${String(i.color || '').trim().toLowerCase()}|${Number(i.qty)}`)
+        .sort()
+        .join('§');
+
+    if (newSuffixes.length > 0) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const sameDayExpeditions = await prisma.order.findMany({
+        where: {
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: todayStart },
+          commune: { equals: data.commune.trim(), mode: 'insensitive' },
+        },
+        include: { items: true },
+      });
+
+      const newSignature = itemSignature(processedItems);
+      const duplicate = sameDayExpeditions.find(o => {
+        const existingSuffixes = [toSuffix(o.customerPhone), toSuffix(o.customerPhone2)].filter(Boolean);
+        const samePhone = existingSuffixes.some(s => newSuffixes.includes(s));
+        return samePhone && itemSignature(o.items) === newSignature;
+      });
+
+      if (duplicate) {
+        throw new Error(
+          `⚠️ Expédition refusée : la commande ${duplicate.ref || duplicate.id} a déjà été enregistrée aujourd'hui pour ce numéro avec exactement les mêmes articles. Doublon probable — vérifiez avant de recréer.`,
+        );
+      }
+    }
+  }
+
   const customer = await upsertCustomerFromOrder({
     name: data.customerName,
     phone: data.customerPhone,
