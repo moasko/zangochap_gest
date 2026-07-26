@@ -504,6 +504,12 @@ export async function updateOrderDetails(orderId: string, data: any) {
     }
   }
 
+  // Type de transaction : validé contre la liste connue (le modal d'édition permet de le changer)
+  const ALLOWED_ORDER_TYPES = ['Standard', 'Echange', 'Express', 'Recuperation', 'Reprogrammé'];
+  if (data.type !== undefined && ALLOWED_ORDER_TYPES.includes(String(data.type))) {
+    sanitized.type = String(data.type);
+  }
+
   // Coherence relais : une edition libre ne doit ni orpheliner un colis relais
   // (marqueur [POINT_RELAIS] ecrase) ni passer une commande en "Boutique" sans marqueur.
   const relayFieldsTouched = ["commune", "customerLocation", "deliveryNote"].some((key) => key in sanitized);
