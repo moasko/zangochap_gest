@@ -8071,11 +8071,26 @@ function OrderFormModal({
 
       items: initialItems as any[],
 
-      exchangeReason: "",
+      // En édition, pré-remplit le motif depuis la ligne "MOTIF ECHANGE: ..." des notes
+      exchangeReason:
+        mode === "edit"
+          ? String(order.notes || "").match(/MOTIF ECHANGE:\s*([^\n]*)/i)?.[1]?.trim() || ""
+          : "",
 
       deliveryDate: getDefaultDeliveryDate(),
     };
   });
+
+  // En édition d'un échange, réinjecte le motif dans les notes (updateOrderDetails ne connaît que "notes")
+  const buildConfirmData = () => {
+    if (mode !== "edit") return formData;
+    const reason = String(formData.exchangeReason || "").trim();
+    const lines = String(formData.notes || "")
+      .split("\n")
+      .filter((l) => !/^\s*MOTIF ECHANGE:/i.test(l));
+    if (formData.type === "Echange" && reason) lines.unshift(`MOTIF ECHANGE: ${reason}`);
+    return { ...formData, notes: lines.join("\n").trim() };
+  };
 
   // Product search via API
 
@@ -8353,7 +8368,7 @@ function OrderFormModal({
               fontSize: 13,
               fontWeight: 800,
             }}
-            onClick={() => onConfirm(formData)}
+            onClick={() => onConfirm(buildConfirmData())}
             disabled={isPending || formData.items.length === 0}
           >
             {isPending ? (
