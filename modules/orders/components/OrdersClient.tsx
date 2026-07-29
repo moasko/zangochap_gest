@@ -623,11 +623,23 @@ export default function OrdersClient({
       params.set("scope", scope);
     else params.delete("scope");
 
-    if (dateFrom !== null && searchParams.get("from") !== dateFrom)
-      params.set("from", dateFrom);
+    // Recherche active + plage par défaut (aujourd'hui) : on retire les dates
+    // pour chercher sur tout l'historique — sinon une ref d'un autre jour est introuvable.
+    const searchAllDates =
+      Boolean(debouncedSearch) &&
+      dateFrom === todayStr &&
+      (dateTo === todayStr || !dateTo);
 
-    if (dateTo !== null && searchParams.get("to") !== dateTo)
-      params.set("to", dateTo);
+    if (searchAllDates) {
+      params.delete("from");
+      params.delete("to");
+    } else {
+      if (dateFrom !== null && searchParams.get("from") !== dateFrom)
+        params.set("from", dateFrom);
+
+      if (dateTo !== null && searchParams.get("to") !== dateTo)
+        params.set("to", dateTo);
+    }
 
     if (dateType !== "created") params.set("dateType", dateType);
     else params.delete("dateType");
@@ -648,6 +660,7 @@ export default function OrdersClient({
     dateTo,
     dateType,
     debouncedSearch,
+    todayStr,
     router,
     searchParams,
     user?.role,

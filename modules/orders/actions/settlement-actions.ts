@@ -620,9 +620,20 @@ export async function toggleCommercialContacted(orderId: string, value: boolean)
     throw new Error("Accès refusé");
   }
 
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { history: true } });
+  if (!order) throw new Error("Commande introuvable");
+
+  const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
+  history.push({
+    at: new Date().toISOString(),
+    action: value ? "Client contacté par le commercial" : "Contact commercial annulé",
+    by: session.email,
+    byName: session.name,
+  });
+
   await prisma.order.update({
     where: { id: orderId },
-    data: { isCommercialContacted: value }
+    data: { isCommercialContacted: value, history }
   });
 
   revalidatePath("/zangochap-manager/admin/settlements");

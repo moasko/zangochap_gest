@@ -19,6 +19,7 @@ import { checkOrderAccess, generateUniqueRef, upsertCustomerFromOrder } from "..
 import { decrementStockForOrder, restoreStockForOrder } from "./stock";
 import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
 import { triggerAutomations } from "@/modules/automations/engine";
+import { recordDeveloperAudit } from "@/modules/developer/audit";
 
 // ============ POINT RELAIS ============
 // L'attribution relais vit sous forme d'une ligne marqueur dans deliveryNote,
@@ -528,7 +529,19 @@ export async function deleteOrder(orderId: string) {
         : {}),
       history,
       stockDecremented: false // Ensure it stays false after restoration
-    } 
+    }
+  });
+
+  // Trace durable dans le log central : survit à la rotation des 50 dernières
+  // commandes de la console et à une éventuelle purge physique ultérieure.
+  await recordDeveloperAudit("order.delete", "success", {
+    orderId: order.id,
+    ref: order.ref,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    total: order.total,
+    status: order.status,
+    itemsCount: order.items.length,
   });
 
   revalidatePath("/zangochap-manager/orders");

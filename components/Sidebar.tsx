@@ -20,7 +20,7 @@ import {
   Upload, FileText, LogOut, ClipboardList,
   AlertTriangle, Settings, ChevronRight, ChevronLeft, History, Wallet, Warehouse,
   Image as ImageIcon, Menu, X, Bell, WifiOff, Landmark,
-  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap, StickyNote
+  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap, StickyNote, Trash2
 } from "lucide-react";
 
 interface SidebarProps {
@@ -81,7 +81,8 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
         { label: 'Toutes les commandes', href: '/zangochap-manager/orders', icon: <ShoppingBag size={18} />, badge: counts.orders },
         { label: 'À traiter (site)', href: '/zangochap-manager/orders/to-process', icon: <AlertTriangle size={18} />, badge: counts.toProcess },
         { label: 'Fiche de rappel', href: '/zangochap-manager/orders/non-packed', icon: <Package size={18} /> },
-        { label: 'Nouvelle commande', href: '/zangochap-manager/orders/new', icon: <ClipboardList size={18} /> }
+        { label: 'Nouvelle commande', href: '/zangochap-manager/orders/new', icon: <ClipboardList size={18} /> },
+        { label: 'Corbeille', href: '/zangochap-manager/orders/trash', icon: <Trash2 size={18} /> }
       ]
     },
     {

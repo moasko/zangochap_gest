@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/modules/auth/actions";
-import { randomUUID } from "crypto";
 
 type AuditStatus = "success" | "failure" | "blocked" | "info";
 
@@ -21,12 +21,18 @@ export async function recordDeveloperAudit(
 ) {
   try {
     const session = await getSession();
-    await prisma.$executeRaw`
-      INSERT INTO "DeveloperAuditLog"
-        ("id", "action", "status", "actorId", "actorName", "actorEmail", "details", "createdAt")
-      VALUES
-        (${randomUUID()}, ${action}, ${status}, ${session?.id || null}, ${session?.name || null}, ${session?.email || null}, ${shrinkDetails(details) || null}, NOW())
-    `;
+    // Client Prisma (et non $executeRaw) : la sérialisation JSON de "details"
+    // est gérée nativement — un objet brut passé en paramètre raw échoue sous Postgres.
+    await prisma.developerAuditLog.create({
+      data: {
+        action,
+        status,
+        actorId: session?.id || null,
+        actorName: session?.name || null,
+        actorEmail: session?.email || null,
+        details: (shrinkDetails(details) as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+      },
+    });
   } catch {
     // The audit table is optional until its manual migration is applied.
   }

@@ -288,7 +288,7 @@ export async function cleanTestOrdersAction() {
       where: {
         customerName: { startsWith: "[TEST]" },
       },
-      select: { id: true },
+      select: { id: true, ref: true, customerName: true, total: true, status: true },
     });
 
     if (testOrders.length === 0) {
@@ -304,6 +304,13 @@ export async function cleanTestOrdersAction() {
     await prisma.promoUsage.deleteMany({ where: { orderId: { in: ids } } });
     await prisma.orderItem.deleteMany({ where: { orderId: { in: ids } } });
     await prisma.order.deleteMany({ where: { id: { in: ids } } });
+
+    // Suppression physique : l'history part avec les commandes, on garde la
+    // liste des refs détruites dans le log central avant qu'elle ne disparaisse.
+    await recordDeveloperAudit("orders.clean_test", "success", {
+      count: testOrders.length,
+      orders: testOrders.map((o) => ({ id: o.id, ref: o.ref, name: o.customerName, total: o.total, status: o.status })),
+    });
 
     revalidatePath("/zangochap-manager/orders");
 

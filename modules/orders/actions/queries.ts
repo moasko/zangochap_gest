@@ -37,8 +37,11 @@ function todayIso() {
 }
 
 export function buildOrdersWhere(params: OrdersQueryParams, user: SessionUser | null | undefined) {
-  const from = params.from ?? todayIso();
-  const to = params.to ?? todayIso();
+  // Une recherche texte sans plage de dates explicite couvre tout l'historique,
+  // sinon une ref d'un autre jour est introuvable (piège du filtre "aujourd'hui").
+  const hasSearch = Boolean(params.q?.trim());
+  const from = params.from ?? (hasSearch ? undefined : todayIso());
+  const to = params.to ?? (hasSearch ? undefined : todayIso());
 
   const where: Record<string, unknown> = { deletedAt: null };
 
