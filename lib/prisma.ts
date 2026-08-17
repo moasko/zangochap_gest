@@ -3,12 +3,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 const prismaClientSingleton = () => {
-  // Triggering reload for schema sync (removed sequence)... (v5)
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not defined in environment variables");
   }
-  console.log("Initializing Prisma Client with Pool...");
   const pool = new Pool({
     connectionString,
     max: 10, // Neon free-tier supports ~20 connections; keep headroom
@@ -20,10 +18,6 @@ const prismaClientSingleton = () => {
         rejectUnauthorized: false,
       }
       : undefined
-  });
-
-  pool.on('connect', () => {
-    // console.log('New client connected to pool');
   });
 
   pool.on('error', (err) => {
@@ -39,8 +33,6 @@ declare global {
   var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
 }
 
-// v6 reload for isLabeled schema sync
-delete (globalThis as any).prisma;
 const prisma = globalThis.prisma ?? prismaClientSingleton();
 
 export default prisma;

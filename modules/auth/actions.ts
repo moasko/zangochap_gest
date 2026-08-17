@@ -7,6 +7,23 @@ import { revalidatePath } from "next/cache";
 
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { Prisma, Role } from "@prisma/client";
+import { z } from "zod";
+
+const accountSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().toLowerCase().email().max(254),
+  phone: z.string().trim().max(30).optional(),
+  phone2: z.string().trim().max(30).optional(),
+  serviceLabel: z.string().trim().max(100).optional(),
+  password: z.string().min(8).max(128),
+  role: z.nativeEnum(Role),
+});
+
+const accountUpdateSchema = accountSchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  "Aucune modification fournie.",
+);
 
 // Le secret de signature ne doit JAMAIS retomber sur une valeur connue : l'ancien
 // fallback etait present dans le repo, donc n'importe qui pouvait forger un cookie
@@ -162,7 +179,7 @@ async function ensureAdmin() {
 // ============ ACCOUNT MANAGEMENT ============
 export async function getAccounts() {
   const session = await ensureAdmin();
-  const where: any = {};
+  const where: Prisma.UserWhereInput = {};
   if (session.role === "admin") {
     where.role = { not: "DEVELOPER" };
   }
@@ -195,25 +212,31 @@ export async function createAccount(data: {
 }) {
   const session = await ensureAdmin();
 
-  if (session.role === "admin" && data.role.toUpperCase() === "DEVELOPER") {
+  const parsed = accountSchema.safeParse({ ...data, role: data.role.toUpperCase() });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message || "Données de compte invalides." };
+  }
+  const account = parsed.data;
+
+  if (session.role === "admin" && account.role === Role.DEVELOPER) {
     throw new Error("Action non autorisée. Les administrateurs ne peuvent pas créer de compte développeur.");
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: data.email.toLowerCase() } });
+  const existing = await prisma.user.findUnique({ where: { email: account.email } });
   if (existing) return { success: false, error: "Email déjà utilisé" };
 
-  const initials = data.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  const hashedPassword = await bcrypt.hash(data.password, 10);
+  const initials = account.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const hashedPassword = await bcrypt.hash(account.password, 10);
 
   await prisma.user.create({
     data: {
-      email: data.email.toLowerCase(),
-      name: data.name,
-      phone: data.phone,
-      phone2: data.phone2,
-      serviceLabel: data.serviceLabel,
+      email: account.email,
+      name: account.name,
+      phone: account.phone,
+      phone2: account.phone2,
+      serviceLabel: account.serviceLabel,
       password: hashedPassword,
-      role: data.role.toUpperCase() as any,
+      role: account.role,
       initials,
     },
   });
@@ -234,6 +257,16 @@ export async function updateAccount(email: string, data: {
 }) {
   const session = await ensureAdmin();
 
+  const parsed = accountUpdateSchema.safeParse({
+    ...data,
+    email: data.email?.trim().toLowerCase(),
+    role: data.role?.toUpperCase(),
+  });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message || "Données de compte invalides." };
+  }
+  const account = parsed.data;
+
   if (session.role === "admin") {
     const targetUser = await prisma.user.findUnique({
       where: { email },
@@ -242,23 +275,23 @@ export async function updateAccount(email: string, data: {
     if (targetUser?.role === "DEVELOPER") {
       throw new Error("Action non autorisée. Les administrateurs ne peuvent pas modifier de compte développeur.");
     }
-    if (data.role?.toUpperCase() === "DEVELOPER") {
+    if (account.role === Role.DEVELOPER) {
       throw new Error("Action non autorisée. Les administrateurs ne peuvent pas attribuer le rôle développeur.");
     }
   }
 
-  const updateData: any = {};
-  if (data.name) {
-    updateData.name = data.name;
-    updateData.initials = data.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+  const updateData: Prisma.UserUpdateInput = {};
+  if (account.name) {
+    updateData.name = account.name;
+    updateData.initials = account.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
   }
-  if (data.email) updateData.email = data.email.toLowerCase();
-  if (data.phone) updateData.phone = data.phone;
-  if (data.phone2 !== undefined) updateData.phone2 = data.phone2;
-  if (data.serviceLabel !== undefined) updateData.serviceLabel = data.serviceLabel;
-  if (data.role) updateData.role = data.role.toUpperCase();
-  if (data.password && data.password.length >= 4) {
-    updateData.password = await bcrypt.hash(data.password, 10);
+  if (account.email) updateData.email = account.email;
+  if (account.phone) updateData.phone = account.phone;
+  if (account.phone2 !== undefined) updateData.phone2 = account.phone2;
+  if (account.serviceLabel !== undefined) updateData.serviceLabel = account.serviceLabel;
+  if (account.role) updateData.role = account.role;
+  if (account.password) {
+    updateData.password = await bcrypt.hash(account.password, 10);
   }
 
   await prisma.user.update({
