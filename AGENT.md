@@ -64,3 +64,4 @@ Après une modification importante, mettre à jour `memory/project-context.md` s
 l'architecture, les flux, les risques ou les conventions ont changé. Ajouter une
 entrée concise dans `memory/change-log.md` avec la date, les fichiers concernés et
 la raison. Ne pas recopier de grands fichiers sources dans la mémoire.
+
