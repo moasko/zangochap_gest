@@ -759,6 +759,13 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
     byName: session.name,
   });
 
+  // Calcul des dates au moment de la confirmation
+  // Règle : pas de livraison le dimanche → si demain est dimanche, on prend lundi
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const nextDeliveryOffset = now.getDay() === 6 ? 2 : 1; // samedi (6) → +2 jours (lundi), sinon +1 (demain)
+  const tomorrowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + nextDeliveryOffset, 0, 0, 0, 0);
+
   let updatedOrder: any = null;
   for (let attempt = 0; attempt < 10; attempt++) {
     const ref = order.ref || await generateUniqueRef(order.commune || undefined, order.type || undefined);
@@ -770,8 +777,10 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
           status: 'CONFIRMED',
           commercialId: assignee.id,
           commercialName: assignee.name,
-          confirmedAt: new Date(),
+          confirmedAt: now,
           confirmedByName: assignee.name,
+          createdAt: todayMidnight,
+          deliveryDate: order.deliveryDate ?? tomorrowMidnight,
           history,
         },
         include: { items: true },
