@@ -90,11 +90,11 @@ export async function POST(req: NextRequest) {
               location: textValue(item, ["location", "emplacement"]),
               supplier: supplierName
                 ? {
-                    connectOrCreate: {
-                      where: { name: supplierName },
-                      create: { name: supplierName },
-                    },
-                  }
+                  connectOrCreate: {
+                    where: { name: supplierName },
+                    create: { name: supplierName },
+                  },
+                }
                 : undefined,
               createdBy: { connect: { id: user.id } },
             },

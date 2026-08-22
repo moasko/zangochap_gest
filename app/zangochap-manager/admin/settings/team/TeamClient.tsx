@@ -247,7 +247,7 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
       {showNew && <AccountModal onClose={() => setShowNew(false)} />}
       {editing && <AccountModal account={editing} onClose={() => setEditing(null)} />}
 
-      
+
     </div>
   );
 
@@ -337,9 +337,9 @@ export default function TeamClient({ accounts, currentUser }: { accounts: any[];
             </div>
             <div className="form-row span-2">
               <label className="field-label">{account ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe temporaire *'}</label>
-              <input className="field-input" type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••" minLength={account ? 0 : 4} required={!account} />
+              <input className="field-input" type="text" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={password || !account ? 8 : undefined} maxLength={128} required={!account} />
               <p style={{ fontSize: 11, color: 'var(--brown-soft)', marginTop: 4 }}>
-                {account ? 'Laissez vide pour conserver le mot de passe actuel.' : 'Le membre pourra le changer lors de sa première connexion.'}
+                {account ? 'Laissez vide pour conserver le mot de passe actuel. Sinon, utilisez au moins 8 caractères.' : 'Minimum 8 caractères. Le membre pourra le changer lors de sa première connexion.'}
               </p>
             </div>
           </div>

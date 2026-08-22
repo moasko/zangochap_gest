@@ -499,8 +499,8 @@ export async function createPublicOrder(
 // ============ DELETE ORDER (SOFT DELETE) ============
 export async function deleteOrder(orderId: string) {
   const session = await getSession();
-  if (!session || !['admin', 'commercial', 'developer'].includes(session.role?.toLowerCase())) throw new Error("Accès refusé");
-  
+  if (!session || !['ADMIN', 'COMMERCIAL', 'DEVELOPER'].includes(session.role?.toLowerCase())) throw new Error("Accès refusé");
+
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw new Error("Commande introuvable");
   if (!checkOrderAccess(order, session)) throw new Error("Accès refusé");
@@ -511,17 +511,17 @@ export async function deleteOrder(orderId: string) {
   }
 
   const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
-  history.push({ 
-    at: new Date().toISOString(), 
-    action: "Commande SUPPRIMÉE (Soft Delete)", 
-    by: session.email, 
-    byName: session.name 
+  history.push({
+    at: new Date().toISOString(),
+    action: "Commande SUPPRIMÉE (Soft Delete)",
+    by: session.email,
+    byName: session.name
   });
 
   // Soft delete: Update status to CANCELLED and mark the ref
-  await prisma.order.update({ 
-    where: { id: orderId }, 
-    data: { 
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
       status: 'CANCELLED',
       deletedAt: new Date(),
       ...(order.ref
@@ -759,13 +759,6 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
     byName: session.name,
   });
 
-  // Calcul des dates au moment de la confirmation
-  // Règle : pas de livraison le dimanche → si demain est dimanche, on prend lundi
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const nextDeliveryOffset = now.getDay() === 6 ? 2 : 1; // samedi (6) → +2 jours (lundi), sinon +1 (demain)
-  const tomorrowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + nextDeliveryOffset, 0, 0, 0, 0);
-
   let updatedOrder: any = null;
   for (let attempt = 0; attempt < 10; attempt++) {
     const ref = order.ref || await generateUniqueRef(order.commune || undefined, order.type || undefined);
@@ -777,10 +770,8 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
           status: 'CONFIRMED',
           commercialId: assignee.id,
           commercialName: assignee.name,
-          confirmedAt: now,
+          confirmedAt: new Date(),
           confirmedByName: assignee.name,
-          createdAt: todayMidnight,
-          deliveryDate: order.deliveryDate ?? tomorrowMidnight,
           history,
         },
         include: { items: true },

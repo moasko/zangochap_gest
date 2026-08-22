@@ -2,6 +2,12 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-08-22 — Correction de la création des utilisateurs
+
+- Alignement du formulaire équipe avec la règle serveur de huit caractères minimum pour les mots de passe.
+- Conversion des champs téléphone et service facultatifs vides en `null`, afin de respecter les contraintes uniques sans bloquer plusieurs comptes sans numéro.
+- Ajout de messages explicites lorsque l'email ou le numéro WhatsApp existe déjà.
+
 ## 2026-08-17 — Premier lot de réduction de dette
 
 - Retrait de toute synchronisation Prisma automatique au démarrage de production.

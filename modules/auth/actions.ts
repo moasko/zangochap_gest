@@ -25,6 +25,11 @@ const accountUpdateSchema = accountSchema.partial().refine(
   "Aucune modification fournie.",
 );
 
+function optionalText(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
 // Le secret de signature ne doit JAMAIS retomber sur une valeur connue : l'ancien
 // fallback etait present dans le repo, donc n'importe qui pouvait forger un cookie
 // de session admin. On accepte tout secret defini par l'exploitant (sa longueur est
@@ -222,26 +227,45 @@ export async function createAccount(data: {
     throw new Error("Action non autorisée. Les administrateurs ne peuvent pas créer de compte développeur.");
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: account.email } });
-  if (existing) return { success: false, error: "Email déjà utilisé" };
+  const normalizedPhone = optionalText(account.phone);
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: account.email },
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+      ],
+    },
+    select: { email: true, phone: true },
+  });
+  if (existing?.email === account.email) return { success: false, error: "Email déjà utilisé." };
+  if (normalizedPhone && existing?.phone === normalizedPhone) {
+    return { success: false, error: "Numéro WhatsApp déjà utilisé." };
+  }
 
   const initials = account.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const hashedPassword = await bcrypt.hash(account.password, 10);
 
-  await prisma.user.create({
-    data: {
-      email: account.email,
-      name: account.name,
-      phone: account.phone,
-      phone2: account.phone2,
-      serviceLabel: account.serviceLabel,
-      password: hashedPassword,
-      role: account.role,
-      initials,
-    },
-  });
+  try {
+    await prisma.user.create({
+      data: {
+        email: account.email,
+        name: account.name,
+        phone: normalizedPhone,
+        phone2: optionalText(account.phone2),
+        serviceLabel: optionalText(account.serviceLabel),
+        password: hashedPassword,
+        role: account.role,
+        initials,
+      },
+    });
+  } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { success: false, error: "Cet email ou ce numéro est déjà utilisé." };
+    }
+    throw error;
+  }
 
-  revalidatePath("/zangochap-manager/admin/team");
+  revalidatePath("/zangochap-manager/admin/settings/team");
   revalidatePath("/zangochap-manager/directory");
   return { success: true };
 }
@@ -286,9 +310,9 @@ export async function updateAccount(email: string, data: {
     updateData.initials = account.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
   }
   if (account.email) updateData.email = account.email;
-  if (account.phone) updateData.phone = account.phone;
-  if (account.phone2 !== undefined) updateData.phone2 = account.phone2;
-  if (account.serviceLabel !== undefined) updateData.serviceLabel = account.serviceLabel;
+  if (account.phone !== undefined) updateData.phone = optionalText(account.phone);
+  if (account.phone2 !== undefined) updateData.phone2 = optionalText(account.phone2);
+  if (account.serviceLabel !== undefined) updateData.serviceLabel = optionalText(account.serviceLabel);
   if (account.role) updateData.role = account.role;
   if (account.password) {
     updateData.password = await bcrypt.hash(account.password, 10);
