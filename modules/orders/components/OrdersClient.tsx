@@ -6211,7 +6211,6 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                               {canManageOrder && ![
                                 "DELIVERED",
                                 "CANCELLED",
-                                "REPRO_DISPO",
                               ].includes(order.status) && (
                                   <button
                                     type="button"
@@ -7054,7 +7053,7 @@ function OrderDetailModal({
                         </button>
                       )}
 
-                    {!["DELIVERED", "CANCELLED", "REPRO_DISPO"].includes(
+                    {!["DELIVERED", "CANCELLED"].includes(
                       order.status,
                     ) && (
                         <button
@@ -8359,7 +8358,7 @@ function OrderFormModal({
           </button>
           {mode === "edit" &&
             onReproDispo &&
-            !["DELIVERED", "CANCELLED", "REPRO_DISPO"].includes(
+            !["DELIVERED", "CANCELLED"].includes(
               order.status,
             ) && (
               <button

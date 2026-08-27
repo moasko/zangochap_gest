@@ -1048,7 +1048,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                               type="button"
                               className="cell-btn-icon"
                               onClick={() => setReproOrder(order)}
-                              disabled={isPending || order.status === "REPRO_DISPO"}
+                              disabled={isPending}
                               title="Repro-dispo demain"
                             >
                               <CalendarClock size={14} />
