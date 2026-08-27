@@ -759,6 +759,21 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
     byName: session.name,
   });
 
+  // Les commandes du site sont creees sans date de livraison : au moment de
+  // leur prise en charge, planifier le prochain jour livrable (jamais dimanche).
+  // Une date deja renseignee reste prioritaire.
+  const now = new Date();
+  const nextDeliveryOffset = now.getDay() === 6 ? 2 : 1;
+  const nextDeliveryDate = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + nextDeliveryOffset,
+    0,
+    0,
+    0,
+    0,
+  );
+
   let updatedOrder: any = null;
   for (let attempt = 0; attempt < 10; attempt++) {
     const ref = order.ref || await generateUniqueRef(order.commune || undefined, order.type || undefined);
@@ -770,8 +785,9 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
           status: 'CONFIRMED',
           commercialId: assignee.id,
           commercialName: assignee.name,
-          confirmedAt: new Date(),
+          confirmedAt: now,
           confirmedByName: assignee.name,
+          deliveryDate: order.deliveryDate ?? nextDeliveryDate,
           history,
         },
         include: { items: true },
