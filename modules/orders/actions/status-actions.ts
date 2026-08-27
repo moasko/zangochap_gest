@@ -66,6 +66,17 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   if (normalizedStatus === 'TO_PROCESS') {
     throw new Error("Le statut A traiter est reserve aux commandes du site public.");
   }
+  if (normalizedStatus === 'CANCELLED') {
+    if (order.status === 'CANCELLED') {
+      throw new Error("Cette commande est deja annulee.");
+    }
+    if (['DELIVERED', 'PARTIALLY_DELIVERED'].includes(order.status)) {
+      throw new Error("Une commande livree ne peut pas etre annulee. Utilisez la correction de livraison admin.");
+    }
+    if (order.settlementId) {
+      throw new Error("Cette commande est rattachee a un reglement livreur et ne peut plus etre annulee.");
+    }
+  }
 
   const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
   history.push({

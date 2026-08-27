@@ -333,8 +333,8 @@ export default function OrdersClient({
   // Mutations
 
   const statusMutation = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
-      const result = await updateOrderStatus(orderId, status);
+    mutationFn: async ({ orderId, status, note }: { orderId: string; status: string; note?: string }) => {
+      const result = await updateOrderStatus(orderId, status, note);
       if (!result.success) throw new Error(result.error);
       return result;
     },
@@ -763,8 +763,8 @@ export default function OrdersClient({
   const currentPage = serverPage;
 
   const handleStatusChange = useCallback(
-    (orderId: string, status: string) => {
-      statusMutation.mutate({ orderId, status });
+    (orderId: string, status: string, note?: string) => {
+      statusMutation.mutate({ orderId, status, note });
     },
     [statusMutation],
   );
@@ -6826,7 +6826,7 @@ function OrderDetailModal({
   order: any;
   user: any;
   onClose: () => void;
-  onStatusChange: (id: string, status: string) => void;
+  onStatusChange: (id: string, status: string, note?: string) => void;
 
   onUpdateDetails: (id: string, data: any) => void;
 
@@ -7075,7 +7075,10 @@ function OrderDetailModal({
 
                     <button
                       className="btn-secondary"
-                      onClick={() => onStatusChange(order.id, "CANCELLED")}
+                      onClick={() => {
+                        const reason = window.prompt("Motif de l'annulation :")?.trim();
+                        if (reason) onStatusChange(order.id, "CANCELLED", reason);
+                      }}
                       disabled={isPending}
                       style={{
                         borderColor: "var(--amber)",
