@@ -499,7 +499,7 @@ export async function createPublicOrder(
 // ============ DELETE ORDER (SOFT DELETE) ============
 export async function deleteOrder(orderId: string) {
   const session = await getSession();
-  if (!session || !['ADMIN', 'COMMERCIAL', 'DEVELOPER'].includes(session.role?.toLowerCase())) throw new Error("Accès refusé");
+  if (!session || !['ADMIN', 'COMMERCIAL', 'DEVELOPER'].includes(session.role?.toUpperCase())) throw new Error("Accès refusé");
 
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw new Error("Commande introuvable");
