@@ -7,8 +7,8 @@ import { useToast } from "@/components/Toast";
 import { addOrderHistoryEntry } from "@/modules/orders/actions";
 import { updateOrderStatus } from "@/modules/orders/actions/status-actions";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, X, Search } from "lucide-react";
-import { toggleItemVerification } from "@/modules/logistics/verification/actions";
+import { Check, Package, X, Search } from "lucide-react";
+import { markItemNotPacked, toggleItemVerification } from "@/modules/logistics/verification/actions";
 import { useResponsiveMode } from "@/lib/hooks";
 import LogisticsMobileStyles from "@/modules/logistics/components/LogisticsMobileStyles";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,6 +16,7 @@ import PackingOrderModal from "./components/PackingOrderModal";
 import VariantsEditorModal from "./components/VariantsEditorModal";
 import PackingItem from "./components/PackingItem";
 import { PackingOrder, PackingOrderItem, PackingProductVariant, PackingUser, ProductWithVariants } from "./types";
+import "./packing.css";
 
 // --- HOOKS ---
 type DatePreset = 'today' | 'yesterday' | 'custom' | 'all';
@@ -23,6 +24,7 @@ type DatePreset = 'today' | 'yesterday' | 'custom' | 'all';
 const STATUS_FILTERS = [
   { key: 'CONFIRMED', label: 'Confirmées' },
   { key: 'PREPARING', label: 'Suivies' },
+  { key: 'NOT_PACKED', label: 'Pas emballées' },
   { key: 'ALTERNATIVE', label: 'Alternatives' },
   { key: 'PARTIAL', label: 'Part. emballées' },
   { key: 'UNAVAILABLE', label: 'Indisponibles' },
@@ -133,6 +135,8 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
         // Filtre Statut / Alternative
         if (filter === 'ALTERNATIVE') {
           if (o.status !== 'ALTERNATIVE' && !o.history?.some(h => h.action.includes('Alternative proposée'))) return false;
+        } else if (filter === 'NOT_PACKED') {
+          if (!o.items.some(item => item.packingStatus === 'NOT_PACKED')) return false;
         } else if (filter === 'PREPARING') {
           // Suivies = commandes dont au moins un article a été coché, mais pas encore emballées
           if (o.status === 'PACKED') return false;
@@ -253,7 +257,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
       if (o.id !== orderId) return o;
       return {
         ...o,
-        items: o.items.map(i => i.id === item.id ? { ...i, isVerified: newStatus } : i)
+        items: o.items.map(i => i.id === item.id ? { ...i, isVerified: newStatus, packingStatus: newStatus ? 'PACKED' : 'PENDING' } : i)
       };
     }));
 
@@ -270,7 +274,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
           if (o.id !== orderId) return o;
           return {
             ...o,
-            items: o.items.map(i => i.id === item.id ? { ...i, isVerified: !newStatus } : i)
+            items: o.items.map(i => i.id === item.id ? { ...i, isVerified: !newStatus, packingStatus: item.packingStatus } : i)
           };
         }));
       })
@@ -281,6 +285,26 @@ export default function PackingClient({ initialOrders, products: initialProducts
           return next;
         });
       });
+  }, [setOrders, showToast]);
+
+  const handleItemNotPacked = useCallback((orderId: string, item: PackingOrderItem) => {
+    setSavingChecks(prev => new Set(prev).add(item.id));
+    markItemNotPacked(item.id)
+      .then(() => {
+        setOrders(prev => prev.map(order => order.id !== orderId ? order : {
+          ...order,
+          items: order.items.map(current => current.id === item.id
+            ? { ...current, isVerified: false, verifiedAt: null, packingStatus: 'NOT_PACKED' }
+            : current),
+        }));
+        showToast(`« ${item.name} » marqué pas emballé`, 'success');
+      })
+      .catch((error: unknown) => showToast(error instanceof Error ? error.message : "Erreur de sauvegarde", 'error'))
+      .finally(() => setSavingChecks(prev => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      }));
   }, [setOrders, showToast]);
 
   const handleMarkPacking = useCallback((orderId: string, status: string) => {
@@ -436,6 +460,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
     onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) =>
       setPreviewItem({ url, name, size, color }),
     onToggleCheckItem: toggleCheckItem,
+    onMarkItemNotPacked: handleItemNotPacked,
     canEditStock: ['ADMIN', 'DEVELOPER', 'STOCK'].includes(user.role?.toUpperCase()),
   };
 
@@ -445,19 +470,31 @@ export default function PackingClient({ initialOrders, products: initialProducts
     transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
   } as const;
 
-  if (isViewportReady && isMobile) {
+  if (!isViewportReady) {
     return (
-      <motion.div key="packing-mobile" className="logistics-mobile-root logistics-view-mobile" {...viewMotion}>
+      <>
         <LogisticsMobileStyles />
-        <div className="logistics-mobile-header">
-          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 800 }}>Emballage</h1>
-            <div style={{ position: 'absolute', right: 0, fontSize: 12, fontWeight: 700, color: 'var(--orange)', background: 'var(--orange-soft)', padding: '4px 10px', borderRadius: 20 }}>
-              {filtered.length}
+        <div className="content logistics-responsive-pending" role="status" aria-live="polite">
+          Chargement de l&apos;interface…
+        </div>
+      </>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <motion.div key="packing-mobile" className="logistics-mobile-root logistics-view-mobile packing-mobile-root" {...viewMotion}>
+        <LogisticsMobileStyles />
+        <div className="logistics-mobile-header packing-mobile-header">
+          <div className="packing-mobile-titlebar">
+            <div className="packing-mobile-title-icon"><Package size={21} strokeWidth={2.4} /></div>
+            <div className="packing-mobile-title-copy">
+              <h1>Emballage</h1>
             </div>
+            <div className="packing-mobile-count" aria-label={`${filtered.length} commandes affichées`}>{filtered.length}</div>
           </div>
 
-          <div className="mobile-search-bar">
+          <div className="mobile-search-bar packing-search">
             <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#AEAEB2' }} />
             <input
               type="text"
@@ -466,9 +503,10 @@ export default function PackingClient({ initialOrders, products: initialProducts
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
+            {search && <button className="packing-search-clear" onClick={() => setSearch('')} aria-label="Effacer la recherche"><X size={16} /></button>}
           </div>
 
-          <div className="mobile-status-tabs">
+          <div className="mobile-status-tabs packing-status-tabs">
             {STATUS_FILTERS.map(f => (
               <button key={f.key} className={`status-tab ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
                 {f.label}
@@ -476,7 +514,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: 4, background: '#F2F2F7', padding: '2px', borderRadius: 10, marginBottom: 12 }}>
+          <div className="packing-date-presets" style={{ display: 'flex', gap: 4, background: '#F2F2F7', padding: '2px', borderRadius: 10, marginBottom: 12 }}>
             {[
               { label: 'Auj.', val: 'today' },
               { label: 'Hier', val: 'yesterday' },
@@ -486,6 +524,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
               <button
                 key={d.val}
                 onClick={() => applyDatePreset(d.val as DatePreset)}
+                className={`packing-date-preset ${datePreset === d.val ? 'active' : ''}`}
                 style={{
                   flex: 1, fontSize: 10, fontWeight: 800, padding: '6px 0', borderRadius: 8, border: 'none',
                   background: datePreset === d.val ? 'white' : 'transparent',
@@ -497,17 +536,23 @@ export default function PackingClient({ initialOrders, products: initialProducts
             ))}
           </div>
           {datePreset === 'custom' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-              <input type="date" className="filter-date" value={dateFrom} onChange={e => handleDateFromChange(e.target.value)} style={{ minWidth: 0, height: 36, borderRadius: 10, border: 'none', background: '#F2F2F7', fontSize: 11 }} />
-              <input type="date" className="filter-date" value={dateTo} onChange={e => handleDateToChange(e.target.value)} style={{ minWidth: 0, height: 36, borderRadius: 10, border: 'none', background: '#F2F2F7', fontSize: 11 }} />
+            <div className="packing-mobile-extra-filters" style={{ marginBottom: 8 }}>
+              <input type="date" className="packing-mobile-filter" aria-label="Date de début" value={dateFrom} onChange={e => handleDateFromChange(e.target.value)} />
+              <input type="date" className="packing-mobile-filter" aria-label="Date de fin" value={dateTo} onChange={e => handleDateToChange(e.target.value)} />
             </div>
           )}
+          {warehouses.length > 1 && <div className="packing-mobile-extra-filters single">
+            <select className="packing-mobile-filter" aria-label="Filtrer par entrepôt" value={warehouseFilter} onChange={e => setWarehouseFilter(e.target.value)}>
+              <option value="all">Tous les entrepôts</option>
+              {warehouses.map(warehouse => <option key={warehouse} value={warehouse}>{warehouse}</option>)}
+            </select>
+          </div>}
         </div>
 
-        <div className="logistics-mobile-content">
+        <div className="logistics-mobile-content packing-mobile-content">
           <AnimatePresence mode="popLayout">
             {filtered.length === 0 ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: '40px 0', textAlign: 'center' }}>
+              <motion.div className="packing-mobile-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: '40px 0', textAlign: 'center' }}>
                 <Package size={48} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
                 <p style={{ color: '#8E8E93', fontSize: 14 }}>Aucune commande</p>
               </motion.div>
@@ -529,6 +574,11 @@ export default function PackingClient({ initialOrders, products: initialProducts
             )}
           </AnimatePresence>
         </div>
+
+        {selectedIds.size > 0 && <div className="packing-mobile-bulkbar">
+          <span>{selectedIds.size} sélectionnée(s)</span>
+          <button onClick={() => handleBulkMark('PACKED')} disabled={isPending}><Check size={15} /> Emballer</button>
+        </div>}
 
         <PackingOrderModal
           order={selectedOrder}
@@ -621,7 +671,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
 
   return (
     <motion.div key="packing-desktop" className="content logistics-view-desktop" {...viewMotion}>
-      <div className="filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', background: 'white', padding: '12px 16px', borderRadius: 12, marginBottom: 20, border: '1px solid var(--line)' }}>
+      <div className="filters-bar packing-desktop-filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', background: 'white', padding: '12px 16px', borderRadius: 12, marginBottom: 20, border: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {STATUS_FILTERS.map(f => (
             <button key={f.key} className={`filter-chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>

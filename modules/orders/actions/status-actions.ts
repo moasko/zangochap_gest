@@ -100,15 +100,6 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   if (normalizedStatus === 'UNAVAILABLE' && !note?.trim()) {
     throw new Error("Indiquez la raison de l'indisponibilité.");
   }
-  if (order.status === 'PACKED' && normalizedStatus === 'CONFIRMED') {
-    if (!isRole(session, 'admin', 'developer', 'packing', 'stock')) {
-      throw new Error("Vous n'êtes pas autorisé à annuler un emballage.");
-    }
-    if (order.deliverymanId || order.settlementId) {
-      throw new Error("L'emballage ne peut plus être annulé après attribution à un livreur.");
-    }
-  }
-
   const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
   history.push({
     at: new Date().toISOString(),
@@ -158,7 +149,6 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => !item.isVerified)) {
         throw new Error("La vérification des articles a changé. Tous les articles doivent être vérifiés.");
       }
-
       if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
         updateData.lastDeliveryAttemptAt = new Date();
         updateData.lastDeliveryAttemptRiderId = order.deliverymanId;

@@ -38,7 +38,6 @@ interface VariantsEditorModalProps {
 }
 
 export default function VariantsEditorModal({ product, variants: initialVariants, onClose, onSave }: VariantsEditorModalProps) {
-  const hasInitialVariants = (initialVariants?.length || 0) > 0;
   const hasInitialStockLevels = (initialVariants || []).some((variant) => Array.isArray(variant.stockLevels));
 
   const normalizeVariant = React.useCallback((variant: PackingProductVariant): EditableVariant => {
@@ -153,7 +152,7 @@ export default function VariantsEditorModal({ product, variants: initialVariants
     setUploadingVariantIndex(variantIndex);
     setError(null);
 
-    reader.onload = async (event) => {
+    reader.onload = async () => {
       try {
         const { dataUrl, fileName } = await processImageFile(file);
         const result = await uploadMediaFile(dataUrl, fileName);

@@ -24,7 +24,11 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
   await prisma.$transaction(async (tx) => {
     const item = await tx.orderItem.update({
       where: { id: orderItemId },
-      data: { isVerified, verifiedAt: isVerified ? new Date() : null },
+      data: {
+        isVerified,
+        verifiedAt: isVerified ? new Date() : null,
+        packingStatus: isVerified ? "PACKED" : "PENDING",
+      },
     });
     const currentOrder = await tx.order.findUnique({ where: { id: item.orderId }, select: { history: true } });
     const history: Prisma.InputJsonObject[] = Array.isArray(currentOrder?.history)
@@ -42,6 +46,43 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
   });
 
   revalidatePath("/zangochap-manager/logistics/verification");
+  revalidatePath("/zangochap-manager/logistics/packing");
+  return { success: true };
+}
+
+export async function markItemNotPacked(orderItemId: string) {
+  const session = await getSession();
+  if (!session) throw new Error("Non authentifie");
+
+  const existing = await prisma.orderItem.findUnique({ where: { id: orderItemId }, include: { order: true } });
+  if (!existing || existing.order.deletedAt) throw new Error("Article introuvable");
+  if (!isRole(session, "admin", "developer", "packing", "stock", "collection") || !checkOrderAccess(existing.order, session)) {
+    throw new Error("Accès refusé");
+  }
+  if (!VERIFIABLE_STATUSES.includes(existing.order.status)) {
+    throw new Error("Cette commande ne peut plus être modifiée depuis l'emballage.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.orderItem.update({
+      where: { id: orderItemId },
+      data: { isVerified: false, verifiedAt: null, packingStatus: "NOT_PACKED" },
+    });
+    const currentOrder = await tx.order.findUnique({ where: { id: item.orderId }, select: { history: true } });
+    const history: Prisma.InputJsonObject[] = Array.isArray(currentOrder?.history)
+      ? currentOrder.history.flatMap((entry) => entry && typeof entry === "object" && !Array.isArray(entry)
+        ? [entry as Prisma.InputJsonObject]
+        : [])
+      : [];
+    history.push({
+      at: new Date().toISOString(),
+      action: `Emballage : Article "${item.name}" marqué PAS EMBALLÉ`,
+      by: session.email,
+      byName: session.name,
+    });
+    await tx.order.update({ where: { id: item.orderId }, data: { history } });
+  });
+
   revalidatePath("/zangochap-manager/logistics/packing");
   return { success: true };
 }

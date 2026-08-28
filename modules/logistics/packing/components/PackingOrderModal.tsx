@@ -20,6 +20,7 @@ interface PackingOrderModalProps {
   onEditStock: (product: ProductWithVariants) => void;
   canEditStock: boolean;
   onToggleCheckItem: (orderId: string, item: PackingOrderItem) => void;
+  onMarkItemNotPacked: (orderId: string, item: PackingOrderItem) => void;
   onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) => void;
   savingChecks?: Set<string>;
 }
@@ -37,6 +38,7 @@ export default function PackingOrderModal({
   onEditStock,
   canEditStock,
   onToggleCheckItem,
+  onMarkItemNotPacked,
   onPreviewImage,
   savingChecks = new Set()
 }: PackingOrderModalProps) {
@@ -56,24 +58,38 @@ export default function PackingOrderModal({
         title={`Détails · ${order.ref}`}
         large
         footer={
-          <div style={{ display: 'flex', width: '100%', gap: 10 }}>
-            <button className="btn-secondary" style={{ flex: 1 }} onClick={onClose}>Fermer</button>
-            <button className="btn-orange" style={{ flex: 2 }} onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined}>
-              <Check size={16} /> Valider Emballage
-            </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: '100%', gap: 8 }}>
+            {order.status === 'PACKED' ? (
+              <>
+                <button className="btn-secondary" onClick={onClose}>Fermer</button>
+                <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'CONFIRMED')} disabled={isPending} style={{ color: '#B33A32', borderColor: '#F3C5C1' }}>Annuler l&apos;emballage</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'UNAVAILABLE')} disabled={isPending} style={{ color: 'var(--red)', borderColor: '#F3C5C1' }}>Indisponible</button>
+                <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'PARTIAL')} disabled={isPending || !isPartial} style={{ color: '#9A5A00', borderColor: '#F1D49D' }}>Partiel</button>
+                <button className="btn-secondary" onClick={onClose}>Fermer</button>
+                <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined} style={{ gridColumn: '1 / -1' }}>
+                  <Check size={16} /> Emballé
+                </button>
+              </>
+            )}
           </div>
         }
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div className="packing-modal-progress" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--orange)', fontSize: 18 }}>{order.ref}</div>
             <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>{order.customerName}</div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, color: '#8E8E93', marginBottom: 2 }}>PROGRESSION</div>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>{progress} / {total}</div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#8E8E93', marginBottom: 2 }}>PROGRESSION</div>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>{progress} / {total}</div>
+            </div>
           </div>
-        </div>
+          <div className="progress-bar-bg" style={{ height: 7, marginTop: -10, marginBottom: 18 }} aria-label={`${progress} articles vérifiés sur ${total}`}>
+            <div className="progress-bar-fill" style={{ width: `${total > 0 ? (progress / total) * 100 : 0}%`, background: isComplete ? '#24A967' : '#F15A24' }} />
+          </div>
 
         <SectionLabel spaced>Checklist Articles</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -84,7 +100,7 @@ export default function PackingOrderModal({
             return (
               <DetailCard
                 key={idx}
-                className={isChecked ? 'checked' : ''}
+                className={`packing-checklist-card ${isChecked ? 'checked' : ''}`}
                 style={{
                   padding: 0,
                   overflow: 'hidden',
@@ -174,6 +190,22 @@ export default function PackingOrderModal({
                         ))}
                       </div>
                       <div style={{ display: 'flex', gap: 8, position: 'relative', zIndex: 10 }}>
+                        <button
+                          type="button"
+                          className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
+                          disabled={isSaving}
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
+                        >
+                          {isChecked ? 'Emballé ✓' : 'Emballé'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                          disabled={isSaving}
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
+                        >
+                          {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                        </button>
                         {canEditStock && <button
                           className="action-btn"
                           onClick={(e) => {
@@ -238,7 +270,7 @@ export default function PackingOrderModal({
         <div style={{ marginTop: 20 }}>
           <SectionLabel spaced>{"Note d'emballage"}</SectionLabel>
           <textarea
-            className="mobile-search-input"
+            className="mobile-search-input packing-note"
             value={packingNote}
             onChange={e => setPackingNote(e.target.value)}
             placeholder="Note optionnelle..."
@@ -257,7 +289,7 @@ export default function PackingOrderModal({
           <button className="btn-secondary" onClick={onClose}>Fermer</button>
           {order.status === 'PACKED' ? (
             <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'CONFIRMED')} disabled={isPending} style={{ background: '#FEE2E2', color: '#EF4444', borderColor: '#FCA5A5' }}>
-              <ArrowLeftRight size={14} /> {"Annuler l'emballage (Erreur)"}
+              <ArrowLeftRight size={14} /> Annuler l&apos;emballage
             </button>
           ) : (
             <>
@@ -298,7 +330,7 @@ export default function PackingOrderModal({
         return (
           <DetailCard
             key={idx}
-            className={isChecked ? 'checked' : ''}
+            className={`packing-checklist-card ${isChecked ? 'checked' : ''}`}
             style={{
               marginBottom: 12,
               border: isSaving ? '1.5px solid var(--orange)' : undefined,
@@ -356,6 +388,22 @@ export default function PackingOrderModal({
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
+                      disabled={isSaving}
+                      onClick={(event) => { event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
+                    >
+                      {isChecked ? 'Emballé ✓' : 'Emballé'}
+                    </button>
+                    <button
+                      type="button"
+                      className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                      disabled={isSaving}
+                      onClick={(event) => { event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
+                    >
+                      {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                    </button>
                     {canEditStock && <button
                       className="action-btn"
                       onClick={(e) => { e.stopPropagation(); if (p) onEditStock(p); }}
@@ -374,7 +422,7 @@ export default function PackingOrderModal({
 
       <div style={{ marginTop: 20 }}>
         <SectionLabel>{"Note d'emballage"}</SectionLabel>
-        <textarea className="field-input" value={packingNote} onChange={e => setPackingNote(e.target.value)} style={{ minHeight: 80 }} />
+        <textarea className="field-input packing-note" value={packingNote} onChange={e => setPackingNote(e.target.value)} style={{ minHeight: 80 }} placeholder="Ajoutez une précision utile pour l'équipe…" />
       </div>
     </Modal>
   );

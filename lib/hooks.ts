@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
 
 export function useResponsiveMode(breakpoint: number = 768) {
-  const [viewport, setViewport] = useState(() => {
-    if (typeof window === "undefined") return { isMobile: false, isReady: false };
-    return {
-      isMobile: window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches,
-      isReady: true,
-    };
-  });
+  // The server and the browser must share the exact same first render.
+  // Reading matchMedia in the state initializer makes mobile hydrate a
+  // different tree from the desktop tree emitted during SSR.
+  const [viewport, setViewport] = useState({ isMobile: false, isReady: false });
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);

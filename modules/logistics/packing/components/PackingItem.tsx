@@ -3,7 +3,7 @@
 import React from "react";
 import { StatusBadge } from "@/components/UI";
 import { formatDay } from "@/lib/constants";
-import { Check, Edit2, Eye, Warehouse, ArrowLeftRight, Loader2 } from "lucide-react";
+import { Check, Edit2, Eye, Warehouse, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { PackingOrder, PackingOrderItem, ProductWithVariants } from "../types";
@@ -20,6 +20,7 @@ interface PackingItemProps {
   onMarkPacking: (orderId: string, status: string) => void;
   onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) => void;
   onToggleCheckItem: (orderId: string, item: PackingOrderItem) => void;
+  onMarkItemNotPacked: (orderId: string, item: PackingOrderItem) => void;
   savingChecks?: Set<string>;
   idx?: number;
 }
@@ -36,6 +37,7 @@ const PackingItem = React.memo(({
   onMarkPacking,
   onPreviewImage,
   onToggleCheckItem,
+  onMarkItemNotPacked,
   savingChecks = new Set(),
   idx = 0
 }: PackingItemProps) => {
@@ -50,7 +52,7 @@ const PackingItem = React.memo(({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.05 }}
-        className="mobile-card"
+        className="mobile-card packing-order-card"
         onClick={() => onSelect(o)}
         style={{
           padding: 0,
@@ -61,7 +63,7 @@ const PackingItem = React.memo(({
           flexDirection: 'column'
         }}
       >
-        <div style={{ display: 'flex', padding: '12px', gap: 14 }}>
+        <div className="packing-order-main" style={{ display: 'flex', padding: '12px', gap: 14 }}>
           {/* IMAGE LEFT */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <div
@@ -72,6 +74,7 @@ const PackingItem = React.memo(({
                   onPreviewImage(img, o.items[0].name, o.items[0].size, o.items[0].color);
                 }
               }}
+              className="packing-order-image"
               style={{
                 width: 100,
                 height: 100,
@@ -110,17 +113,27 @@ const PackingItem = React.memo(({
           {/* INFO RIGHT */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 14, color: '#1C1C1E' }}>{o.ref}</div>
-              <StatusBadge status={o.status} size="sm" />
+              <div className="packing-order-ref" style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 14, color: '#1C1C1E' }}>{o.ref}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <StatusBadge status={o.status} size="sm" />
+                <button
+                  type="button"
+                  className={`packing-select-btn ${isSelected ? 'selected' : ''}`}
+                  aria-label={isSelected ? `Désélectionner ${o.ref}` : `Sélectionner ${o.ref}`}
+                  onClick={(event) => { event.stopPropagation(); onToggleSelect(o.id); }}
+                >
+                  {isSelected && <Check size={15} strokeWidth={3} />}
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1E', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="packing-order-customer" style={{ fontSize: 12, fontWeight: 700, color: '#1C1C1E', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {o.customerName}
                   {o.items.some((i: PackingOrderItem) => i.isGift) && <span style={{ fontSize: 8, background: 'var(--orange-soft)', color: 'var(--orange)', padding: '1px 5px', borderRadius: 4, fontWeight: 800 }}>CADEAU</span>}
                 </div>
-                <div style={{ fontSize: 10, color: '#8E8E93', fontWeight: 600 }}>{o.commune || 'Abidjan'} • {formatDay(o.createdAt)}</div>
+                <div className="packing-order-meta" style={{ fontSize: 10, color: '#8E8E93', fontWeight: 600 }}>{o.commune || 'Abidjan'} • {formatDay(o.createdAt)}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                   {o.commercialName && <span style={{ fontSize: 9, fontWeight: 700, background: '#E8F4FD', color: '#0A84FF', padding: '2px 6px', borderRadius: 6 }}>🛒 {o.commercialName}</span>}
                   {o.packedByName && <span style={{ fontSize: 9, fontWeight: 700, background: '#F2FBF4', color: '#34C759', padding: '2px 6px', borderRadius: 6 }}>📦 {o.packedByName}</span>}
@@ -152,7 +165,7 @@ const PackingItem = React.memo(({
               </button>}
             </div>
 
-            <div style={{ background: '#F2F2F7', padding: '8px', borderRadius: 8 }}>
+            <div className="packing-order-progress" style={{ background: '#F2F2F7', padding: '8px', borderRadius: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontWeight: 800, color: '#8E8E93', marginBottom: 4 }}>
                 <span>PROGRESSION</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -168,8 +181,9 @@ const PackingItem = React.memo(({
         </div>
 
         {/* ACTIONS BOTTOM */}
-        <div style={{ display: 'flex', borderTop: '1px solid #E5E5EA' }}>
+        <div className="packing-card-actions" style={{ display: 'flex', borderTop: '1px solid #E5E5EA' }}>
           <button
+            className="packing-card-action primary"
              onClick={(e) => { e.stopPropagation(); onMarkPacking(o.id, 'PACKED'); }}
              disabled={progress < 100}
             style={{ flex: 1.5, height: 44, background: progress === 100 ? '#34C759' : '#C7C7CC', color: 'white', border: 'none', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: progress === 100 ? 'pointer' : 'not-allowed' }}
@@ -177,12 +191,14 @@ const PackingItem = React.memo(({
             <Check size={16} strokeWidth={3} /> PACKER
           </button>
           <button
+            className="packing-card-action partial"
             onClick={(e) => { e.stopPropagation(); onMarkPacking(o.id, 'PARTIAL'); }}
             style={{ flex: 1, height: 44, background: '#FF9500', color: 'white', border: 'none', fontWeight: 800, fontSize: 12, borderLeft: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             PARTIEL
           </button>
           <button
+            className="packing-card-action unavailable"
             onClick={(e) => { e.stopPropagation(); onMarkPacking(o.id, 'UNAVAILABLE'); }}
             style={{ flex: 1, height: 44, background: '#FF3B30', color: 'white', border: 'none', fontWeight: 800, fontSize: 12, borderLeft: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
@@ -248,6 +264,14 @@ const PackingItem = React.memo(({
               </span>
               <span className="size-dot">{i.size}</span>
               <strong style={{ fontSize: 11 }}>{i.color}</strong>
+              <button
+                type="button"
+                className={`packing-item-state-btn ${i.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                disabled={isSaving}
+                onClick={(event) => { event.stopPropagation(); onMarkItemNotPacked(o.id, i); }}
+              >
+                {i.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+              </button>
 
               {o.history?.filter((h) => h.action.includes(`Alternative proposée pour "${i.name}"`)).map((h, hi: number) => (
                 <div key={hi} style={{ fontSize: 10, color: 'var(--orange)', background: 'var(--orange-soft)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginTop: 2 }}>
@@ -293,11 +317,6 @@ const PackingItem = React.memo(({
           <button className="action-btn" title="Détail emballage" onClick={() => onSelect(o)}>
             <Eye size={14} />
           </button>
-          {o.status === 'PACKED' && (
-            <button className="action-btn" title="Annuler l'emballage (Erreur)" onClick={() => { if (confirm('Annuler l\'emballage de cette commande ?')) onMarkPacking(o.id, 'CONFIRMED'); }} style={{ color: 'var(--red)', background: '#FEE2E2' }}>
-              <ArrowLeftRight size={14} />
-            </button>
-          )}
         </div>
       </td>
     </tr>

@@ -50,6 +50,12 @@ enum MovementType {
   LOSS
 }
 
+enum PackingItemStatus {
+  PENDING
+  PACKED
+  NOT_PACKED
+}
+
 enum SettlementStatus {
   PENDING
   COMPLETED
@@ -566,6 +572,7 @@ model OrderItem {
   notes       String?   @db.Text
   isVerified  Boolean   @default(false)
   verifiedAt  DateTime?
+  packingStatus PackingItemStatus @default(PENDING)
   isDelivered Boolean   @default(true)
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId     String
