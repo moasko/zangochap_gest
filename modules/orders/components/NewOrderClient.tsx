@@ -176,6 +176,8 @@ export default function NewOrderClient({ products, user, categories, relayPoints
   const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate());
   const [paymentMethod, setPaymentMethod] = useState('');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
+  const [depositSenderPhone, setDepositSenderPhone] = useState('');
+  const [depositTransactionRef, setDepositTransactionRef] = useState('');
 
   const searchParams = useSearchParams();
 
@@ -585,6 +587,10 @@ Ne passez pas à côté de cette belle surprise !`;
           showToast('Veuillez préciser le mode de règlement pour une expédition', 'error');
           return;
         }
+        if (commune === 'Hors Abidjan' && !depositSenderPhone.trim()) {
+          showToast('Veuillez saisir le numéro ayant effectué le dépôt', 'error');
+          return;
+        }
 
         const orderPayload = {
           customerId: customerId || undefined,
@@ -599,6 +605,8 @@ Ne passez pas à côté de cette belle surprise !`;
           type: orderType || undefined,
           deliveryDate,
           paymentMethod: finalPaymentMethod || undefined,
+          depositSenderPhone: depositSenderPhone || undefined,
+          depositTransactionRef: depositTransactionRef.trim() || undefined,
           promoCode: discount.code || undefined,
           discount: discount.amount,
         };
@@ -1086,6 +1094,15 @@ Ne passez pas à côté de cette belle surprise !`;
                         <input className="field-input" value={customPaymentMethod} onChange={e => setCustomPaymentMethod(e.target.value)} placeholder="Ex. Western Union, Ria..." />
                       </div>
                     )}
+                    <div className="form-row" style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label-sm" style={{ color: 'var(--orange)', fontWeight: 800 }}>NUMÉRO AYANT EFFECTUÉ LE DÉPÔT *</label>
+                      <input className="field-input" value={depositSenderPhone} onChange={e => setDepositSenderPhone(onlyDigits(e.target.value))} inputMode="numeric" autoComplete="off" maxLength={15} placeholder="Ex. 0700000000" style={{ border: '2.5px solid var(--orange-soft)', fontWeight: 800 }} />
+                      <div style={{ fontSize: 10, color: 'var(--brown-soft)', marginTop: 4 }}>Numéro utilisé par le client pour effectuer le paiement.</div>
+                    </div>
+                    <div className="form-row" style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label-sm">RÉFÉRENCE DE TRANSACTION (FACULTATIF)</label>
+                      <input className="field-input" value={depositTransactionRef} onChange={e => setDepositTransactionRef(e.target.value)} autoComplete="off" maxLength={100} placeholder="Ex. référence SMS ou transaction" />
+                    </div>
                   </>
                 )}
                 <div className="form-row">

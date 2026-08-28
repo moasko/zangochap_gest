@@ -63,6 +63,13 @@ enum GiftApprovalStatus {
   CANCELLED
 }
 
+enum DepositVerificationStatus {
+  PENDING
+  RECEIVED
+  NOT_RECEIVED
+  CORRECTION_REQUIRED
+}
+
 enum SettlementStatus {
   PENDING
   COMPLETED
@@ -538,6 +545,13 @@ model Order {
   lastDeliveryAttemptReason    String?
   deliveredAt      String? // ISO string for simple display
   paymentMethod    String? // MTN, Orange, Wave, etc.
+  depositSenderPhone String?
+  depositTransactionRef String?
+  depositVerificationStatus DepositVerificationStatus?
+  depositVerificationNote String? @db.Text
+  depositVerifiedAt DateTime?
+  depositVerifiedByName String?
+  depositAlertAcknowledgedAt DateTime?
   amountReceived   Int?
 
   settlement   Settlement? @relation("OrderSettlement", fields: [settlementId], references: [id])
@@ -565,6 +579,7 @@ model Order {
   @@index([lastDeliveryAttemptAt])
   @@index([lastDeliveryAttemptRiderId])
   @@index([createdAt])
+  @@index([depositVerificationStatus])
 }
 
 model OrderItem {

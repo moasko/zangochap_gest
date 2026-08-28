@@ -101,6 +101,8 @@ export async function createOrder(data: {
   total?: number;
   deliveryDate?: string;
   paymentMethod?: string;
+  depositSenderPhone?: string;
+  depositTransactionRef?: string;
   status?: string;
   source?: 'public';
   allowRefRetry?: boolean;
@@ -207,6 +209,13 @@ export async function createOrder(data: {
   // + mêmes articles = ruse client fréquente pour se faire livrer deux fois.
   // Les reprogrammations restent autorisées (flux légitime).
   const isExpedition = data.commune?.trim().toLowerCase() === 'hors abidjan';
+  if (isExpedition && !isWebOrder && !data.paymentMethod?.trim()) {
+    throw new Error("Le moyen de paiement est obligatoire pour une expédition hors Abidjan.");
+  }
+  const depositSenderPhone = String(data.depositSenderPhone || '').replace(/\D/g, '');
+  if (isExpedition && !isWebOrder && !depositSenderPhone) {
+    throw new Error("Le numéro ayant effectué le dépôt est obligatoire pour une expédition hors Abidjan.");
+  }
   if (isExpedition && data.type !== 'Reprogrammé') {
     const toSuffix = (p?: string | null) => {
       const digits = String(p || '').replace(/\D/g, '');
@@ -440,6 +449,9 @@ export async function createOrder(data: {
             deliveryFee: Number(data.deliveryFee || 0),
             deliveryNote: relayDeliveryNote,
             paymentMethod: data.paymentMethod,
+            depositSenderPhone: isExpedition ? depositSenderPhone || null : null,
+            depositTransactionRef: isExpedition ? data.depositTransactionRef?.trim() || null : null,
+            depositVerificationStatus: isExpedition && !isWebOrder ? 'PENDING' : null,
             status,
             commercialId: isWebOrder ? (assignedCommercial?.id || null) : (session?.id || null),
             commercialName: isWebOrder ? (assignedCommercial?.name || "Site Web") : (session?.name || null),

@@ -107,6 +107,7 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
     {
       title: 'Pilotage', items: [
         { label: 'Gestion Livraisons', href: '/zangochap-manager/admin/delivery', icon: <Truck size={18} /> },
+        { label: 'Dépôts expédition', href: '/zangochap-manager/admin/expeditions/deposits', icon: <AlertTriangle size={18} /> },
         { label: 'Corrections livraison', href: '/zangochap-manager/admin/delivery/corrections', icon: <Undo2 size={18} /> },
         { label: 'Fiche d\'expédition', href: '/zangochap-manager/admin/delivery-sheet', icon: <FileText size={18} /> },
         { label: 'Galerie Media', href: '/zangochap-manager/media', icon: <ImageIcon size={18} /> },

@@ -64,6 +64,10 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   };
 
   const normalizedStatus = newStatus.toUpperCase();
+  const isExpedition = order.commune?.trim().toLowerCase() === 'hors abidjan';
+  if (isExpedition && order.depositVerificationStatus && ['PACKED', 'ON_DELIVERY', 'DELIVERED', 'PARTIALLY_DELIVERED'].includes(normalizedStatus) && order.depositVerificationStatus !== 'RECEIVED') {
+    throw new Error("Expédition bloquée : le dépôt client doit être confirmé par un administrateur.");
+  }
   if (normalizedStatus === 'TO_PROCESS') {
     throw new Error("Le statut A traiter est reserve aux commandes du site public.");
   }
