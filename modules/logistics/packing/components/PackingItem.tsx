@@ -227,12 +227,14 @@ const PackingItem = React.memo(({
           const isChecked = i.isVerified;
           const imageUrl = i.image;
           const isSaving = savingChecks.has(i.id);
+          const giftBlocked = i.isGift && i.giftApprovalStatus !== 'APPROVED';
           
           return (
             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, margin: '2px 0', opacity: isChecked ? 0.4 : 1, transition: 'opacity 0.2s', pointerEvents: isSaving ? 'none' : 'auto' }}>
               <div
-                onClick={(e) => { e.stopPropagation(); onToggleCheckItem(o.id, i); }}
-                style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid var(--line)', background: isChecked ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                onClick={(e) => { e.stopPropagation(); if (!giftBlocked) onToggleCheckItem(o.id, i); }}
+                title={giftBlocked ? "Autorisation administrateur requise" : undefined}
+                style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid var(--line)', background: isChecked ? 'var(--green)' : giftBlocked ? '#FEE2E2' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: giftBlocked ? 'not-allowed' : 'pointer' }}
               >
                 {isSaving ? (
                   <Loader2 size={10} className="animate-spin" color={isChecked ? "white" : "var(--orange)"} />
@@ -261,6 +263,7 @@ const PackingItem = React.memo(({
               <span style={{ fontWeight: 600, textDecoration: isChecked ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
                 {i.name}
                 {i.isGift && <span style={{ fontSize: 8, background: 'var(--orange-soft)', color: 'var(--orange)', padding: '0 4px', borderRadius: 4, fontWeight: 800 }}>CADEAU</span>}
+                {giftBlocked && <span style={{ fontSize: 8, background: '#FEE2E2', color: '#B91C1C', padding: '1px 4px', borderRadius: 4, fontWeight: 900 }}>{i.giftApprovalStatus === 'REJECTED' ? 'REFUSÉ' : 'ATTENTE ADMIN'}</span>}
               </span>
               <span className="size-dot">{i.size}</span>
               <strong style={{ fontSize: 11 }}>{i.color}</strong>

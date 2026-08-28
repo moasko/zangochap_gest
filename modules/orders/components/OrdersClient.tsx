@@ -444,8 +444,15 @@ export default function OrdersClient({
       }
     },
 
-    onError: (e: any) => {
+    onError: (e: any, variables) => {
       if (reloadOnStaleServerAction(e)) return;
+      if (String(e?.message || '').includes('GIFT_APPROVAL_REQUIRED:') && !variables.data.giftRequestReason) {
+        const reason = prompt("Quota cadeau dépassé. Indiquez le motif de la demande à l'administrateur :")?.trim();
+        if (reason) {
+          updateDetailsMutation.mutate({ orderId: variables.orderId, data: { ...variables.data, giftRequestReason: reason } });
+          return;
+        }
+      }
       showToast(e.message || "Erreur", "error");
     },
   });

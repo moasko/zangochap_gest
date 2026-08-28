@@ -20,6 +20,11 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
   if (!VERIFIABLE_STATUSES.includes(existing.order.status)) {
     throw new Error("Cette commande ne peut plus être modifiée depuis l'emballage.");
   }
+  if (isVerified && existing.isGift && existing.giftApprovalStatus !== "APPROVED") {
+    throw new Error(existing.giftApprovalStatus === "REJECTED"
+      ? "Ce cadeau a été refusé par l'administrateur."
+      : "Ce cadeau attend encore l'autorisation de l'administrateur.");
+  }
 
   await prisma.$transaction(async (tx) => {
     const item = await tx.orderItem.update({

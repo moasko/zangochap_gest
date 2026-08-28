@@ -90,6 +90,7 @@ export async function createOrder(data: {
     image?: string;
     isCustom?: boolean;
     isGift?: boolean;
+    originalPrice?: number;
     notes?: string;
     desc?: string;
   }>;
@@ -103,6 +104,7 @@ export async function createOrder(data: {
   status?: string;
   source?: 'public';
   allowRefRetry?: boolean;
+  giftRequestReason?: string;
 }) {
   const session = await getSession();
   const isWebOrder = data.source === 'public';
@@ -259,6 +261,7 @@ export async function createOrder(data: {
   });
 
   // Validate promo code & inject GIFT products if necessary
+  processedItems.forEach(item => delete item._officialPromoGift);
   if (data.promoCode) {
     const promo = await prisma.promoCode.findUnique({
       where: { code: data.promoCode },
@@ -327,6 +330,14 @@ export async function createOrder(data: {
         });
         if (giftProduct) {
           const hasGiftItem = processedItems.some(item => item.productId === giftProduct.id && item.isGift);
+          if (hasGiftItem) {
+            const promoGiftItem = processedItems.find(item => item.productId === giftProduct.id && item.isGift);
+            if (promoGiftItem) {
+              promoGiftItem.qty = 1;
+              promoGiftItem.price = 0;
+              promoGiftItem._officialPromoGift = true;
+            }
+          }
           if (!hasGiftItem) {
             processedItems.push({
               productId: giftProduct.id,
@@ -336,7 +347,9 @@ export async function createOrder(data: {
               size: "Standard",
               color: "Standard",
               isGift: true,
-              emoji: giftProduct.emoji || '🎁'
+              originalPrice: Number(giftProduct.price),
+              emoji: giftProduct.emoji || '🎁',
+              _officialPromoGift: true,
             });
           }
         }
@@ -351,6 +364,13 @@ export async function createOrder(data: {
   const status = isWebOrder ? 'TO_PROCESS' : ((staffStatus as any) || 'CONFIRMED');
   const requestedRef = isWebOrder ? undefined : data.ref;
   const shouldGenerateRef = !isWebOrder;
+  const manualGiftProductIds = processedItems
+    .filter(item => item.isGift && !item._officialPromoGift && item.productId)
+    .map(item => item.productId as string);
+  const giftProducts = manualGiftProductIds.length > 0
+    ? await prisma.product.findMany({ where: { id: { in: manualGiftProductIds } }, select: { id: true, price: true } })
+    : [];
+  const giftValueByProduct = new Map(giftProducts.map(product => [product.id, Number(product.price)]));
 
   // ATOMIC RETRY LOOP: handles concurrency collisions on staff-created refs.
   let order;
@@ -367,7 +387,47 @@ export async function createOrder(data: {
           assignedCommercial = await getNextCommercialForAssignment(tx);
         }
 
-        return tx.order.create({
+        const quotaApplies = !isWebOrder && session?.role?.toUpperCase() === 'COMMERCIAL';
+        let giftDecision: 'APPROVED' | 'PENDING' = 'APPROVED';
+        const manualGifts = processedItems.filter(item => item.isGift && !item._officialPromoGift);
+        if (quotaApplies && session?.id && manualGifts.length > 0) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`gift-quota:${session.id}`}))`;
+          const commercial = await tx.user.findUnique({
+            where: { id: session.id },
+            select: { giftMonthlyQuota: true, giftMonthlyValueQuota: true },
+          });
+          if (!commercial) throw new Error("Commercial introuvable.");
+          const monthStart = new Date();
+          monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+          const nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+          const approved = await tx.orderItem.findMany({
+            where: {
+              isGift: true,
+              giftCountsTowardQuota: true,
+              giftApprovalStatus: 'APPROVED',
+              order: { commercialId: session.id, deletedAt: null, status: { not: 'CANCELLED' }, createdAt: { gte: monthStart, lt: nextMonth } },
+            },
+            select: { qty: true, giftUnitValue: true },
+          });
+          const usedQuantity = approved.reduce((sum, item) => sum + item.qty, 0);
+          const usedValue = approved.reduce((sum, item) => sum + item.qty * item.giftUnitValue, 0);
+          const requestedQuantity = manualGifts.reduce((sum, item) => sum + Number(item.qty), 0);
+          const requestedValue = manualGifts.reduce((sum, item) => {
+            const unitValue = Number(item.originalPrice || giftValueByProduct.get(item.productId || '') || 0);
+            return sum + Number(item.qty) * unitValue;
+          }, 0);
+          const quantityExceeded = usedQuantity + requestedQuantity > commercial.giftMonthlyQuota;
+          const valueExceeded = commercial.giftMonthlyValueQuota > 0
+            && usedValue + requestedValue > commercial.giftMonthlyValueQuota;
+          if (quantityExceeded || valueExceeded) {
+            if (!data.giftRequestReason?.trim()) {
+              throw new Error(`GIFT_APPROVAL_REQUIRED:Quota cadeau dépassé. ${commercial.giftMonthlyQuota - usedQuantity} cadeau(x) restant(s).`);
+            }
+            giftDecision = 'PENDING';
+          }
+        }
+
+        const createdOrder = await tx.order.create({
           data: {
             ...(ref ? { ref } : {}),
             customerId: customer.id,
@@ -403,6 +463,13 @@ export async function createOrder(data: {
                 variantId: item.variantId,
                 isCustom: item.isCustom || false,
                 isGift: item.isGift || false,
+                giftCountsTowardQuota: item.isGift ? !item._officialPromoGift : false,
+                giftUnitValue: item.isGift
+                  ? Number(item.originalPrice || giftValueByProduct.get(item.productId || '') || 0)
+                  : 0,
+                giftApprovalStatus: item.isGift
+                  ? (item._officialPromoGift ? 'APPROVED' : giftDecision)
+                  : null,
                 notes: item.notes || item.desc || null,
               })),
             },
@@ -425,6 +492,35 @@ export async function createOrder(data: {
           },
           include: { items: true },
         });
+        if (giftDecision === 'PENDING' && session?.id) {
+          const pendingGiftItems = createdOrder.items.filter(item => item.isGift && item.giftCountsTowardQuota);
+          if (pendingGiftItems.length > 0) {
+            await tx.giftApprovalRequest.createMany({
+              data: pendingGiftItems.map(item => ({
+                commercialId: session.id as string,
+                commercialName: session.name,
+                orderId: createdOrder.id,
+                orderRef: createdOrder.ref,
+                orderItemId: item.id,
+                giftName: item.name,
+                quantity: item.qty,
+                unitValue: item.giftUnitValue,
+                reason: data.giftRequestReason!.trim(),
+              })),
+            });
+            await tx.chatMessage.create({
+              data: {
+                body: `🎁 Demande cadeau de ${session.name} pour la commande ${createdOrder.ref || createdOrder.id}. Motif : ${data.giftRequestReason!.trim()}`,
+                scope: 'ROLE',
+                targetRole: 'ADMIN',
+                senderId: session.id,
+                senderName: session.name,
+                senderRole: session.role as Role,
+              },
+            });
+          }
+        }
+        return createdOrder;
       });
       break;
     } catch (e: any) {
@@ -519,18 +615,24 @@ export async function deleteOrder(orderId: string) {
   });
 
   // Soft delete: Update status to CANCELLED and mark the ref
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: 'CANCELLED',
-      deletedAt: new Date(),
-      ...(order.ref
-        ? { ref: order.ref.startsWith('[SUPPRIMÉ]') ? order.ref : `[SUPPRIMÉ] ${order.ref}` }
-        : {}),
-      history,
-      stockDecremented: false // Ensure it stays false after restoration
-    }
-  });
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'CANCELLED',
+        deletedAt: new Date(),
+        ...(order.ref
+          ? { ref: order.ref.startsWith('[SUPPRIMÉ]') ? order.ref : `[SUPPRIMÉ] ${order.ref}` }
+          : {}),
+        history,
+        stockDecremented: false,
+      },
+    }),
+    prisma.giftApprovalRequest.updateMany({
+      where: { orderId, status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    }),
+  ]);
 
   // Trace durable dans le log central : survit à la rotation des 50 dernières
   // commandes de la console et à une éventuelle purge physique ultérieure.
@@ -660,6 +762,33 @@ export async function updateOrderDetails(orderId: string, data: any) {
         const existingItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
         const existingIds = existingItems.map(i => i.id);
         const incomingIds = data.items.map((i: any) => i.id).filter(Boolean);
+        const newlyGiftedItems = data.items.filter((item: any) => {
+          if (!item.isGift) return false;
+          const existingItem = existingItems.find(existing => existing.id === item.id);
+          return !existingItem?.isGift;
+        });
+        let editGiftDecision: 'APPROVED' | 'PENDING' = 'APPROVED';
+        if (session.role?.toUpperCase() === 'COMMERCIAL' && newlyGiftedItems.length > 0) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`gift-quota:${session.id}`}))`;
+          const commercial = await tx.user.findUnique({ where: { id: session.id }, select: { giftMonthlyQuota: true, giftMonthlyValueQuota: true } });
+          if (!commercial) throw new Error("Commercial introuvable.");
+          const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+          const nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+          const approved = await tx.orderItem.findMany({
+            where: { isGift: true, giftCountsTowardQuota: true, giftApprovalStatus: 'APPROVED', order: { commercialId: session.id, deletedAt: null, status: { not: 'CANCELLED' }, createdAt: { gte: monthStart, lt: nextMonth } } },
+            select: { qty: true, giftUnitValue: true },
+          });
+          const usedQuantity = approved.reduce((sum, item) => sum + item.qty, 0);
+          const usedValue = approved.reduce((sum, item) => sum + item.qty * item.giftUnitValue, 0);
+          const requestedQuantity = newlyGiftedItems.reduce((sum: number, item: any) => sum + (parseInt(item.qty) || 1), 0);
+          const requestedValue = newlyGiftedItems.reduce((sum: number, item: any) => sum + (parseInt(item.qty) || 1) * (Number(item.originalPrice) || 0), 0);
+          const exceeded = usedQuantity + requestedQuantity > commercial.giftMonthlyQuota
+            || (commercial.giftMonthlyValueQuota > 0 && usedValue + requestedValue > commercial.giftMonthlyValueQuota);
+          if (exceeded) {
+            if (!data.giftRequestReason?.trim()) throw new Error("GIFT_APPROVAL_REQUIRED:Quota cadeau dépassé. Une autorisation administrateur est nécessaire.");
+            editGiftDecision = 'PENDING';
+          }
+        }
 
         // Delete items that were removed
         const toDelete = existingIds.filter(id => !incomingIds.includes(id));
@@ -672,6 +801,8 @@ export async function updateOrderDetails(orderId: string, data: any) {
           const imageUrl = item.image;
 
           const isExisting = item.id && existingIds.includes(item.id);
+          const existingItem = existingItems.find(existing => existing.id === item.id);
+          const isNewGift = Boolean(item.isGift && !existingItem?.isGift);
           const itemData = {
             productId: item.productId || null,
             variantId: item.variantId || null,
@@ -684,19 +815,51 @@ export async function updateOrderDetails(orderId: string, data: any) {
             image: imageUrl,
             isCustom: item.isCustom || false,
             isGift: item.isGift || false,
+            ...(!item.isGift ? { giftCountsTowardQuota: false, giftUnitValue: 0, giftApprovalStatus: null } : {}),
+            ...(isNewGift ? {
+              giftCountsTowardQuota: true,
+              giftUnitValue: Number(item.originalPrice) || 0,
+              giftApprovalStatus: editGiftDecision,
+            } : {}),
           };
 
+          let savedItem;
           if (isExisting) {
-            await tx.orderItem.update({
+            savedItem = await tx.orderItem.update({
               where: { id: item.id },
               data: itemData
             });
           } else {
-            await tx.orderItem.create({
+            savedItem = await tx.orderItem.create({
               data: {
                 ...itemData,
                 orderId: order.id
               }
+            });
+          }
+          if (!item.isGift && existingItem?.isGift) {
+            await tx.giftApprovalRequest.updateMany({ where: { orderItemId: savedItem.id, status: 'PENDING' }, data: { status: 'CANCELLED' } });
+          }
+          if (isNewGift && editGiftDecision === 'PENDING') {
+            await tx.giftApprovalRequest.create({
+              data: {
+                commercialId: session.id as string,
+                commercialName: session.name,
+                orderId: order.id,
+                orderRef: order.ref,
+                orderItemId: savedItem.id,
+                giftName: savedItem.name,
+                quantity: savedItem.qty,
+                unitValue: savedItem.giftUnitValue,
+                reason: data.giftRequestReason.trim(),
+              },
+            });
+            await tx.chatMessage.create({
+              data: {
+                body: `🎁 Demande cadeau de ${session.name} pour la commande ${order.ref || order.id}. Motif : ${data.giftRequestReason.trim()}`,
+                scope: 'ROLE', targetRole: 'ADMIN', senderId: session.id,
+                senderName: session.name, senderRole: session.role as Role,
+              },
             });
           }
         }

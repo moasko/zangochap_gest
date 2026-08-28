@@ -15,6 +15,7 @@ import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
 import Modal from "@/components/Modal";
 import ReceiptModal from "@/components/ReceiptModal";
+import { getCommercialGiftUsage } from "@/modules/gifts/actions";
 
 interface NewOrderClientProps {
   products: any[];
@@ -33,6 +34,12 @@ const onlyDigits = (value: string) => value.replace(/\D/g, '');
 export default function NewOrderClient({ products, user, categories, relayPoints }: NewOrderClientProps) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [giftUsage, setGiftUsage] = useState<{ usedQuantity: number; remainingQuantity: number; commercial: { giftMonthlyQuota: number } } | null>(null);
+
+  useEffect(() => {
+    if (String(user?.role || '').toUpperCase() !== 'COMMERCIAL') return;
+    getCommercialGiftUsage().then(setGiftUsage).catch(() => undefined);
+  }, [user?.role]);
   const [items, setItems] = useState<any[]>([]);
   const [isPending, startTransition] = useTransition();
   const { showToast } = useToast();
@@ -579,7 +586,7 @@ Ne passez pas à côté de cette belle surprise !`;
           return;
         }
 
-        const res: any = await createOrder({
+        const orderPayload = {
           customerId: customerId || undefined,
           customerName,
           customerPhone,
@@ -594,7 +601,17 @@ Ne passez pas à côté de cette belle surprise !`;
           paymentMethod: finalPaymentMethod || undefined,
           promoCode: discount.code || undefined,
           discount: discount.amount,
-        });
+        };
+        let res: any;
+        try {
+          res = await createOrder(orderPayload);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : '';
+          if (!message.includes('GIFT_APPROVAL_REQUIRED:')) throw error;
+          const reason = prompt("Quota cadeau dépassé. Indiquez pourquoi ce cadeau doit être autorisé par l'administrateur :")?.trim();
+          if (!reason) throw new Error("La demande de cadeau a été annulée.");
+          res = await createOrder({ ...orderPayload, giftRequestReason: reason });
+        }
 
         if (!res || !res.order) {
           throw new Error(res?.error || 'La création de la commande a échoué');
@@ -767,6 +784,9 @@ Ne passez pas à côté de cette belle surprise !`;
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <ShoppingCart size={20} />
               <h2 style={{ fontSize: 18, fontWeight: 700 }}>Panier</h2>
+              {giftUsage && <span title="Quota mensuel de cadeaux" style={{ fontSize: 10, fontWeight: 800, color: giftUsage.remainingQuantity > 0 ? '#8A4B16' : '#B42318', background: giftUsage.remainingQuantity > 0 ? '#FFF4E8' : '#FEE4E2', padding: '4px 7px', borderRadius: 8 }}>
+                🎁 {giftUsage.usedQuantity}/{giftUsage.commercial.giftMonthlyQuota}
+              </span>}
             </div>
             <div className="flex items-center gap-3">
               <span className="pos-cart-count">{(items?.length || 0)} articles</span>

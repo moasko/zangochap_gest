@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, LayoutGrid, MapPin, Settings, Store, Tag, Users } from "lucide-react";
+import { ChevronLeft, Gift, LayoutGrid, MapPin, Settings, Store, Users } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -36,6 +36,12 @@ const NAV_ITEMS = [
     href: "/zangochap-manager/admin/settings/team",
     icon: <Users size={16} />,
     desc: "Accès",
+  },
+  {
+    label: "Cadeaux",
+    href: "/zangochap-manager/admin/settings/gifts",
+    icon: <Gift size={16} />,
+    desc: "Quotas & demandes",
   },
 ];
 

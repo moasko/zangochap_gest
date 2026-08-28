@@ -56,6 +56,13 @@ enum PackingItemStatus {
   NOT_PACKED
 }
 
+enum GiftApprovalStatus {
+  APPROVED
+  PENDING
+  REJECTED
+  CANCELLED
+}
+
 enum SettlementStatus {
   PENDING
   COMPLETED
@@ -114,6 +121,8 @@ model User {
   phone2       String? // Second numéro
   serviceLabel String? // Libellé si numéro de service
   isPaused     Boolean      @default(false)
+  giftMonthlyQuota      Int @default(0)
+  giftMonthlyValueQuota Int @default(0)
   pausedAt     DateTime?
   pauseReason  String?
   orders       Order[]      @relation("CommercialOrders")
@@ -569,6 +578,9 @@ model OrderItem {
   image       String?   @db.Text
   isCustom    Boolean   @default(false)
   isGift      Boolean   @default(false)
+  giftCountsTowardQuota Boolean @default(true)
+  giftUnitValue Int @default(0)
+  giftApprovalStatus GiftApprovalStatus?
   notes       String?   @db.Text
   isVerified  Boolean   @default(false)
   verifiedAt  DateTime?
@@ -584,6 +596,30 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
   @@index([variantId])
+}
+
+model GiftApprovalRequest {
+  id             String             @id @default(cuid())
+  commercialId   String
+  commercialName String
+  orderId        String
+  orderRef       String?
+  orderItemId    String             @unique
+  giftName       String
+  quantity       Int
+  unitValue      Int                @default(0)
+  reason         String             @db.Text
+  status         GiftApprovalStatus @default(PENDING)
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?
+  reviewNote     String?            @db.Text
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([commercialId, createdAt])
+  @@index([status, createdAt])
+  @@index([orderId])
 }
 
 model CollectionRecord {

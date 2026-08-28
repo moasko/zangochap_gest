@@ -86,6 +86,10 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     if (unverifiedItems.length > 0) {
       throw new Error(`${unverifiedItems.length} article(s) doivent encore être vérifiés avant l'emballage.`);
     }
+    const blockedGifts = order.items.filter(item => item.isGift && item.giftApprovalStatus !== 'APPROVED');
+    if (blockedGifts.length > 0) {
+      throw new Error(`${blockedGifts.length} cadeau(x) attendent une autorisation ou ont été refusés.`);
+    }
   }
   if (normalizedStatus === 'PARTIAL') {
     if (!PACKING_SOURCE_STATUSES.includes(order.status)) {
@@ -141,7 +145,7 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     await prisma.$transaction(async (tx) => {
       const currentOrder = await tx.order.findUnique({
         where: { id: orderId },
-        include: { items: { select: { isVerified: true } } },
+        include: { items: { select: { isVerified: true, isGift: true, giftApprovalStatus: true } } },
       });
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new Error("La commande a été modifiée par une autre personne. Actualisez puis réessayez.");
@@ -149,12 +153,21 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => !item.isVerified)) {
         throw new Error("La vérification des articles a changé. Tous les articles doivent être vérifiés.");
       }
+      if (normalizedStatus === 'PACKED' && currentOrder.items.some(item => item.isGift && item.giftApprovalStatus !== 'APPROVED')) {
+        throw new Error("L'autorisation d'un cadeau a changé. Actualisez la commande avant de continuer.");
+      }
       if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
         updateData.lastDeliveryAttemptAt = new Date();
         updateData.lastDeliveryAttemptRiderId = order.deliverymanId;
         updateData.lastDeliveryAttemptRiderName = order.deliverymanName;
         updateData.lastDeliveryAttemptStatus = normalizedStatus;
         updateData.lastDeliveryAttemptReason = note?.trim();
+      }
+      if (normalizedStatus === 'CANCELLED') {
+        await tx.giftApprovalRequest.updateMany({
+          where: { orderId, status: 'PENDING' },
+          data: { status: 'CANCELLED' },
+        });
       }
 
     if (normalizedStatus === 'REPRO_DISPO') {

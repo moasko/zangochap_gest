@@ -97,6 +97,7 @@ export default function PackingOrderModal({
             const p = productMap.get(item.productId || "");
             const isChecked = item.isVerified;
             const isSaving = savingChecks.has(item.id);
+            const giftBlocked = item.isGift && item.giftApprovalStatus !== 'APPROVED';
             return (
               <DetailCard
                 key={idx}
@@ -115,7 +116,7 @@ export default function PackingOrderModal({
                   position: 'relative' as const,
                   pointerEvents: isSaving ? 'none' as const : 'auto' as const,
                 }}
-                onClick={() => onToggleCheckItem(order.id, item)}
+                onClick={() => { if (!giftBlocked) onToggleCheckItem(order.id, item); }}
               >
                 {isSaving && (
                   <div style={{
@@ -169,6 +170,7 @@ export default function PackingOrderModal({
                       <div style={{ fontWeight: 800, fontSize: 14, color: isChecked ? '#8E8E93' : '#1C1C1E', textDecoration: isChecked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {item.name}
                         {item.isGift && <span style={{ fontSize: 9, background: 'var(--orange-soft)', color: 'var(--orange)', padding: '1px 6px', borderRadius: 10, fontWeight: 800, textTransform: 'uppercase' }}>Cadeau</span>}
+                        {giftBlocked && <span style={{ fontSize: 8, background: '#FEE2E2', color: '#B91C1C', padding: '2px 6px', borderRadius: 8, fontWeight: 900 }}>{item.giftApprovalStatus === 'REJECTED' ? 'REFUSÉ' : 'EN ATTENTE ADMIN'}</span>}
                       </div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: isChecked ? '#8E8E93' : 'var(--orange)', marginLeft: 6 }}>
                         x{item.qty}
@@ -193,7 +195,7 @@ export default function PackingOrderModal({
                         <button
                           type="button"
                           className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
-                          disabled={isSaving}
+                          disabled={isSaving || giftBlocked}
                           onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
                         >
                           {isChecked ? 'Emballé ✓' : 'Emballé'}
@@ -327,6 +329,7 @@ export default function PackingOrderModal({
         const p = productMap.get(item.productId || "");
         const isChecked = item.isVerified;
         const isSaving = savingChecks.has(item.id);
+        const giftBlocked = item.isGift && item.giftApprovalStatus !== 'APPROVED';
         return (
           <DetailCard
             key={idx}
@@ -340,7 +343,7 @@ export default function PackingOrderModal({
               position: 'relative' as const,
               pointerEvents: isSaving ? 'none' as const : 'auto' as const,
             }}
-            onClick={() => onToggleCheckItem(order.id, item)}
+            onClick={() => { if (!giftBlocked) onToggleCheckItem(order.id, item); }}
           >
             {isSaving && (
               <div style={{
@@ -377,6 +380,7 @@ export default function PackingOrderModal({
                     <div style={{ fontWeight: 700, fontSize: 15, textDecoration: isChecked ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                       {item.name}
                       {item.isGift && <span style={{ fontSize: 9, background: 'var(--orange-soft)', color: 'var(--orange)', padding: '1px 6px', borderRadius: 10, fontWeight: 800, textTransform: 'uppercase' }}>Cadeau</span>}
+                      {giftBlocked && <span style={{ fontSize: 8, background: '#FEE2E2', color: '#B91C1C', padding: '2px 6px', borderRadius: 8, fontWeight: 900 }}>{item.giftApprovalStatus === 'REJECTED' ? 'REFUSÉ' : 'EN ATTENTE ADMIN'}</span>}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--brown-soft)', marginTop: 4 }}>
                       Taille : {item.size} | Couleur : {item.color} | Qté : x{item.qty}
@@ -391,7 +395,7 @@ export default function PackingOrderModal({
                     <button
                       type="button"
                       className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
-                      disabled={isSaving}
+                      disabled={isSaving || giftBlocked}
                       onClick={(event) => { event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
                     >
                       {isChecked ? 'Emballé ✓' : 'Emballé'}
