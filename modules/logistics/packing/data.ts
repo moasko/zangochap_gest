@@ -10,7 +10,16 @@ const PACKING_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.UNAVAILABLE,
   OrderStatus.PACKED,
   OrderStatus.REPROGRAMMED,
+  OrderStatus.ALTERNATIVE,
 ];
+
+const PACKING_ROLES = new Set(["ADMIN", "DEVELOPER", "PACKING", "STOCK", "COLLECTION"]);
+
+export function assertPackingAccess(user: Awaited<ReturnType<typeof getSession>>) {
+  if (!user || !PACKING_ROLES.has(user.role?.toUpperCase())) {
+    throw new Error("Accès réservé au service logistique.");
+  }
+}
 
 export async function getPackingOrders(): Promise<PackingOrder[]> {
   return prisma.order.findMany({
@@ -24,28 +33,22 @@ export async function getPackingOrders(): Promise<PackingOrder[]> {
     orderBy: {
       createdAt: "desc",
     },
-    take: 300,
   }) as Promise<PackingOrder[]>;
 }
 
-export async function getPackingPageData() {
-  const user = await getSession();
-  const orders = await getPackingOrders();
-
+export async function getPackingProducts(orders: PackingOrder[]) {
   const productIds = Array.from(
     new Set(orders.flatMap((order) => order.items.map((item) => item.productId)).filter(Boolean)),
   ) as string[];
 
-  const products = productIds.length
-    ? await prisma.product.findMany({
+  return productIds.length
+    ? prisma.product.findMany({
         where: { id: { in: productIds } },
         include: {
           variants: {
             include: {
               stockLevels: {
-                include: {
-                  warehouse: true,
-                },
+                include: { warehouse: true },
               },
             },
           },
@@ -53,6 +56,13 @@ export async function getPackingPageData() {
         orderBy: { name: "asc" },
       })
     : [];
+}
+
+export async function getPackingPageData() {
+  const user = await getSession();
+  assertPackingAccess(user);
+  const orders = await getPackingOrders();
+  const products = await getPackingProducts(orders);
 
   return JSON.parse(
     JSON.stringify({

@@ -2,6 +2,18 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-08-28 — Fiabilisation du service Emballage
+
+- Fichiers : page/API d'emballage, checklist logistique, changement de statut et édition de stock.
+- Accès à la file d'emballage et aux vérifications limité aux rôles logistiques autorisés.
+- Une commande ne peut plus être déclarée emballée tant que tous ses articles ne sont pas vérifiés, y compris lors d'un traitement groupé.
+- L'emballage partiel exige désormais une vraie sélection partielle et un motif indiquant les articles ou quantités manquants.
+- Les modifications concurrentes de statut sont détectées avant la sortie de stock.
+- Les commandes `ALTERNATIVE` sont visibles, la limite silencieuse de 300 commandes est retirée et les stocks/produits sont rafraîchis avec la file.
+- La modification du stock depuis le modal d'emballage est réservée aux administrateurs, développeurs et gestionnaires de stock.
+- Interface : actions impossibles désactivées, erreurs serveur explicites, sélection groupée fiabilisée et affichage initial limité aux commandes du jour; les anciennes restent accessibles avec le filtre `Tout`.
+- Vérifications : TypeScript réussi; lint ciblé sans erreur (avertissements historiques sur les balises image uniquement).
+
 ## 2026-08-28 — Fiabilisation de la page Performance Équipe
 
 - Fichiers : `modules/orders/actions/analytics-actions.ts`,

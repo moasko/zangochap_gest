@@ -18,6 +18,7 @@ interface PackingOrderModalProps {
   onMarkPacking: (orderId: string, status: string) => void;
   onProposeAlternative: (orderId: string, itemName: string) => void;
   onEditStock: (product: ProductWithVariants) => void;
+  canEditStock: boolean;
   onToggleCheckItem: (orderId: string, item: PackingOrderItem) => void;
   onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) => void;
   savingChecks?: Set<string>;
@@ -34,6 +35,7 @@ export default function PackingOrderModal({
   onMarkPacking,
   onProposeAlternative,
   onEditStock,
+  canEditStock,
   onToggleCheckItem,
   onPreviewImage,
   savingChecks = new Set()
@@ -43,6 +45,8 @@ export default function PackingOrderModal({
 
   const progress = order.items.filter((i) => i.isVerified).length;
   const total = order.items.length;
+  const isComplete = total > 0 && progress === total;
+  const isPartial = progress > 0 && progress < total;
 
   if (isMobile) {
     return (
@@ -54,7 +58,7 @@ export default function PackingOrderModal({
         footer={
           <div style={{ display: 'flex', width: '100%', gap: 10 }}>
             <button className="btn-secondary" style={{ flex: 1 }} onClick={onClose}>Fermer</button>
-            <button className="btn-orange" style={{ flex: 2 }} onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending}>
+            <button className="btn-orange" style={{ flex: 2 }} onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined}>
               <Check size={16} /> Valider Emballage
             </button>
           </div>
@@ -170,7 +174,7 @@ export default function PackingOrderModal({
                         ))}
                       </div>
                       <div style={{ display: 'flex', gap: 8, position: 'relative', zIndex: 10 }}>
-                        <button
+                        {canEditStock && <button
                           className="action-btn"
                           onClick={(e) => {
                             e.preventDefault();
@@ -192,7 +196,7 @@ export default function PackingOrderModal({
                           }}
                         >
                           <Edit2 size={16} />
-                        </button>
+                        </button>}
                         <button
                           className="action-btn"
                           onClick={(e) => {
@@ -260,10 +264,10 @@ export default function PackingOrderModal({
               <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'UNAVAILABLE')} disabled={isPending} style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
                 Pas en stock
               </button>
-              <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'PARTIAL')} disabled={isPending} style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
+              <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'PARTIAL')} disabled={isPending || !isPartial} title={!isPartial ? "Cochez au moins un article et laissez les articles manquants décochés" : undefined} style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
                 Incomplet
               </button>
-              <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending}>
+              <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined}>
                 <Check size={14} /> Prêt pour livraison ✓
               </button>
             </>
@@ -352,13 +356,13 @@ export default function PackingOrderModal({
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button
+                    {canEditStock && <button
                       className="action-btn"
                       onClick={(e) => { e.stopPropagation(); if (p) onEditStock(p); }}
                       title="Modifier Stock"
                     >
                       <Edit2 size={14} />
-                    </button>
+                    </button>}
                     <button className="action-btn" onClick={(e) => { e.stopPropagation(); onProposeAlternative(order.id, item.name); }}><ArrowLeftRight size={14} /></button>
                   </div>
                 </div>

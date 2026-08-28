@@ -18,6 +18,7 @@ type UpdateOrderStatusResult = {
 };
 
 const CLOSED_DELIVERY_STATUSES = ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED', 'REPRO_DISPO'];
+const PACKING_SOURCE_STATUSES = ['CONFIRMED', 'PREPARING', 'PARTIAL', 'UNAVAILABLE', 'REPROGRAMMED', 'ALTERNATIVE'];
 
 function normalizeAmountReceived(amountReceived?: number | null) {
   if (amountReceived === undefined || amountReceived === null) return undefined;
@@ -77,6 +78,36 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       throw new Error("Cette commande est rattachee a un reglement livreur et ne peut plus etre annulee.");
     }
   }
+  if (normalizedStatus === 'PACKED') {
+    if (!PACKING_SOURCE_STATUSES.includes(order.status)) {
+      throw new Error("Cette commande ne peut pas être déclarée emballée depuis son statut actuel.");
+    }
+    const unverifiedItems = order.items.filter((item) => !item.isVerified);
+    if (unverifiedItems.length > 0) {
+      throw new Error(`${unverifiedItems.length} article(s) doivent encore être vérifiés avant l'emballage.`);
+    }
+  }
+  if (normalizedStatus === 'PARTIAL') {
+    if (!PACKING_SOURCE_STATUSES.includes(order.status)) {
+      throw new Error("Cette commande ne peut pas être déclarée partiellement emballée.");
+    }
+    const verifiedCount = order.items.filter((item) => item.isVerified).length;
+    if (verifiedCount === 0 || verifiedCount === order.items.length) {
+      throw new Error("Un emballage partiel doit contenir des articles vérifiés et des articles manquants.");
+    }
+    if (!note?.trim()) throw new Error("Indiquez les articles ou quantités manquants.");
+  }
+  if (normalizedStatus === 'UNAVAILABLE' && !note?.trim()) {
+    throw new Error("Indiquez la raison de l'indisponibilité.");
+  }
+  if (order.status === 'PACKED' && normalizedStatus === 'CONFIRMED') {
+    if (!isRole(session, 'admin', 'developer', 'packing', 'stock')) {
+      throw new Error("Vous n'êtes pas autorisé à annuler un emballage.");
+    }
+    if (order.deliverymanId || order.settlementId) {
+      throw new Error("L'emballage ne peut plus être annulé après attribution à un livreur.");
+    }
+  }
 
   const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
   history.push({
@@ -117,6 +148,17 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
 
   try {
     await prisma.$transaction(async (tx) => {
+      const currentOrder = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { items: { select: { isVerified: true } } },
+      });
+      if (!currentOrder || currentOrder.status !== order.status) {
+        throw new Error("La commande a été modifiée par une autre personne. Actualisez puis réessayez.");
+      }
+      if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => !item.isVerified)) {
+        throw new Error("La vérification des articles a changé. Tous les articles doivent être vérifiés.");
+      }
+
       if (['RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
         updateData.lastDeliveryAttemptAt = new Date();
         updateData.lastDeliveryAttemptRiderId = order.deliverymanId;

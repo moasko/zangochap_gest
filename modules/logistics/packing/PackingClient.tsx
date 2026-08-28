@@ -40,8 +40,9 @@ function toLocalDateInputValue(date = new Date()) {
 /**
  * Hook pour la gestion du polling stabilisé
  */
-function usePackingPolling(initialOrders: PackingOrder[], savingCount: number) {
+function usePackingPolling(initialOrders: PackingOrder[], initialProducts: ProductWithVariants[], savingCount: number) {
   const [orders, setOrders] = useState<PackingOrder[]>(initialOrders);
+  const [products, setProducts] = useState<ProductWithVariants[]>(initialProducts);
   const savingCountRef = useRef(savingCount);
 
   useEffect(() => {
@@ -51,8 +52,9 @@ function usePackingPolling(initialOrders: PackingOrder[], savingCount: number) {
   useEffect(() => {
     if (savingCountRef.current === 0) {
       setOrders(initialOrders);
+      setProducts(initialProducts);
     }
-  }, [initialOrders]);
+  }, [initialOrders, initialProducts]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,6 +73,9 @@ function usePackingPolling(initialOrders: PackingOrder[], savingCount: number) {
           if (Array.isArray(json.orders)) {
             setOrders(json.orders);
           }
+          if (Array.isArray(json.products)) {
+            setProducts(json.products);
+          }
         }
       } catch (e: unknown) {
         if (e instanceof Error && e.name === 'AbortError') return;
@@ -85,7 +90,7 @@ function usePackingPolling(initialOrders: PackingOrder[], savingCount: number) {
     };
   }, []);
 
-  return { orders, setOrders };
+  return { orders, setOrders, products };
 }
 
 /**
@@ -127,7 +132,7 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
       .filter((o) => {
         // Filtre Statut / Alternative
         if (filter === 'ALTERNATIVE') {
-          if (!o.history?.some(h => h.action.includes('Alternative proposée'))) return false;
+          if (o.status !== 'ALTERNATIVE' && !o.history?.some(h => h.action.includes('Alternative proposée'))) return false;
         } else if (filter === 'PREPARING') {
           // Suivies = commandes dont au moins un article a été coché, mais pas encore emballées
           if (o.status === 'PACKED') return false;
@@ -175,7 +180,7 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
   };
 }
 
-export default function PackingClient({ initialOrders, products }: { initialOrders: PackingOrder[], products: ProductWithVariants[], user: PackingUser }) {
+export default function PackingClient({ initialOrders, products: initialProducts, user }: { initialOrders: PackingOrder[], products: ProductWithVariants[], user: PackingUser }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMobile, isReady: isViewportReady } = useResponsiveMode();
@@ -192,7 +197,7 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
   const [isPending, startTransition] = useTransition();
 
   // --- CUSTOM HOOKS ---
-  const { orders, setOrders } = usePackingPolling(initialOrders, savingChecks.size);
+  const { orders, setOrders, products } = usePackingPolling(initialOrders, initialProducts, savingChecks.size);
   const {
     filter, setFilter, search, setSearch, dateFrom, setDateFrom, dateTo, setDateTo, warehouseFilter, setWarehouseFilter, datePreset, setDatePreset, filtered
   } = usePackingFilters(orders, products, searchParams);
@@ -233,8 +238,11 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
 
   const toggleAll = useCallback(() => {
     setSelectedIds(prev => {
-      if (prev.size === filtered.length) return new Set();
-      return new Set(filtered.map(o => o.id));
+      const visibleIds = filtered.map(order => order.id);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      visibleIds.forEach(id => allVisibleSelected ? next.delete(id) : next.add(id));
+      return next;
     });
   }, [filtered]);
 
@@ -256,8 +264,8 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
     });
 
     toggleItemVerification(item.id, newStatus)
-      .catch(() => {
-        showToast("Erreur de sauvegarde", "error");
+      .catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : "Erreur de sauvegarde", "error");
         setOrders(prev => prev.map(o => {
           if (o.id !== orderId) return o;
           return {
@@ -281,12 +289,23 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
 
     if (status === 'PACKED') {
       const unverifiedCount = order.items.filter(i => !i.isVerified).length;
-      if (unverifiedCount > 0 && !confirm(`Attention : ${unverifiedCount} article(s) n'ont pas été vérifiés.`)) return;
+      if (unverifiedCount > 0) {
+        showToast(`${unverifiedCount} article(s) doivent encore être vérifiés.`, 'error');
+        return;
+      }
+    }
+
+    let effectiveNote = packingNote.trim();
+    if ((status === 'PARTIAL' || status === 'UNAVAILABLE') && !effectiveNote) {
+      effectiveNote = prompt(status === 'PARTIAL'
+        ? 'Quels articles ou quantités manquent ?'
+        : "Pourquoi la commande n'est-elle pas disponible ?")?.trim() || '';
+      if (!effectiveNote) return;
     }
 
     startTransition(async () => {
       try {
-        const result = await updateOrderStatus(orderId, status, packingNote || undefined);
+        const result = await updateOrderStatus(orderId, status, effectiveNote || undefined);
         if (!result.success) {
           showToast(result.error, 'error');
           return;
@@ -298,28 +317,49 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
         }));
         setSelectedOrderId(null);
         setPackingNote('');
-      } catch {
-        showToast('Erreur lors du marquage', 'error');
+      } catch (error: unknown) {
+        showToast(error instanceof Error ? error.message : 'Erreur lors du marquage', 'error');
       }
     });
   }, [orders, packingNote, setOrders, showToast]);
 
   const handleBulkMark = useCallback((status: string) => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Marquer ${selectedIds.size} commandes comme "${status}" ?`)) return;
+    const selectedOrders = orders.filter(order => selectedIds.has(order.id));
+    const eligibleOrders = status === 'PACKED'
+      ? selectedOrders.filter(order => order.items.every(item => item.isVerified))
+      : selectedOrders;
+    const blockedCount = selectedOrders.length - eligibleOrders.length;
+    if (eligibleOrders.length === 0) {
+      showToast('Aucune commande sélectionnée n’est entièrement vérifiée.', 'error');
+      return;
+    }
+    const warning = blockedCount > 0 ? ` ${blockedCount} commande(s) incomplète(s) seront ignorées.` : '';
+    if (!confirm(`Marquer ${eligibleOrders.length} commande(s) comme emballée(s) ?${warning}`)) return;
 
     startTransition(async () => {
       try {
-        const orderIds = Array.from(selectedIds);
-        const results = await Promise.all(orderIds.map(id => updateOrderStatus(id, status)));
-        const successfulResults = results.filter(result => result.success);
-        const failedIds = new Set(orderIds.filter((_, index) => !results[index].success));
+        const orderIds = eligibleOrders.map(order => order.id);
+        const settledResults = await Promise.allSettled(orderIds.map(id => updateOrderStatus(id, status)));
+        const successfulResults = settledResults.flatMap(result =>
+          result.status === 'fulfilled' && result.value.success ? [result.value] : []
+        );
+        const failedIds = new Set([
+          ...selectedOrders.filter(order => !eligibleOrders.some(eligible => eligible.id === order.id)).map(order => order.id),
+          ...orderIds.filter((_, index) => {
+            const result = settledResults[index];
+            return result.status === 'rejected' || !result.value.success;
+          }),
+        ]);
         const updatedById = new Map(successfulResults.map(result => [result.order.id, result.order]));
         if (failedIds.size > 0) {
-          const firstFailure = results.find(result => !result.success);
-          showToast(`${successfulResults.length} mise(s) à jour, ${failedIds.size} bloquée(s). ${firstFailure?.error || ''}`, 'error');
+          const firstFailure = settledResults.find(result => result.status === 'rejected' || !result.value.success);
+          const failureMessage = firstFailure?.status === 'rejected'
+            ? (firstFailure.reason instanceof Error ? firstFailure.reason.message : '')
+            : firstFailure && !firstFailure.value.success ? firstFailure.value.error : '';
+          showToast(`${successfulResults.length} mise(s) à jour, ${failedIds.size} bloquée(s). ${failureMessage}`, 'error');
         } else {
-          showToast(`${selectedIds.size} commandes mises à jour ✓`, 'success');
+          showToast(`${eligibleOrders.length} commandes mises à jour ✓`, 'success');
         }
         setOrders(prev => prev.map(o => {
           const updated = updatedById.get(o.id);
@@ -327,11 +367,11 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
           return o;
         }));
         setSelectedIds(failedIds);
-      } catch {
-        showToast('Erreur lors du traitement groupé', 'error');
+      } catch (error: unknown) {
+        showToast(error instanceof Error ? error.message : 'Erreur lors du traitement groupé', 'error');
       }
     });
-  }, [selectedIds, setOrders, showToast]);
+  }, [orders, selectedIds, setOrders, showToast]);
 
   const handleProposeAlternative = useCallback((orderId: string, itemName: string) => {
     const alt = prompt(`Alternative pour "${itemName}" ?`);
@@ -396,6 +436,7 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
     onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) =>
       setPreviewItem({ url, name, size, color }),
     onToggleCheckItem: toggleCheckItem,
+    canEditStock: ['ADMIN', 'DEVELOPER', 'STOCK'].includes(user.role?.toUpperCase()),
   };
 
   const viewMotion = {
@@ -623,9 +664,6 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
         actions={selectedIds.size > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="cell-muted">{selectedIds.size} sélectionnée(s)</span>
-            <button className="btn-secondary" onClick={() => handleBulkMark('PARTIAL')} disabled={isPending}>
-              Partiel
-            </button>
             <button className="btn-orange" onClick={() => handleBulkMark('PACKED')} disabled={isPending}>
               Emballé
             </button>
@@ -635,7 +673,7 @@ export default function PackingClient({ initialOrders, products }: { initialOrde
         <table>
           <thead>
             <tr>
-              <th style={{ width: 40 }}><input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={toggleAll} /></th>
+              <th style={{ width: 40 }}><input type="checkbox" checked={filtered.length > 0 && filtered.every(order => selectedIds.has(order.id))} onChange={toggleAll} /></th>
               <th>Référence</th><th>Articles</th><th>Entrepôts</th><th>Statut</th><th></th>
             </tr>
           </thead>

@@ -16,6 +16,7 @@ interface PackingItemProps {
   onToggleSelect: (id: string) => void;
   onSelect: (order: PackingOrder) => void;
   onEditStock: (product: ProductWithVariants) => void;
+  canEditStock: boolean;
   onMarkPacking: (orderId: string, status: string) => void;
   onPreviewImage: (url: string, name: string, size?: string | null, color?: string | null) => void;
   onToggleCheckItem: (orderId: string, item: PackingOrderItem) => void;
@@ -31,6 +32,7 @@ const PackingItem = React.memo(({
   onToggleSelect,
   onSelect,
   onEditStock,
+  canEditStock,
   onMarkPacking,
   onPreviewImage,
   onToggleCheckItem,
@@ -124,7 +126,7 @@ const PackingItem = React.memo(({
                   {o.packedByName && <span style={{ fontSize: 9, fontWeight: 700, background: '#F2FBF4', color: '#34C759', padding: '2px 6px', borderRadius: 6 }}>📦 {o.packedByName}</span>}
                 </div>
               </div>
-              <button
+              {canEditStock && <button
                 onClick={(e) => {
                   e.stopPropagation();
                   const productId = o.items[0]?.productId;
@@ -147,7 +149,7 @@ const PackingItem = React.memo(({
                 }}
               >
                 <Edit2 size={14} /> Stock
-              </button>
+              </button>}
             </div>
 
             <div style={{ background: '#F2F2F7', padding: '8px', borderRadius: 8 }}>
@@ -168,8 +170,9 @@ const PackingItem = React.memo(({
         {/* ACTIONS BOTTOM */}
         <div style={{ display: 'flex', borderTop: '1px solid #E5E5EA' }}>
           <button
-            onClick={(e) => { e.stopPropagation(); if (progress < 100) { if (!confirm('Tout n\'est pas coché. Marquer comme emballé quand même ?')) return; } onMarkPacking(o.id, 'PACKED'); }}
-            style={{ flex: 1.5, height: 44, background: '#34C759', color: 'white', border: 'none', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+             onClick={(e) => { e.stopPropagation(); onMarkPacking(o.id, 'PACKED'); }}
+             disabled={progress < 100}
+            style={{ flex: 1.5, height: 44, background: progress === 100 ? '#34C759' : '#C7C7CC', color: 'white', border: 'none', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: progress === 100 ? 'pointer' : 'not-allowed' }}
           >
             <Check size={16} strokeWidth={3} /> PACKER
           </button>
