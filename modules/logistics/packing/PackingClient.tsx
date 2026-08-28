@@ -147,9 +147,11 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
         if (search && !o.ref?.toLowerCase().includes(s) && !o.customerName.toLowerCase().includes(s)) return false;
 
         // Filtre Date
-        const created = new Date(o.createdAt).getTime();
-        if (timeRange.from && created < timeRange.from) return false;
-        if (timeRange.to && created > timeRange.to) return false;
+        // Pour l'emballage, une commande web entre dans la file le jour de sa
+        // prise en charge, même si le client l'a passée la veille.
+        const packingQueueDate = new Date(o.confirmedAt || o.createdAt).getTime();
+        if (timeRange.from && packingQueueDate < timeRange.from) return false;
+        if (timeRange.to && packingQueueDate > timeRange.to) return false;
 
         // Filtre Entrepôt (Lookup performant)
         if (warehouseFilter !== 'all') {
