@@ -11,6 +11,8 @@ Les entrées les plus récentes sont placées en premier.
   des livraisons partielles et du chiffre d'affaires réellement encaissé.
 - Les résumés utilisent désormais toute la période même si le détail reste limité
   aux 50 lignes les plus récentes; les filtres URL et les détails sont synchronisés.
+- Refonte légère de l'interface Performance : période active visible, raccourcis
+  complets, chargement, recherche effaçable, accessibilité et responsive mobile.
 - Enregistrement de `deliveredAt` pour les nouvelles livraisons complètes et partielles.
 - Vérifications : TypeScript et lint ciblé serveur réussis.
 

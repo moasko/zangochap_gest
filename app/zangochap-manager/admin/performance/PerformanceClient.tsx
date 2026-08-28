@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useTransition } from 'react';
 import { StatCard, TableCard, StatusBadge } from '@/components/UI';
 import Modal from '@/components/Modal';
-import { TrendingUp, Truck, ShoppingBag, Target, Package, Eye, Search, Loader2, Award, Phone, Box } from 'lucide-react';
+import { TrendingUp, Truck, ShoppingBag, Target, Package, Eye, Search, Loader2, Award, Phone, Box, CalendarRange, X, RotateCcw } from 'lucide-react';
 import { formatPrice, formatDate } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { getUserPerformanceDetails } from "@/modules/orders/actions";
@@ -13,10 +13,10 @@ interface PerformanceClientProps {
   initialDateFrom: string;
   initialDateTo: string;
   stats: {
-    commercialsStats: any[];
-    deliveryStats: any[];
-    collectorStats: any[];
-    packingStats: any[];
+    commercialsStats: CommercialStat[];
+    deliveryStats: DeliveryStat[];
+    collectorStats: CollectorStat[];
+    packingStats: PackingStat[];
     summary: {
       totalRevenue: number;
       totalOrders: number;
@@ -27,6 +27,38 @@ interface PerformanceClientProps {
     };
   };
 }
+
+type BaseMember = { id: string; name: string };
+type CommercialStat = BaseMember & { sales: number; delivered: number; cancelled: number; interventions: number; interventionsDelivered: number; revenue: number; convRate: number; prime: number };
+type DeliveryStat = BaseMember & { total: number; delivered: number; returned: number; revenue: number; successRate: number };
+type CollectorStat = BaseMember & { count: number; collected: number; unavailable: number; alternative: number; successRate: number };
+type PackingStat = BaseMember & { packed: number; completed: number; partial: number; score: number };
+type DetailItem = {
+  createdAt?: string | Date | null;
+  packedAt?: string | Date | null;
+  performanceAt?: string | Date | null;
+  ref?: string | null;
+  productId?: string | null;
+  customerName?: string | null;
+  total?: number;
+  status?: string | null;
+};
+type DetailSummaryData = {
+  total?: number;
+  delivered?: number;
+  returned?: number;
+  collected?: number;
+  unavailable?: number;
+  completed?: number;
+  partial?: number;
+  revenue?: number;
+  convRate?: number;
+  successRate?: number;
+  score?: number;
+  interventions?: number;
+  interventionsDelivered?: number;
+};
+type MemberDetails = { summary?: DetailSummaryData; orders?: DetailItem[]; records?: DetailItem[] };
 
 // Rank badge component
 function RankBadge({ rank }: { rank: number }) {
@@ -54,25 +86,33 @@ function rateColor(rate: number) {
   return 'var(--red)';
 }
 
+function localDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function PerformanceClient({ stats, initialDateFrom, initialDateTo }: PerformanceClientProps) {
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [selectedMember, setSelectedMember] = useState<{ id: string; name: string; role: string } | null>(null);
-  const [memberDetails, setMemberDetails] = useState<any>(null);
+  const [memberDetails, setMemberDetails] = useState<MemberDetails | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [isFiltering, startFiltering] = useTransition();
   const detailRequestId = useRef(0);
   const router = useRouter();
 
   const setQuickDate = (range: 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'all') => {
     const now = new Date();
-    let from = '', to = now.toISOString().split('T')[0];
+    let from = '', to = localDateValue(now);
     if (range === 'today') { from = to; }
-    else if (range === 'yesterday') { const y = new Date(); y.setDate(y.getDate() - 1); from = y.toISOString().split('T')[0]; to = from; }
-    else if (range === 'week') { const w = new Date(); w.setDate(w.getDate() - 6); from = w.toISOString().split('T')[0]; }
-    else if (range === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]; }
-    else if (range === 'lastMonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]; to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0]; }
+    else if (range === 'yesterday') { const y = new Date(); y.setDate(y.getDate() - 1); from = localDateValue(y); to = from; }
+    else if (range === 'week') { const w = new Date(); w.setDate(w.getDate() - 6); from = localDateValue(w); }
+    else if (range === 'month') { from = localDateValue(new Date(now.getFullYear(), now.getMonth(), 1)); }
+    else if (range === 'lastMonth') { from = localDateValue(new Date(now.getFullYear(), now.getMonth() - 1, 1)); to = localDateValue(new Date(now.getFullYear(), now.getMonth(), 0)); }
     else { from = ''; to = ''; }
     setDateFrom(from);
     setDateTo(to);
@@ -84,13 +124,40 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
       const params = new URLSearchParams();
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
-      router.replace(`/zangochap-manager/admin/performance?${params.toString()}`);
+      startFiltering(() => router.replace(`/zangochap-manager/admin/performance?${params.toString()}`));
     } else {
-      router.replace('/zangochap-manager/admin/performance');
+      startFiltering(() => router.replace('/zangochap-manager/admin/performance'));
     }
   }, [dateFrom, dateTo, router]);
 
-  const handleViewDetails = useCallback(async (member: any, role: string) => {
+  const activeRange = useMemo(() => {
+    const now = new Date();
+    const today = localDateValue(now);
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 6);
+    const monthStart = localDateValue(new Date(now.getFullYear(), now.getMonth(), 1));
+    const lastMonthStart = localDateValue(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const lastMonthEnd = localDateValue(new Date(now.getFullYear(), now.getMonth(), 0));
+    if (!dateFrom && !dateTo) return 'all';
+    if (dateFrom === today && dateTo === today) return 'today';
+    if (dateFrom === localDateValue(yesterday) && dateTo === localDateValue(yesterday)) return 'yesterday';
+    if (dateFrom === localDateValue(weekStart) && dateTo === today) return 'week';
+    if (dateFrom === monthStart && dateTo === today) return 'month';
+    if (dateFrom === lastMonthStart && dateTo === lastMonthEnd) return 'lastMonth';
+    return 'custom';
+  }, [dateFrom, dateTo]);
+
+  const periodLabel = useMemo(() => {
+    if (!dateFrom && !dateTo) return 'Toutes les données';
+    if (dateFrom && dateTo && dateFrom > dateTo) return 'Période invalide';
+    const label = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (dateFrom && dateTo && dateFrom === dateTo) return label(dateFrom);
+    if (dateFrom && dateTo) return `${label(dateFrom)} au ${label(dateTo)}`;
+    if (dateFrom) return `Depuis le ${label(dateFrom)}`;
+    return `Jusqu'au ${label(dateTo)}`;
+  }, [dateFrom, dateTo]);
+
+  const handleViewDetails = useCallback(async (member: BaseMember, role: string) => {
     const requestId = ++detailRequestId.current;
     setSelectedMember({ ...member, role });
     setMemberDetails(null);
@@ -129,28 +196,36 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
       {/* HEADER */}
       <div className="perf-header">
         <div>
-          <h1>Performance Équipe</h1>
+          <div className="perf-title-row">
+            <h1>Performance Équipe</h1>
+            <span className="period-badge"><CalendarRange size={13} /> {periodLabel}</span>
+          </div>
           <p>Analyse détaillée de l&apos;activité par collaborateur et service.</p>
         </div>
         <div className="perf-controls">
-          <div className="search-bar" style={{ width: 200 }}>
+          <div className="search-bar perf-search">
             <Search size={15} color="var(--brown-soft)" />
             <input type="text" placeholder="Chercher..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            {searchTerm && <button type="button" className="clear-search" onClick={() => setSearchTerm('')} aria-label="Effacer la recherche"><X size={14} /></button>}
           </div>
-          <div className="filters-bar" style={{ margin: 0, padding: '4px 10px', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--cream)', padding: '2px 6px', borderRadius: 8, border: '1px solid var(--line)' }}>
-              <button className={`shortcut-btn ${!dateFrom && !dateTo ? 'active' : ''}`} onClick={() => setQuickDate('all')}>Tout</button>
-              <button className="shortcut-btn" onClick={() => setQuickDate('today')}>Ajd</button>
-              <button className="shortcut-btn" onClick={() => setQuickDate('week')}>7j</button>
-              <button className="shortcut-btn" onClick={() => setQuickDate('month')}>Mois</button>
+          <div className="perf-filter-panel">
+            <div className="perf-shortcuts" aria-label="Périodes rapides">
+              <button className={`shortcut-btn ${activeRange === 'all' ? 'active' : ''}`} onClick={() => setQuickDate('all')}>Tout</button>
+              <button className={`shortcut-btn ${activeRange === 'today' ? 'active' : ''}`} onClick={() => setQuickDate('today')}>Aujourd&apos;hui</button>
+              <button className={`shortcut-btn ${activeRange === 'yesterday' ? 'active' : ''}`} onClick={() => setQuickDate('yesterday')}>Hier</button>
+              <button className={`shortcut-btn ${activeRange === 'week' ? 'active' : ''}`} onClick={() => setQuickDate('week')}>7 jours</button>
+              <button className={`shortcut-btn ${activeRange === 'month' ? 'active' : ''}`} onClick={() => setQuickDate('month')}>Ce mois</button>
+              <button className={`shortcut-btn ${activeRange === 'lastMonth' ? 'active' : ''}`} onClick={() => setQuickDate('lastMonth')}>Mois dernier</button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input type="date" className="filter-date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <div className="perf-date-range">
+              <label><span>Du</span><input type="date" className="filter-date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></label>
               <span style={{ color: 'var(--line)', fontSize: 10 }}>→</span>
-              <input type="date" className="filter-date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+              <label><span>Au</span><input type="date" className="filter-date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></label>
+              {(dateFrom || dateTo) && <button type="button" className="reset-period" onClick={() => setQuickDate('all')} title="Réinitialiser la période"><RotateCcw size={14} /></button>}
+              {isFiltering && <Loader2 className="animate-spin filter-spinner" size={16} />}
             </div>
             {dateFrom && dateTo && dateFrom > dateTo && (
-              <span style={{ color: 'var(--red)', fontSize: 11, fontWeight: 700 }}>La date de début doit précéder la date de fin.</span>
+              <span className="filter-error">La date de début doit précéder la date de fin.</span>
             )}
           </div>
         </div>
@@ -169,7 +244,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
       {/* ROLE TABS */}
       <div className="perf-tabs">
         {roles.map(r => (
-          <button key={r.key} onClick={() => setRoleFilter(r.key)} className={`role-btn ${roleFilter === r.key ? 'active' : ''}`}>
+          <button key={r.key} onClick={() => setRoleFilter(r.key)} aria-pressed={roleFilter === r.key} className={`role-btn ${roleFilter === r.key ? 'active' : ''}`}>
             {r.icon} {r.label} <span className="role-count">{r.count}</span>
           </button>
         ))}
@@ -201,7 +276,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       <td><span className="cell-price">{formatPrice(c.revenue)}</span></td>
                       <td><ProgressBar value={c.convRate} color={rateColor(c.convRate)} /></td>
                       <td><span style={{ color: 'var(--orange)', fontWeight: 700, fontSize: 12 }}>{formatPrice(c.prime)}</span></td>
-                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(c, 'COMMERCIAL')}><Eye size={14} /></button></td>
+                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(c, 'COMMERCIAL')} title={`Voir le détail de ${c.name}`} aria-label={`Voir le détail de ${c.name}`}><Eye size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -227,7 +302,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       <td><span style={{ color: 'var(--green)', fontWeight: 600 }}>{p.completed}</span></td>
                       <td><span style={{ color: p.partial > 0 ? 'var(--amber)' : 'var(--brown-soft)' }}>{p.partial}</span></td>
                       <td><ProgressBar value={p.score} color={rateColor(p.score)} /></td>
-                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(p, 'PACKING')}><Eye size={14} /></button></td>
+                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(p, 'PACKING')} title={`Voir le détail de ${p.name}`} aria-label={`Voir le détail de ${p.name}`}><Eye size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -254,7 +329,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       <td><span style={{ color: c.unavailable > 0 ? 'var(--red)' : 'var(--brown-soft)' }}>{c.unavailable}</span></td>
                       <td><span style={{ color: 'var(--blue)' }}>{c.alternative}</span></td>
                       <td><ProgressBar value={c.successRate} color={rateColor(c.successRate)} /></td>
-                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(c, 'COLLECTION')}><Eye size={14} /></button></td>
+                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(c, 'COLLECTION')} title={`Voir le détail de ${c.name}`} aria-label={`Voir le détail de ${c.name}`}><Eye size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -281,7 +356,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       <td><span style={{ color: d.returned > 0 ? 'var(--red)' : 'var(--brown-soft)' }}>{d.returned}</span></td>
                       <td><span className="cell-price">{formatPrice(d.revenue)}</span></td>
                       <td><ProgressBar value={d.successRate} color={rateColor(d.successRate)} /></td>
-                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(d, 'LIVREUR')}><Eye size={14} /></button></td>
+                      <td><button className="icon-btn-small" onClick={() => handleViewDetails(d, 'LIVREUR')} title={`Voir le détail de ${d.name}`} aria-label={`Voir le détail de ${d.name}`}><Eye size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,9 +392,9 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       </tr>
                     </thead>
                     <tbody>
-                      {(memberDetails.orders || memberDetails.records)?.map((item: any, i: number) => (
+                      {(memberDetails.orders || memberDetails.records)?.map((item: DetailItem, i: number) => (
                         <tr key={i}>
-                          <td style={{ color: 'var(--brown-soft)', whiteSpace: 'nowrap' }}>{formatDate(item.performanceAt || item.packedAt || item.createdAt)}</td>
+                          <td style={{ color: 'var(--brown-soft)', whiteSpace: 'nowrap' }}>{item.performanceAt || item.packedAt || item.createdAt ? formatDate(item.performanceAt || item.packedAt || item.createdAt || '') : '—'}</td>
                           <td><span style={{ fontWeight: 600 }}>{item.ref || item.productId || '—'}</span></td>
                           {selectedMember.role !== 'COLLECTION' && <td style={{ fontSize: 11 }}>{item.customerName || '—'}</td>}
                           {(selectedMember.role === 'COMMERCIAL' || selectedMember.role === 'LIVREUR') && (
@@ -349,7 +424,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
 }
 
 // Sub-component for detail modal summary
-function DetailSummary({ summary, role }: { summary: any; role: string }) {
+function DetailSummary({ summary, role }: { summary: DetailSummaryData; role: string }) {
   if (role === 'COMMERCIAL') {
     return (
       <div className="detail-stats-row">

@@ -17,6 +17,25 @@
   color: var(--ink);
   margin-bottom: 4px;
 }
+.perf-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.period-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--orange);
+  background: var(--orange-soft);
+  border: 1px solid color-mix(in srgb, var(--orange) 24%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
 .perf-header p {
   color: var(--brown-soft);
   font-size: 13px;
@@ -25,7 +44,95 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+.perf-search {
+  width: 210px;
+  min-height: 38px;
+}
+.clear-search {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  color: var(--brown-soft);
+  background: transparent;
+  cursor: pointer;
+}
+.clear-search:hover { background: var(--cream-2); color: var(--ink); }
+.perf-filter-panel {
+  min-width: min(100%, 570px);
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 6px 18px rgba(61, 42, 31, 0.05);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 7px 10px;
+}
+.perf-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--cream);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.perf-shortcuts::-webkit-scrollbar { display: none; }
+.perf-shortcuts .shortcut-btn {
+  min-height: 28px;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+.perf-date-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+.perf-date-range label {
+  display: grid;
+  gap: 2px;
+}
+.perf-date-range label > span {
+  padding-left: 3px;
+  color: var(--brown-soft);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.perf-date-range .filter-date {
+  height: 30px;
+  min-width: 126px;
+}
+.reset-period {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--cream);
+  color: var(--brown-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.reset-period:hover { border-color: var(--orange); color: var(--orange); }
+.filter-spinner { color: var(--orange); margin: 0 3px 6px; }
+.filter-error {
+  grid-column: 1 / -1;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 4px 0;
 }
 
 /* Stats Grid Override */
@@ -34,6 +141,14 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   margin-bottom: 28px;
+}
+.perf-stats .stat-card {
+  min-height: 108px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.perf-stats .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(61, 42, 31, 0.08);
 }
 
 /* Role Tabs */
@@ -72,6 +187,14 @@
   border-color: var(--ink);
   color: white;
 }
+.role-btn:focus-visible,
+.icon-btn-small:focus-visible,
+.shortcut-btn:focus-visible,
+.reset-period:focus-visible,
+.clear-search:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
 .role-btn .role-count {
   padding: 1px 6px;
   border-radius: 10px;
@@ -88,6 +211,19 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
+}
+.perf-sections .table-card {
+  border-radius: 12px;
+  box-shadow: 0 8px 26px rgba(61, 42, 31, 0.05);
+}
+.perf-sections .table-wrap > table tbody tr {
+  transition: background-color 0.12s ease;
+}
+.perf-sections .table-wrap > table tbody tr:hover {
+  background: color-mix(in srgb, var(--cream) 72%, white);
+}
+.perf-sections .table-wrap > table th {
+  white-space: nowrap;
 }
 
 /* Rank Badge */
@@ -280,7 +416,32 @@
   .perf-controls {
     width: 100%;
   }
+  .perf-search { width: 100%; }
+  .perf-filter-panel {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+  .perf-date-range {
+    align-items: flex-end;
+  }
+  .perf-date-range label { flex: 1; }
+  .perf-date-range .filter-date { width: 100%; min-width: 0; }
+  .perf-tabs {
+    margin-inline: -4px;
+    padding-inline: 4px;
+  }
+  .period-badge { max-width: 100%; }
   .detail-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+@media (max-width: 480px) {
+  .perf-stats { grid-template-columns: 1fr; }
+  .perf-stats .stat-card { min-height: 92px; }
+  .perf-date-range { flex-wrap: wrap; }
+  .perf-date-range > span { display: none; }
+  .perf-date-range label { flex-basis: calc(50% - 4px); }
+  .detail-stats-row { grid-template-columns: 1fr 1fr; }
 }
