@@ -429,7 +429,7 @@ export async function updateProductVariantStockLevels(productId: string, data: {
     }>;
   }>;
 }) {
-  const session = await ensureAuth(["admin", "developer", "stock"]);
+  const session = await ensureAuth(["admin", "developer", "packing", "stock", "collection"]);
 
   await prisma.$transaction(async (tx) => {
     const defaultWarehouse = await tx.warehouse.upsert({

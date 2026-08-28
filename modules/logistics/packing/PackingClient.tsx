@@ -461,7 +461,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
       setPreviewItem({ url, name, size, color }),
     onToggleCheckItem: toggleCheckItem,
     onMarkItemNotPacked: handleItemNotPacked,
-    canEditStock: ['ADMIN', 'DEVELOPER', 'STOCK'].includes(user.role?.toUpperCase()),
+    canEditStock: ['ADMIN', 'DEVELOPER', 'PACKING', 'STOCK', 'COLLECTION'].includes(user.role?.toUpperCase()),
   };
 
   const viewMotion = {
