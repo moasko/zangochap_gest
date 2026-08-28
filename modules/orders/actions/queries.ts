@@ -45,12 +45,8 @@ export function buildOrdersWhere(params: OrdersQueryParams, user: SessionUser | 
 
   const where: Record<string, unknown> = { deletedAt: null };
 
-  if (params.status?.toUpperCase() === OrderStatus.TO_PROCESS) {
-    where.id = "__to_process_orders_are_only_visible_on_the_to_process_page__";
-  } else if (params.status && params.status !== "all") {
+  if (params.status && params.status !== "all") {
     where.status = params.status.toUpperCase() as OrderStatus;
-  } else {
-    where.status = { not: OrderStatus.TO_PROCESS };
   }
 
   if (params.commune && params.commune !== "all") {
