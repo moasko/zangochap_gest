@@ -58,7 +58,7 @@ export default function PackingOrderModal({
         title={`Détails · ${order.ref}`}
         large
         footer={
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: '100%', gap: 8 }}>
+          <div className="packing-mobile-order-footer">
             {order.status === 'PACKED' ? (
               <>
                 <button className="btn-secondary" onClick={onClose}>Fermer</button>
@@ -182,7 +182,7 @@ export default function PackingOrderModal({
                       <span style={{ fontSize: 11, color: '#8E8E93', fontWeight: 700 }}>{item.color}</span>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
+                    <div style={{ marginTop: 'auto' }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {p?.variants?.find((v) => v.size === item.size && v.color === item.color)?.stockLevels?.map((sl) => (
                           <div key={sl.id} style={{ fontSize: 9, background: '#F2F2F7', padding: '2px 6px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -191,72 +191,42 @@ export default function PackingOrderModal({
                           </div>
                         ))}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, position: 'relative', zIndex: 10 }}>
-                        <button
-                          type="button"
-                          className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
-                          disabled={isSaving || giftBlocked}
-                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
-                        >
-                          {isChecked ? 'Emballé ✓' : 'Emballé'}
-                        </button>
-                        <button
-                          type="button"
-                          className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
-                          disabled={isSaving}
-                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
-                        >
-                          {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
-                        </button>
-                        {canEditStock && <button
-                          className="action-btn"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (p) onEditStock(p);
-                          }}
-                          style={{
-                            background: 'var(--cream)',
-                            color: 'var(--brown-soft)',
-                            width: 36,
-                            height: 36,
-                            borderRadius: 10,
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                          }}
-                        >
-                          <Edit2 size={16} />
-                        </button>}
-                        <button
-                          className="action-btn"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onProposeAlternative(order.id, item.name);
-                          }}
-                          style={{
-                            background: 'var(--orange-soft)',
-                            color: 'var(--orange)',
-                            width: 36,
-                            height: 36,
-                            borderRadius: 10,
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                          }}
-                        >
-                          <ArrowLeftRight size={16} />
-                        </button>
-                      </div>
                     </div>
                   </div>
+                </div>
+                <div className="packing-mobile-item-actions" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`packing-item-choice packed ${item.packingStatus === 'PACKED' || isChecked ? 'active' : ''}`}
+                    disabled={isSaving || giftBlocked}
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isChecked) onToggleCheckItem(order.id, item); }}
+                  >
+                    <Check size={15} /> {isChecked ? 'Emballé ✓' : 'Emballé'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                    disabled={isSaving}
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
+                  >
+                    {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                  </button>
+                  {canEditStock && <button
+                    type="button"
+                    className="packing-mobile-secondary-action stock"
+                    disabled={!p || isSaving}
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (p) onEditStock(p); }}
+                  >
+                    <Edit2 size={15} /> Modifier stock
+                  </button>}
+                  <button
+                    type="button"
+                    className="packing-mobile-secondary-action alternative"
+                    disabled={isSaving}
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); onProposeAlternative(order.id, item.name); }}
+                  >
+                    <ArrowLeftRight size={15} /> Alternative
+                  </button>
                 </div>
                 {order.history?.filter((h) => h.action.includes(`Alternative proposée pour "${item.name}"`)).map((h, hi: number) => (
                   <div key={hi} style={{ margin: '0 12px 10px', padding: '8px 12px', background: 'var(--orange-soft)', borderLeft: '3px solid var(--orange)', borderRadius: 6, fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>
