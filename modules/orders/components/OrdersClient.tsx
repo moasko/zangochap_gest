@@ -7048,7 +7048,7 @@ function OrderDetailModal({
                       </div>
                     )}
 
-                    {["CONFIRMED", "PACKED", "ON_DELIVERY"].includes(
+                    {user?.role !== "commercial" && ["CONFIRMED", "PACKED", "ON_DELIVERY"].includes(
                       order.status,
                     ) && (
                         <button

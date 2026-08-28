@@ -64,6 +64,9 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   };
 
   const normalizedStatus = newStatus.toUpperCase();
+  if (String(session.role).toUpperCase() === 'COMMERCIAL' && ['DELIVERED', 'PARTIALLY_DELIVERED'].includes(normalizedStatus)) {
+    throw new Error("Les commerciaux ne sont pas autorisés à déclarer une commande livrée.");
+  }
   const isExpedition = order.commune?.trim().toLowerCase() === 'hors abidjan';
   if (isExpedition && order.depositVerificationStatus && ['PACKED', 'ON_DELIVERY', 'DELIVERED', 'PARTIALLY_DELIVERED'].includes(normalizedStatus) && order.depositVerificationStatus !== 'RECEIVED') {
     throw new Error("Expédition bloquée : le dépôt client doit être confirmé par un administrateur.");
