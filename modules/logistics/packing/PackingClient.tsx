@@ -290,14 +290,16 @@ export default function PackingClient({ initialOrders, products: initialProducts
   const handleItemNotPacked = useCallback((orderId: string, item: PackingOrderItem) => {
     setSavingChecks(prev => new Set(prev).add(item.id));
     markItemNotPacked(item.id)
-      .then(() => {
+      .then((result) => {
         setOrders(prev => prev.map(order => order.id !== orderId ? order : {
           ...order,
           items: order.items.map(current => current.id === item.id
-            ? { ...current, isVerified: false, verifiedAt: null, packingStatus: 'NOT_PACKED' }
+            ? { ...current, isVerified: false, verifiedAt: null, packingStatus: result.packingStatus }
             : current),
         }));
-        showToast(`« ${item.name} » marqué pas emballé`, 'success');
+        showToast(result.packingStatus === 'NOT_PACKED'
+          ? `« ${item.name} » marqué pas emballé`
+          : `« ${item.name} » remis en attente`, 'success');
       })
       .catch((error: unknown) => showToast(error instanceof Error ? error.message : "Erreur de sauvegarde", 'error'))
       .finally(() => setSavingChecks(prev => {

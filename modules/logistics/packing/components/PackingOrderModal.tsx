@@ -205,11 +205,12 @@ export default function PackingOrderModal({
                   </button>
                   <button
                     type="button"
-                    className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                          className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                          aria-pressed={item.packingStatus === 'NOT_PACKED'}
                     disabled={isSaving}
                     onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
                   >
-                    {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                          {item.packingStatus === 'NOT_PACKED' ? 'Retirer “Pas emballé”' : 'Pas emballé'}
                   </button>
                   {canEditStock && <button
                     type="button"
@@ -372,11 +373,12 @@ export default function PackingOrderModal({
                     </button>
                     <button
                       type="button"
-                      className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                    className={`packing-item-choice not-packed ${item.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                    aria-pressed={item.packingStatus === 'NOT_PACKED'}
                       disabled={isSaving}
                       onClick={(event) => { event.stopPropagation(); onMarkItemNotPacked(order.id, item); }}
                     >
-                      {item.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                    {item.packingStatus === 'NOT_PACKED' ? 'Retirer “Pas emballé”' : 'Pas emballé'}
                     </button>
                     {canEditStock && <button
                       className="action-btn"

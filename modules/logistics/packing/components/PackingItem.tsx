@@ -270,10 +270,11 @@ const PackingItem = React.memo(({
               <button
                 type="button"
                 className={`packing-item-state-btn ${i.packingStatus === 'NOT_PACKED' ? 'active' : ''}`}
+                aria-pressed={i.packingStatus === 'NOT_PACKED'}
                 disabled={isSaving}
                 onClick={(event) => { event.stopPropagation(); onMarkItemNotPacked(o.id, i); }}
               >
-                {i.packingStatus === 'NOT_PACKED' ? 'Pas emballé ✓' : 'Pas emballé'}
+                {i.packingStatus === 'NOT_PACKED' ? 'Retirer “Pas emballé”' : 'Pas emballé'}
               </button>
 
               {o.history?.filter((h) => h.action.includes(`Alternative proposée pour "${i.name}"`)).map((h, hi: number) => (

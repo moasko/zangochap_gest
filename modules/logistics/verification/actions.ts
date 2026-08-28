@@ -68,10 +68,12 @@ export async function markItemNotPacked(orderItemId: string) {
     throw new Error("Cette commande ne peut plus être modifiée depuis l'emballage.");
   }
 
+  const nextPackingStatus: "PENDING" | "NOT_PACKED" = existing.packingStatus === "NOT_PACKED" ? "PENDING" : "NOT_PACKED";
+
   await prisma.$transaction(async (tx) => {
     const item = await tx.orderItem.update({
       where: { id: orderItemId },
-      data: { isVerified: false, verifiedAt: null, packingStatus: "NOT_PACKED" },
+      data: { isVerified: false, verifiedAt: null, packingStatus: nextPackingStatus },
     });
     const currentOrder = await tx.order.findUnique({ where: { id: item.orderId }, select: { history: true } });
     const history: Prisma.InputJsonObject[] = Array.isArray(currentOrder?.history)
@@ -81,7 +83,9 @@ export async function markItemNotPacked(orderItemId: string) {
       : [];
     history.push({
       at: new Date().toISOString(),
-      action: `Emballage : Article "${item.name}" marqué PAS EMBALLÉ`,
+      action: nextPackingStatus === "NOT_PACKED"
+        ? `Emballage : Article "${item.name}" marqué PAS EMBALLÉ`
+        : `Emballage : État PAS EMBALLÉ retiré pour l'article "${item.name}"`,
       by: session.email,
       byName: session.name,
     });
@@ -89,5 +93,5 @@ export async function markItemNotPacked(orderItemId: string) {
   });
 
   revalidatePath("/zangochap-manager/logistics/packing");
-  return { success: true };
+  return { success: true, packingStatus: nextPackingStatus };
 }
