@@ -2,6 +2,29 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-08-28 — Fiabilisation de la page Performance Équipe
+
+- Fichiers : `modules/orders/actions/analytics-actions.ts`,
+  `modules/orders/actions/status-actions.ts`,
+  `app/zangochap-manager/admin/performance/page.tsx` et `PerformanceClient.tsx`.
+- Correction de l'attribution des collectes par email, des périodes de livraison,
+  des livraisons partielles et du chiffre d'affaires réellement encaissé.
+- Les résumés utilisent désormais toute la période même si le détail reste limité
+  aux 50 lignes les plus récentes; les filtres URL et les détails sont synchronisés.
+- Enregistrement de `deliveredAt` pour les nouvelles livraisons complètes et partielles.
+- Vérifications : TypeScript et lint ciblé serveur réussis.
+
+## 2026-08-26 — Revalidation complète de la mémoire projet
+
+- Fichiers : `memory/project-context.md`, `memory/change-log.md`.
+- Analyse statique de l'architecture, du schéma Prisma, de l'authentification,
+  des commandes, statuts, stocks, livraisons, settlements, API et déploiement.
+- Actualisation des métriques et des flux métier critiques.
+- Retrait des risques devenus obsolètes : singleton Prisma, revalidation de session,
+  protection API promos et migration destructive au démarrage sont déjà corrigés.
+- Ajout des risques encore actifs et des garde-fous à ne pas régresser.
+- Vérification : `npx.cmd tsc --noEmit --incremental false` réussit.
+
 ## 2026-08-22 — Correction de la création des utilisateurs
 
 - Alignement du formulaire équipe avec la règle serveur de huit caractères minimum pour les mots de passe.

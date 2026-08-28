@@ -157,6 +157,9 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     if (normalizedStatus === 'DELIVERED' && normalizedAmountReceived !== undefined) {
       updateData.amountReceived = normalizedAmountReceived;
     }
+    if (normalizedStatus === 'DELIVERED' && order.status !== 'DELIVERED') {
+      updateData.deliveredAt = new Date().toISOString();
+    }
 
       if (normalizedStatus === 'PACKED') {
         await decrementStockForOrder(order, session, tx);
@@ -418,6 +421,7 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
       total: newSubtotal,
       deliveryFee: finalDeliveryFee,
       amountReceived: finalAmountReceived,
+      deliveredAt: new Date().toISOString(),
       history,
     },
     include: { items: true },

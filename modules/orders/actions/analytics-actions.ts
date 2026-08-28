@@ -267,58 +267,158 @@ export async function getDashboardStats() {
 }
 
 // ============ PERFORMANCE STATS ============
+const PERFORMANCE_SUCCESS_STATUSES: OrderStatus[] = [OrderStatus.DELIVERED, OrderStatus.PARTIALLY_DELIVERED];
+const PERFORMANCE_FAILURE_STATUSES: OrderStatus[] = [OrderStatus.RETURNED, OrderStatus.CANCELLED];
+
+function getPerformanceRange(dateFrom?: string, dateTo?: string) {
+  const now = new Date();
+  const start = dateFrom
+    ? new Date(`${dateFrom}T00:00:00`)
+    : new Date(0);
+  const endExclusive = dateTo
+    ? new Date(`${dateTo}T00:00:00`)
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (dateTo) endExclusive.setDate(endExclusive.getDate() + 1);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(endExclusive.getTime()) || start >= endExclusive) {
+    throw new Error("Periode de performance invalide.");
+  }
+  return {
+    start,
+    endExclusive,
+    dateFilter: { gte: start, lt: endExclusive } satisfies Prisma.DateTimeFilter,
+  };
+}
+
+function collectedRevenue(order: { amountReceived: number | null; total: number; deliveryFee: number; discount: number }) {
+  return Math.max(0, Number(order.amountReceived ?? (order.total + order.deliveryFee - order.discount)));
+}
+
+function deliveryPerformanceDate(order: { deliveredAt: string | null; updatedAt: Date }) {
+  const deliveredAt = order.deliveredAt ? new Date(order.deliveredAt) : null;
+  return deliveredAt && !Number.isNaN(deliveredAt.getTime()) ? deliveredAt : order.updatedAt;
+}
+
+function wasPackedPartially(order: { status: OrderStatus; history: Prisma.JsonValue | null }) {
+  if (order.status === OrderStatus.PARTIAL) return true;
+  if (!Array.isArray(order.history)) return false;
+  return order.history.some((entry) => {
+    if (!entry || typeof entry !== "object" || !("action" in entry)) return false;
+    return String(entry.action).toLowerCase().includes("emballage partiel");
+  });
+}
+
+function interventionActorEmail(order: { history: Prisma.JsonValue | null; commercialContactedAt: Date | null }) {
+  if (!Array.isArray(order.history)) return null;
+  const contactTime = order.commercialContactedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+  const candidates = order.history
+    .filter((entry): entry is Prisma.JsonObject => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)))
+    .filter((entry) => {
+      const action = String(entry.action || "").toLowerCase();
+      const at = new Date(String(entry.at || "")).getTime();
+      return (action.startsWith("retour call center:") || action.startsWith("colis accepte apres intervention commerciale:"))
+        && Number.isFinite(at)
+        && at <= contactTime + 5000;
+    })
+    .sort((a, b) => new Date(String(b.at)).getTime() - new Date(String(a.at)).getTime());
+  const email = String(candidates[0]?.by || "").trim().toLowerCase();
+  return email.includes("@") ? email : null;
+}
+
 export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
   await ensureAuth(["admin"]);
-  const now = new Date();
-  const start = dateFrom ? new Date(dateFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = dateTo ? new Date(dateTo + 'T23:59:59') : new Date();
+  const { start, endExclusive, dateFilter } = getPerformanceRange(dateFrom, dateTo);
+  const startIso = start.toISOString();
+  const endIso = endExclusive.toISOString();
 
-  const whereDate: Prisma.DateTimeFilter = { gte: start, lte: end };
-
-  // 1. COMMERCIALS — Based on orders they created
-  const commercials = await prisma.user.findMany({
-    where: { role: 'COMMERCIAL' },
-    select: {
-      id: true,
-      name: true,
-      orders: {
-        where: { deletedAt: null, createdAt: whereDate },
-        select: { total: true, status: true },
+  const [commercials, packers, collectors, deliverymen, createdOrders, deliveredOrders, interventionOrders, packedOrders, collectionRecords, successfulDeliveries, failedAttempts, legacyFailures] = await Promise.all([
+    prisma.user.findMany({ where: { role: 'COMMERCIAL' }, select: { id: true, name: true, email: true } }),
+    prisma.user.findMany({ where: { role: 'PACKING' }, select: { id: true, name: true, email: true } }),
+    prisma.user.findMany({ where: { role: 'COLLECTION' }, select: { id: true, name: true, email: true } }),
+    prisma.user.findMany({ where: { role: 'LIVREUR' }, select: { id: true, name: true } }),
+    prisma.order.findMany({
+      where: { deletedAt: null, createdAt: dateFilter },
+      select: { commercialId: true, status: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: PERFORMANCE_SUCCESS_STATUSES },
+        OR: [
+          { deliveredAt: { gte: startIso, lt: endIso } },
+          { deliveredAt: null, updatedAt: dateFilter },
+        ],
       },
-    },
-  });
+      select: { commercialId: true, amountReceived: true, total: true, deliveryFee: true, discount: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        isCommercialContacted: true,
+        commercialContactedAt: dateFilter,
+        commercialContactedByName: { not: null },
+      },
+      select: { commercialContactedByName: true, commercialContactedAt: true, history: true, status: true },
+    }),
+    prisma.order.findMany({
+      where: { deletedAt: null, packedBy: { not: null }, packedAt: dateFilter },
+      select: { packedBy: true, status: true, history: true },
+    }),
+    prisma.collectionRecord.findMany({
+      where: { createdAt: dateFilter },
+      select: { by: true, status: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        deliverymanId: { not: null },
+        status: { in: PERFORMANCE_SUCCESS_STATUSES },
+        OR: [
+          { deliveredAt: { gte: startIso, lt: endIso } },
+          { deliveredAt: null, updatedAt: dateFilter },
+        ],
+      },
+      select: { deliverymanId: true, amountReceived: true, total: true, deliveryFee: true, discount: true },
+    }),
+    prisma.order.findMany({
+      where: { deletedAt: null, lastDeliveryAttemptRiderId: { not: null }, lastDeliveryAttemptAt: dateFilter },
+      select: { lastDeliveryAttemptRiderId: true, lastDeliveryAttemptStatus: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        deliverymanId: { not: null },
+        status: { in: PERFORMANCE_FAILURE_STATUSES },
+        lastDeliveryAttemptAt: null,
+        updatedAt: dateFilter,
+      },
+      select: { deliverymanId: true, status: true },
+    }),
+  ]);
 
-  // Interventions call center : commandes traitees apres une alerte livreur
-  // (recordCommercialContactReport / acceptOrderAfterCommercialIntervention).
-  // L'attribution se fait par commercialContactedByName, seul champ disponible.
-  const interventionOrders = await prisma.order.findMany({
-    where: {
-      deletedAt: null,
-      isCommercialContacted: true,
-      commercialContactedAt: whereDate,
-      commercialContactedByName: { not: null },
-    },
-    select: { commercialContactedByName: true, status: true },
-  });
-  const interventionsByName = new Map<string, { total: number; delivered: number }>();
+  const interventionsByActor = new Map<string, { total: number; delivered: number }>();
   for (const order of interventionOrders) {
-    const key = String(order.commercialContactedByName).trim().toLowerCase();
-    const entry = interventionsByName.get(key) || { total: 0, delivered: 0 };
+    const key = interventionActorEmail(order) || `name:${String(order.commercialContactedByName).trim().toLowerCase()}`;
+    const entry = interventionsByActor.get(key) || { total: 0, delivered: 0 };
     entry.total += 1;
-    if (order.status === 'DELIVERED') entry.delivered += 1;
-    interventionsByName.set(key, entry);
+    if (PERFORMANCE_SUCCESS_STATUSES.includes(order.status)) entry.delivered += 1;
+    interventionsByActor.set(key, entry);
   }
 
   const commercialsStats = commercials.map(c => {
-    const delivered = c.orders.filter(o => o.status === 'DELIVERED');
-    const cancelled = c.orders.filter(o => o.status === 'CANCELLED' || o.status === 'RETURNED');
-    const revenue = delivered.reduce((sum, o) => sum + o.total, 0);
-    const convRate = c.orders.length > 0 ? Math.round((delivered.length / c.orders.length) * 100) : 0;
-    const interventions = interventionsByName.get(String(c.name || '').trim().toLowerCase()) || { total: 0, delivered: 0 };
+    const cohort = createdOrders.filter(o => o.commercialId === c.id);
+    const delivered = cohort.filter(o => PERFORMANCE_SUCCESS_STATUSES.includes(o.status));
+    const cancelled = cohort.filter(o => PERFORMANCE_FAILURE_STATUSES.includes(o.status));
+    const revenue = deliveredOrders
+      .filter(o => o.commercialId === c.id)
+      .reduce((sum, o) => sum + collectedRevenue(o), 0);
+    const convRate = cohort.length > 0 ? Math.round((delivered.length / cohort.length) * 100) : 0;
+    const interventions = interventionsByActor.get(c.email.toLowerCase())
+      || interventionsByActor.get(`name:${String(c.name || '').trim().toLowerCase()}`)
+      || { total: 0, delivered: 0 };
     return {
       id: c.id,
       name: c.name,
-      sales: c.orders.length,
+      sales: cohort.length,
       delivered: delivered.length,
       cancelled: cancelled.length,
       revenue,
@@ -329,20 +429,11 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
     };
   });
 
-  // 2. PACKING — Based on packedBy field
-  const packers = await prisma.user.findMany({
-    where: { role: 'PACKING' },
-    select: { id: true, name: true, email: true }
-  });
-
-  const packingStats = await Promise.all(packers.map(async p => {
-    const orders = await prisma.order.findMany({
-      where: { deletedAt: null, packedBy: p.email, packedAt: whereDate },
-      select: { status: true }
-    });
-    const partialCount = orders.filter(o => o.status === 'PARTIAL').length;
+  const packingStats = packers.map(p => {
+    const orders = packedOrders.filter(o => o.packedBy?.toLowerCase() === p.email.toLowerCase());
+    const partialCount = orders.filter(wasPackedPartially).length;
     const completedCount = orders.length - partialCount;
-    const score = orders.length > 0 ? Math.round((completedCount / orders.length) * 100) : 100;
+    const score = orders.length > 0 ? Math.round((completedCount / orders.length) * 100) : 0;
     return {
       id: p.id,
       name: p.name,
@@ -351,18 +442,12 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
       partial: partialCount,
       score,
     };
-  }));
-
-  // 3. COLLECTION — Based on CollectionRecord
-  const collectors = await prisma.user.findMany({
-    where: { role: 'COLLECTION' },
-    select: { id: true, name: true }
   });
 
-  const collectorStats = await Promise.all(collectors.map(async c => {
-    const records = await prisma.collectionRecord.findMany({
-      where: { by: c.id, createdAt: whereDate },
-      select: { status: true }
+  const collectorStats = collectors.map(c => {
+    const records = collectionRecords.filter(r => {
+      const actor = r.by.toLowerCase();
+      return actor === c.email.toLowerCase() || actor === c.id.toLowerCase();
     });
     const collected = records.filter(r => r.status === 'collected').length;
     const unavailable = records.filter(r => r.status === 'unavailable').length;
@@ -377,43 +462,42 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
       alternative,
       successRate,
     };
-  }));
-
-  // 4. DELIVERY — Based on deliverymanId
-  const deliverymen = await prisma.user.findMany({
-    where: { role: 'LIVREUR' },
-    select: { id: true, name: true }
   });
-  const deliveryStats = await Promise.all(deliverymen.map(async d => {
-    const orders = await prisma.order.findMany({
-      where: { deletedAt: null, deliverymanId: d.id, createdAt: whereDate },
-      select: { status: true, total: true }
-    });
-    const delivered = orders.filter(o => o.status === 'DELIVERED');
-    const returned = orders.filter(o => o.status === 'RETURNED' || o.status === 'CANCELLED');
-    const revenue = delivered.reduce((sum, o) => sum + o.total, 0);
+
+  const deliveryStats = deliverymen.map(d => {
+    const delivered = successfulDeliveries.filter(o => o.deliverymanId === d.id);
+    const recentFailures = failedAttempts.filter(o =>
+      o.lastDeliveryAttemptRiderId === d.id &&
+      PERFORMANCE_FAILURE_STATUSES.includes(o.lastDeliveryAttemptStatus as OrderStatus)
+    );
+    const oldFailures = legacyFailures.filter(o => o.deliverymanId === d.id);
+    const returned = recentFailures.length + oldFailures.length;
+    const total = delivered.length + returned;
+    const revenue = delivered.reduce((sum, o) => sum + collectedRevenue(o), 0);
     return {
       id: d.id,
       name: d.name,
-      total: orders.length,
+      total,
       delivered: delivered.length,
-      returned: returned.length,
+      returned,
       revenue,
-      successRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0
+      successRate: total > 0 ? Math.round((delivered.length / total) * 100) : 0
     };
-  }));
+  });
 
   // Summary Metrics
   const totalDeliverySorties = deliveryStats.reduce((sum, d) => sum + d.total, 0);
   const totalDelivered = deliveryStats.reduce((sum, d) => sum + d.delivered, 0);
+  const totalDeliveredOrders = deliveredOrders.length;
   const totalPackedAll = packingStats.reduce((sum, p) => sum + p.packed, 0);
-  const totalCollectedAll = collectorStats.reduce((sum, c) => sum + c.count, 0);
+  const totalCollectedAll = collectorStats.reduce((sum, c) => sum + c.collected, 0);
+  const totalRevenue = deliveredOrders.reduce((sum, order) => sum + collectedRevenue(order), 0);
 
   const summary = {
-    totalRevenue: commercialsStats.reduce((sum, c) => sum + c.revenue, 0),
-    totalOrders: commercialsStats.reduce((sum, c) => sum + c.sales, 0),
-    avgOrderValue: totalDelivered > 0
-      ? Math.round(commercialsStats.reduce((sum, c) => sum + c.revenue, 0) / totalDelivered)
+    totalRevenue,
+    totalOrders: createdOrders.length,
+    avgOrderValue: totalDeliveredOrders > 0
+      ? Math.round(totalRevenue / totalDeliveredOrders)
       : 0,
     globalSuccessRate: totalDeliverySorties > 0
       ? Math.round((totalDelivered / totalDeliverySorties) * 100)
@@ -427,17 +511,15 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
 
 // ============ USER PERFORMANCE DETAILS ============
 export async function getUserPerformanceDetails(userId: string, role: string, dateFrom?: string, dateTo?: string) {
-  // Meme restriction que getPerformanceStats : detail de performance = admin only.
   await ensureAuth(["admin"]);
-  const start = dateFrom ? new Date(dateFrom) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const end = dateTo ? new Date(dateTo + 'T23:59:59') : new Date();
-  const whereDate: Prisma.DateTimeFilter = { gte: start, lte: end };
+  const { start, endExclusive, dateFilter } = getPerformanceRange(dateFrom, dateTo);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true, role: true } });
+  if (!user || user.role !== role) throw new Error("Collaborateur introuvable pour ce service.");
 
   if (role === 'COMMERCIAL') {
     const orders = await prisma.order.findMany({
-      where: { deletedAt: null, commercialId: userId, createdAt: whereDate },
+      where: { deletedAt: null, commercialId: userId, createdAt: dateFilter },
       orderBy: { createdAt: 'desc' },
-      take: 50,
       select: {
         ref: true,
         customerName: true,
@@ -447,41 +529,63 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
         commune: true,
       }
     });
-    const delivered = orders.filter(o => o.status === 'DELIVERED');
-    const revenue = delivered.reduce((sum, o) => sum + o.total, 0);
+    const delivered = orders.filter(o => PERFORMANCE_SUCCESS_STATUSES.includes(o.status));
+    const deliveredInPeriod = await prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        commercialId: userId,
+        status: { in: PERFORMANCE_SUCCESS_STATUSES },
+        OR: [
+          { deliveredAt: { gte: start.toISOString(), lt: endExclusive.toISOString() } },
+          { deliveredAt: null, updatedAt: dateFilter },
+        ],
+      },
+      select: { amountReceived: true, total: true, deliveryFee: true, discount: true },
+    });
+    const revenue = deliveredInPeriod.reduce((sum, o) => sum + collectedRevenue(o), 0);
 
     // Interventions sur alerte livreur, attribuees par commercialContactedByName.
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-    const interventionOrders = user?.name
+    const allInterventionOrders = user.name
       ? await prisma.order.findMany({
         where: {
           deletedAt: null,
           isCommercialContacted: true,
-          commercialContactedAt: whereDate,
-          commercialContactedByName: { equals: user.name.trim(), mode: 'insensitive' },
+          commercialContactedAt: dateFilter,
         },
-        select: { status: true },
+        select: { commercialContactedByName: true, commercialContactedAt: true, history: true, status: true },
       })
       : [];
+    const interventionOrders = allInterventionOrders.filter(order => {
+      const actorEmail = interventionActorEmail(order);
+      return actorEmail
+        ? actorEmail === user.email.toLowerCase()
+        : String(order.commercialContactedByName || '').trim().toLowerCase() === user.name.trim().toLowerCase();
+    });
 
     return {
-      orders,
+      orders: orders.slice(0, 50),
       summary: {
         total: orders.length,
         delivered: delivered.length,
         revenue,
         convRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0,
         interventions: interventionOrders.length,
-        interventionsDelivered: interventionOrders.filter(o => o.status === 'DELIVERED').length,
+        interventionsDelivered: interventionOrders.filter(o => PERFORMANCE_SUCCESS_STATUSES.includes(o.status)).length,
       }
     };
   }
 
   if (role === 'LIVREUR') {
-    const orders = await prisma.order.findMany({
-      where: { deletedAt: null, deliverymanId: userId, createdAt: whereDate },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+    const successful = await prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        deliverymanId: userId,
+        status: { in: PERFORMANCE_SUCCESS_STATUSES },
+        OR: [
+          { deliveredAt: { gte: start.toISOString(), lt: endExclusive.toISOString() } },
+          { deliveredAt: null, updatedAt: dateFilter },
+        ],
+      },
       select: {
         ref: true,
         customerName: true,
@@ -490,32 +594,49 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
         createdAt: true,
         commune: true,
         deliveredAt: true,
+        updatedAt: true,
+        amountReceived: true,
+        deliveryFee: true,
+        discount: true,
       }
     });
-    const delivered = orders.filter(o => o.status === 'DELIVERED');
-    const returned = orders.filter(o => o.status === 'RETURNED' || o.status === 'CANCELLED');
+    const attempts = await prisma.order.findMany({
+      where: { deletedAt: null, lastDeliveryAttemptRiderId: userId, lastDeliveryAttemptAt: dateFilter },
+      select: { ref: true, customerName: true, total: true, status: true, createdAt: true, commune: true, lastDeliveryAttemptAt: true, lastDeliveryAttemptStatus: true },
+    });
+    const failures = attempts.filter(o => PERFORMANCE_FAILURE_STATUSES.includes(o.lastDeliveryAttemptStatus as OrderStatus));
+    const legacyFailures = await prisma.order.findMany({
+      where: { deletedAt: null, deliverymanId: userId, status: { in: PERFORMANCE_FAILURE_STATUSES }, lastDeliveryAttemptAt: null, updatedAt: dateFilter },
+      select: { ref: true, customerName: true, total: true, status: true, createdAt: true, commune: true, updatedAt: true },
+    });
+    const detailOrders = [
+      ...successful.map(o => ({ ...o, performanceAt: deliveryPerformanceDate(o) })),
+      ...failures.map(o => ({ ...o, status: o.lastDeliveryAttemptStatus || o.status, performanceAt: o.lastDeliveryAttemptAt })),
+      ...legacyFailures.map(o => ({ ...o, performanceAt: o.updatedAt })),
+    ].sort((a, b) => new Date(b.performanceAt || b.createdAt).getTime() - new Date(a.performanceAt || a.createdAt).getTime());
+    const returned = failures.length + legacyFailures.length;
+    const total = successful.length + returned;
     return {
-      orders,
+      orders: detailOrders.slice(0, 50),
       summary: {
-        total: orders.length,
-        delivered: delivered.length,
-        returned: returned.length,
-        revenue: delivered.reduce((sum, o) => sum + o.total, 0),
-        successRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0,
+        total,
+        delivered: successful.length,
+        returned,
+        revenue: successful.reduce((sum, o) => sum + collectedRevenue(o), 0),
+        successRate: total > 0 ? Math.round((successful.length / total) * 100) : 0,
       }
     };
   }
 
   if (role === 'COLLECTION') {
     const records = await prisma.collectionRecord.findMany({
-      where: { by: userId, createdAt: whereDate },
+      where: { by: { in: [user.email, user.id] }, createdAt: dateFilter },
       orderBy: { createdAt: 'desc' },
-      take: 50
     });
     const collected = records.filter(r => r.status === 'collected').length;
     const unavailable = records.filter(r => r.status === 'unavailable').length;
     return {
-      records,
+      records: records.slice(0, 50),
       summary: {
         total: records.length,
         collected,
@@ -526,29 +647,27 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
   }
 
   if (role === 'PACKING') {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return { orders: [], summary: { total: 0, completed: 0, partial: 0, score: 100 } };
     const orders = await prisma.order.findMany({
-      where: { deletedAt: null, packedBy: user.email, packedAt: whereDate },
+      where: { deletedAt: null, packedBy: user.email, packedAt: dateFilter },
       orderBy: { packedAt: 'desc' },
-      take: 50,
       select: {
         ref: true,
         customerName: true,
         status: true,
         packedAt: true,
         createdAt: true,
+        history: true,
       }
     });
-    const partialCount = orders.filter(o => o.status === 'PARTIAL').length;
+    const partialCount = orders.filter(wasPackedPartially).length;
     const completedCount = orders.length - partialCount;
     return {
-      orders,
+      orders: orders.slice(0, 50),
       summary: {
         total: orders.length,
         completed: completedCount,
         partial: partialCount,
-        score: orders.length > 0 ? Math.round((completedCount / orders.length) * 100) : 100,
+        score: orders.length > 0 ? Math.round((completedCount / orders.length) * 100) : 0,
       }
     };
   }

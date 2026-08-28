@@ -12,5 +12,5 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const { dateFrom, dateTo } = await searchParams;
   const stats = await getPerformanceStats(dateFrom, dateTo);
 
-  return <PerformanceClient stats={stats} />;
+  return <PerformanceClient stats={stats} initialDateFrom={dateFrom || ""} initialDateTo={dateTo || ""} />;
 }

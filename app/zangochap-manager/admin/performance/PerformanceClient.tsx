@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { StatCard, TableCard, StatusBadge } from '@/components/UI';
 import Modal from '@/components/Modal';
-import { TrendingUp, Truck, Users, ShoppingBag, Target, Package, Eye, Search, Loader2, Award, Phone, Box } from 'lucide-react';
+import { TrendingUp, Truck, ShoppingBag, Target, Package, Eye, Search, Loader2, Award, Phone, Box } from 'lucide-react';
 import { formatPrice, formatDate } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { getUserPerformanceDetails } from "@/modules/orders/actions";
 import "./performance-client.css";
 
 interface PerformanceClientProps {
+  initialDateFrom: string;
+  initialDateTo: string;
   stats: {
     commercialsStats: any[];
     deliveryStats: any[];
@@ -34,10 +36,11 @@ function RankBadge({ rank }: { rank: number }) {
 
 // Progress bar component
 function ProgressBar({ value, color }: { value: number; color: string }) {
+  const safeValue = Math.max(0, Math.min(100, value));
   return (
     <div className="progress-bar-wrap">
       <div className="progress-bar-bg">
-        <div className="progress-bar-fill" style={{ width: `${value}%`, background: color }} />
+        <div className="progress-bar-fill" style={{ width: `${safeValue}%`, background: color }} />
       </div>
       <span className="progress-bar-label" style={{ color }}>{value}%</span>
     </div>
@@ -51,14 +54,15 @@ function rateColor(rate: number) {
   return 'var(--red)';
 }
 
-export default function PerformanceClient({ stats }: PerformanceClientProps) {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+export default function PerformanceClient({ stats, initialDateFrom, initialDateTo }: PerformanceClientProps) {
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [selectedMember, setSelectedMember] = useState<{ id: string; name: string; role: string } | null>(null);
   const [memberDetails, setMemberDetails] = useState<any>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const detailRequestId = useRef(0);
   const router = useRouter();
 
   const setQuickDate = (range: 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'all') => {
@@ -66,7 +70,7 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
     let from = '', to = now.toISOString().split('T')[0];
     if (range === 'today') { from = to; }
     else if (range === 'yesterday') { const y = new Date(); y.setDate(y.getDate() - 1); from = y.toISOString().split('T')[0]; to = from; }
-    else if (range === 'week') { const w = new Date(); w.setDate(w.getDate() - 7); from = w.toISOString().split('T')[0]; }
+    else if (range === 'week') { const w = new Date(); w.setDate(w.getDate() - 6); from = w.toISOString().split('T')[0]; }
     else if (range === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]; }
     else if (range === 'lastMonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]; to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0]; }
     else { from = ''; to = ''; }
@@ -75,24 +79,30 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
   };
 
   React.useEffect(() => {
+    if (dateFrom && dateTo && dateFrom > dateTo) return;
     if (dateFrom || dateTo) {
       const params = new URLSearchParams();
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
-      router.push(`/zangochap-manager/admin/performance?${params.toString()}`);
+      router.replace(`/zangochap-manager/admin/performance?${params.toString()}`);
+    } else {
+      router.replace('/zangochap-manager/admin/performance');
     }
   }, [dateFrom, dateTo, router]);
 
   const handleViewDetails = useCallback(async (member: any, role: string) => {
+    const requestId = ++detailRequestId.current;
     setSelectedMember({ ...member, role });
+    setMemberDetails(null);
     setIsLoadingDetails(true);
     try {
       const details = await getUserPerformanceDetails(member.id, role, dateFrom, dateTo);
-      setMemberDetails(details);
+      if (requestId === detailRequestId.current) setMemberDetails(details);
     } catch (error) {
       console.error(error);
+      if (requestId === detailRequestId.current) setMemberDetails(null);
     } finally {
-      setIsLoadingDetails(false);
+      if (requestId === detailRequestId.current) setIsLoadingDetails(false);
     }
   }, [dateFrom, dateTo]);
 
@@ -139,6 +149,9 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
               <span style={{ color: 'var(--line)', fontSize: 10 }}>→</span>
               <input type="date" className="filter-date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
             </div>
+            {dateFrom && dateTo && dateFrom > dateTo && (
+              <span style={{ color: 'var(--red)', fontSize: 11, fontWeight: 700 }}>La date de début doit précéder la date de fin.</span>
+            )}
           </div>
         </div>
       </div>
@@ -150,7 +163,7 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
         <StatCard label="Panier Moyen" value={formatPrice(stats.summary.avgOrderValue)} icon={<Award size={18} />} />
         <StatCard label="Taux Livraison" value={`${stats.summary.globalSuccessRate}%`} icon={<Target size={18} />} />
         <StatCard label="Colis Emballés" value={stats.summary.totalPacked} icon={<Package size={18} />} />
-        <StatCard label="Articles Collectés" value={stats.summary.totalCollected} icon={<Box size={18} />} />
+        <StatCard label="Collectes réussies" value={stats.summary.totalCollected} icon={<Box size={18} />} />
       </div>
 
       {/* ROLE TABS */}
@@ -306,7 +319,7 @@ export default function PerformanceClient({ stats }: PerformanceClientProps) {
                     <tbody>
                       {(memberDetails.orders || memberDetails.records)?.map((item: any, i: number) => (
                         <tr key={i}>
-                          <td style={{ color: 'var(--brown-soft)', whiteSpace: 'nowrap' }}>{formatDate(item.createdAt || item.packedAt)}</td>
+                          <td style={{ color: 'var(--brown-soft)', whiteSpace: 'nowrap' }}>{formatDate(item.performanceAt || item.packedAt || item.createdAt)}</td>
                           <td><span style={{ fontWeight: 600 }}>{item.ref || item.productId || '—'}</span></td>
                           {selectedMember.role !== 'COLLECTION' && <td style={{ fontSize: 11 }}>{item.customerName || '—'}</td>}
                           {(selectedMember.role === 'COMMERCIAL' || selectedMember.role === 'LIVREUR') && (
