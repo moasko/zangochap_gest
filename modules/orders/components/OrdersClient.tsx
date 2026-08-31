@@ -87,6 +87,7 @@ import ProductCard from "@/components/ProductCard";
 import ReceiptModal from "@/components/ReceiptModal";
 
 import "./dashboard.css";
+import "./orders-responsive.css";
 
 const ZANGOCHAP_LOGO_SVG = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
 
@@ -5790,7 +5791,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
   }, [dateFrom, dateTo]);
 
   return (
-    <div className="content animate-fade-in">
+    <div className="content animate-fade-in orders-page">
       {/* SEARCH BAR */}
 
       <div className="search-container" style={{ marginBottom: 14 }}>
@@ -5809,6 +5810,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           type="text"
           className="field-input search-input"
           placeholder="Rechercher par réf, nom, téléphone, commercial..."
+          aria-label="Rechercher une commande"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -5816,6 +5818,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
+            aria-label="Effacer la recherche"
             className="cell-btn-icon"
             style={{
               position: "absolute",
@@ -5836,21 +5839,31 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
       {/* FILTERS */}
 
       <div className="filters-bar">
+        <div className="orders-toolbar-top">
+        <div className="orders-status-filters" role="group" aria-label="Statut des commandes">
         {filters.map((f) => (
           <button
             key={f.key}
             className={`filter-chip ${filter === f.key ? "active" : ""}`}
             onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
           >
             {f.label}
 
             {f.count > 0 && <span className="chip-count">{f.count}</span>}
           </button>
         ))}
-
+        </div>
+        <Link href="/zangochap-manager/orders/new" className="btn-orange">
+          <Plus size={14} /> Nouvelle commande
+        </Link>
+        </div>
+        <div className="orders-toolbar-bottom">
+        <label className="orders-filter-field"><span>Commune</span>
         <select
           className="filter-select"
           value={communeFilter}
+          aria-label="Filtrer par commune"
           onChange={(e) => setCommuneFilter(e.target.value)}
         >
           <option value="all">Toutes communes</option>
@@ -5861,22 +5874,25 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
             </option>
           ))}
         </select>
+        </label>
 
         {user?.role === "commercial" && (
+          <label className="orders-filter-field"><span>Commandes</span>
           <select
             className="filter-select"
             value={scope}
+            aria-label="Périmètre des commandes"
             onChange={(e) => setScope(e.target.value)}
           >
             <option value="all">Toutes commandes</option>
             <option value="mine">Mes commandes</option>
           </select>
+          </label>
         )}
 
-        <div className="filter-spacer" />
-
+        <div className="orders-filter-field"><span>Période</span>
         <div
-          className="dashboard-actions"
+          className="dashboard-actions orders-period-shortcuts"
           style={{
             background: "var(--cream)",
             padding: "2px 6px",
@@ -5909,7 +5925,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           <button
             className={`shortcut-btn ${activeRange === "custom" ? "active" : ""}`}
             onClick={() => {
-              if (!dateFrom && !dateTo) setQuickDate("today");
+              document.getElementById("orders-date-from")?.focus();
             }}
           >
             Perso
@@ -5929,8 +5945,10 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
             Ce mois
           </button>
         </div>
+        </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <div className="orders-date-filters">
+          <label><span>Date de</span>
           <select
             className="filter-select"
             value={dateType}
@@ -5941,53 +5959,52 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
 
             <option value="delivery">Livraison</option>
           </select>
-
+          </label>
+          <label htmlFor="orders-date-from"><span>Du</span>
           <input
+            id="orders-date-from"
             type="date"
             className="filter-date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
           />
-
+          </label>
+          <label><span>Au</span>
           <input
             type="date"
             className="filter-date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
           />
+          </label>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {(queryFetching || queryLoading) && (
-            <RefreshCw size={14} className="animate-spin text-orange" />
-          )}
-
+        <div className="orders-refresh">
           <button
             className="btn-secondary"
             onClick={() =>
               queryClient.invalidateQueries({ queryKey: ["orders"] })
             }
             title="Actualiser"
+            aria-label="Actualiser les commandes"
             style={{ padding: "8px 10px" }}
             disabled={queryFetching}
           >
             <RefreshCw
               size={14}
-              className={queryFetching ? "animate-spin" : ""}
+              className={queryFetching || queryLoading ? "animate-spin" : ""}
             />
           </button>
         </div>
-
-        <Link href="/zangochap-manager/orders/new" className="btn-orange">
-          <Plus size={14} /> Nouvelle commande
-        </Link>
+        </div>
       </div>
 
       {/* TABLE */}
 
       <TableCard
         title="Commandes"
-        meta={`${totalCount} commande(s) · Page ${currentPage}/${totalPages}`}
+        className="orders-table-card"
+        meta={currentTotalCount > 0 ? `${currentTotalCount} commande(s) · Page ${currentPage}/${totalPages}` : "0 commande pour les filtres sélectionnés"}
       >
         {paginatedOrders.length === 0 ? (
           <EmptyState
@@ -5997,7 +6014,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           />
         ) : (
           <>
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th>Référence</th>
@@ -6018,7 +6035,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
 
                   <th>Statut</th>
 
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
@@ -6032,7 +6049,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
 
                   return (
                     <tr key={order.id}>
-                      <td>
+                      <td data-label="Référence" className="orders-reference-cell">
                         <div
                           style={{
                             display: "flex",
@@ -6051,13 +6068,13 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                         </div>
                       </td>
 
-                      <td>
+                      <td data-label="Création">
                         <span className="cell-muted">
                           {formatDate(order.createdAt)}
                         </span>
                       </td>
 
-                      <td>
+                      <td data-label="Livraison">
                         <div
                           style={{
                             fontWeight: 600,
@@ -6091,13 +6108,13 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                           )}
                       </td>
 
-                      <td>
+                      <td data-label="Client">
                         <div className="cell-strong">{order.customerName}</div>
 
                         <div className="cell-muted">{order.customerPhone}</div>
                       </td>
 
-                      <td>
+                      <td data-label="Commercial">
                         {order.commercialName === "Site Web" ? (
                           <span className="source-badge">Site Web</span>
                         ) : (
@@ -6107,16 +6124,16 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                         )}
                       </td>
 
-                      <td>{order.commune || "—"}</td>
+                      <td data-label="Commune">{order.commune || "—"}</td>
 
-                      <td>
+                      <td data-label="Articles">
                         <span className="cell-muted">
                           {order.items.length} article
                           {order.items.length > 1 ? "s" : ""}
                         </span>
                       </td>
 
-                      <td>
+                      <td data-label="Total">
                         <div
                           style={{ display: "flex", flexDirection: "column" }}
                         >
@@ -6130,7 +6147,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                         </div>
                       </td>
 
-                      <td>
+                      <td data-label="Statut">
                         <StatusBadge status={order.status} />
 
                         {order.status === "ON_DELIVERY" &&
@@ -6152,14 +6169,16 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                           )}
                       </td>
 
-                      <td>
+                      <td data-label="Actions" className="orders-actions-cell">
                         <div className="row-actions">
                           <button
                             className="action-btn"
                             title="Voir le détail"
+                            aria-label={`Voir la commande ${order.ref}`}
                             onClick={() => setSelectedOrder(order)}
                           >
                             <Eye size={14} />
+                            <span className="orders-action-label">Détail</span>
                           </button>
 
                           {canManageOrder && (
@@ -6167,26 +6186,32 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                 <button
                                   className="action-btn"
                                   title="Modifier"
+                                  aria-label={`Modifier la commande ${order.ref}`}
                                   onClick={() => setOrderToEdit(order)}
                                 >
                                   <Edit3 size={14} />
+                                  <span className="orders-action-label">Modifier</span>
                                 </button>
                                 <button
                                   className="action-btn"
                                   title="Dupliquer"
+                                  aria-label={`Dupliquer la commande ${order.ref}`}
                                   onClick={() => setOrderToDuplicate(order)}
                                 >
                                   <Copy size={14} />
+                                  <span className="orders-action-label">Dupliquer</span>
                                 </button>
                               </>
                             )}
                           <button
                             className="action-btn"
                             title="Envoyer un message WhatsApp au client (aperçu + envoi direct)"
+                            aria-label={`WhatsApp pour la commande ${order.ref}`}
                             onClick={() => setWhatsAppOrder(order)}
                             style={{ background: "#dcfce7", color: "#16a34a" }}
                           >
                             <MessageCircle size={14} />
+                            <span className="orders-action-label">WhatsApp</span>
                           </button>
                           <details className="action-menu">
                             <summary
@@ -6195,6 +6220,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                               aria-label="Plus d'actions"
                             >
                               <MoreHorizontal size={14} />
+                              <span className="orders-action-label">Plus</span>
                             </summary>
                             <div className="action-menu-panel">
                               {canManageOrder && (
@@ -6203,7 +6229,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                                     className="action-menu-item"
                                     onClick={() => setOrderToExchange(order)}
                                   >
-                                    <Copy size={14} /> Créer un échange
+                                    <ArrowLeftRight size={14} /> Créer un échange
                                   </button>
                                 )}
                               {canManageOrder && (
@@ -6257,6 +6283,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
 
             {totalPages > 1 && (
               <div
+                className="orders-pagination"
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
@@ -6282,6 +6309,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                   <button
                     className="action-btn"
                     disabled={currentPage <= 1}
+                    aria-label="Page précédente"
                     onClick={() => goToPage(currentPage - 1)}
                     style={{ opacity: currentPage <= 1 ? 0.3 : 1 }}
                   >
@@ -6304,6 +6332,8 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                     return (
                       <button
                         key={pageNum}
+                        aria-label={`Page ${pageNum}`}
+                        aria-current={currentPage === pageNum ? "page" : undefined}
                         onClick={() => goToPage(pageNum)}
                         style={{
                           width: 32,
@@ -6341,6 +6371,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
                   <button
                     className="action-btn"
                     disabled={currentPage >= totalPages}
+                    aria-label="Page suivante"
                     onClick={() => goToPage(currentPage + 1)}
                     style={{ opacity: currentPage >= totalPages ? 0.3 : 1 }}
                   >
@@ -6938,6 +6969,7 @@ function OrderDetailModal({
   return (
     <>
       <Modal
+        className="orders-dialog orders-detail-dialog"
         isOpen={true}
         onClose={onClose}
         title={
@@ -6955,6 +6987,7 @@ function OrderDetailModal({
                 className="action-btn-sm"
                 onClick={onEdit}
                 title="Modifier"
+                aria-label="Modifier la commande"
               >
                 <Edit2 size={12} />
               </button>
@@ -6983,6 +7016,9 @@ function OrderDetailModal({
               </>
             ) : (
               <>
+                <details className="orders-detail-actions">
+                  <summary><MoreHorizontal size={18} /> Actions de la commande</summary>
+                  <div className="orders-detail-action-grid">
                 {canEdit && order.status !== "CANCELLED" && (
                   <>
                     {["PENDING", "TO_PROCESS"].includes(order.status) && (
@@ -7127,7 +7163,8 @@ function OrderDetailModal({
                 >
                   <Calendar size={14} /> Reprogrammer
                 </button>
-
+                  </div>
+                </details>
                 <button className="btn-secondary" onClick={onClose}>
                   Fermer
                 </button>
@@ -8332,6 +8369,7 @@ function OrderFormModal({
 
   return (
     <Modal
+      className="orders-dialog orders-form-dialog"
       isOpen={true}
       onClose={onClose}
       title={

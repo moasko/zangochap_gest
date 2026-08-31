@@ -13,9 +13,10 @@ interface ModalProps {
   large?: boolean;
   xl?: boolean;
   full?: boolean;
+  className?: string;
 }
 
-export default function Modal({ isOpen, onClose, title, children, footer, large = false, xl = false, full = false }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, footer, large = false, xl = false, full = false, className = "" }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function Modal({ isOpen, onClose, title, children, footer, large 
   if (!mounted || !isOpen) return null;
 
   return createPortal(
-    <div className="modal-root">
+    <div className={`modal-root ${className}`}>
       {/* Backdrop */}
       <div className="modal-overlay-new" onClick={onClose} />
 
