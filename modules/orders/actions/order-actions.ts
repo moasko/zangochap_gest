@@ -20,6 +20,7 @@ import { decrementStockForOrder, restoreStockForOrder } from "./stock";
 import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
 import { triggerAutomations } from "@/modules/automations/engine";
 import { recordDeveloperAudit } from "@/modules/developer/audit";
+import { getExpeditionDayRange, isInExpeditionDay } from "../helpers/expedition-day";
 
 // ============ POINT RELAIS ============
 // L'attribution relais vit sous forme d'une ligne marqueur dans deliveryNote,
@@ -232,14 +233,13 @@ export async function createOrder(data: {
         .join('§');
 
     if (newSuffixes.length > 0) {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const expeditionDay = getExpeditionDayRange();
 
       const sameDayExpeditions = await prisma.order.findMany({
         where: {
           deletedAt: null,
           status: { not: 'CANCELLED' },
-          createdAt: { gte: todayStart },
+          createdAt: expeditionDay,
           commune: { equals: data.commune.trim(), mode: 'insensitive' },
         },
         include: { items: true },
@@ -247,6 +247,9 @@ export async function createOrder(data: {
 
       const newSignature = itemSignature(processedItems);
       const duplicate = sameDayExpeditions.find(o => {
+        // Never let an earlier creation block a repeat purchase, even if it
+        // was delivered, reprogrammed or otherwise updated today.
+        if (!isInExpeditionDay(o.createdAt, expeditionDay)) return false;
         const existingSuffixes = [toSuffix(o.customerPhone), toSuffix(o.customerPhone2)].filter(Boolean);
         const samePhone = existingSuffixes.some(s => newSuffixes.includes(s));
         return samePhone && itemSignature(o.items) === newSignature;
@@ -254,7 +257,7 @@ export async function createOrder(data: {
 
       if (duplicate) {
         throw new Error(
-          `⚠️ Expédition refusée : la commande ${duplicate.ref || duplicate.id} a déjà été enregistrée aujourd'hui pour ce numéro avec exactement les mêmes articles. Doublon probable — vérifiez avant de recréer.`,
+          `⚠️ Expédition refusée : la commande ${duplicate.ref || duplicate.id}, créée le ${duplicate.createdAt.toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' })} (heure d'Abidjan), contient les mêmes articles pour ce numéro. Cette restriction s'applique uniquement aux commandes créées le même jour.`,
         );
       }
     }
