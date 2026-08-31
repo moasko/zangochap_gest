@@ -324,6 +324,14 @@ function interventionActorEmail(order: { history: Prisma.JsonValue | null; comme
   return email.includes("@") ? email : null;
 }
 
+const performanceGiftCount = {
+  select: { items: { where: { isGift: true, qty: { gt: 0 } } } },
+} as const;
+
+function countOrdersWithGifts(orders: { _count: { items: number } }[]) {
+  return orders.filter(order => order._count.items > 0).length;
+}
+
 export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
   await ensureAuth(["admin"]);
   const { start, endExclusive, dateFilter } = getPerformanceRange(dateFrom, dateTo);
@@ -337,7 +345,7 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
     prisma.user.findMany({ where: { role: 'LIVREUR' }, select: { id: true, name: true } }),
     prisma.order.findMany({
       where: { deletedAt: null, createdAt: dateFilter },
-      select: { commercialId: true, status: true },
+      select: { commercialId: true, status: true, _count: performanceGiftCount },
     }),
     prisma.order.findMany({
       where: {
@@ -348,7 +356,7 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
           { deliveredAt: null, updatedAt: dateFilter },
         ],
       },
-      select: { commercialId: true, amountReceived: true, total: true, deliveryFee: true, discount: true },
+      select: { commercialId: true, amountReceived: true, total: true, deliveryFee: true, discount: true, _count: performanceGiftCount },
     }),
     prisma.order.findMany({
       where: {
@@ -420,6 +428,8 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
       name: c.name,
       sales: cohort.length,
       delivered: delivered.length,
+      deliveredWithGifts: countOrdersWithGifts(delivered),
+      deliveredWithoutGifts: delivered.length - countOrdersWithGifts(delivered),
       cancelled: cancelled.length,
       revenue,
       convRate,
@@ -495,6 +505,8 @@ export async function getPerformanceStats(dateFrom?: string, dateTo?: string) {
 
   const summary = {
     totalRevenue,
+    deliveredWithGifts: countOrdersWithGifts(deliveredOrders),
+    deliveredWithoutGifts: deliveredOrders.length - countOrdersWithGifts(deliveredOrders),
     totalOrders: createdOrders.length,
     avgOrderValue: totalDeliveredOrders > 0
       ? Math.round(totalRevenue / totalDeliveredOrders)
@@ -527,6 +539,7 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
         status: true,
         createdAt: true,
         commune: true,
+        _count: performanceGiftCount,
       }
     });
     const delivered = orders.filter(o => PERFORMANCE_SUCCESS_STATUSES.includes(o.status));
@@ -567,6 +580,8 @@ export async function getUserPerformanceDetails(userId: string, role: string, da
       summary: {
         total: orders.length,
         delivered: delivered.length,
+        deliveredWithGifts: countOrdersWithGifts(delivered),
+        deliveredWithoutGifts: delivered.length - countOrdersWithGifts(delivered),
         revenue,
         convRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0,
         interventions: interventionOrders.length,

@@ -24,12 +24,14 @@ interface PerformanceClientProps {
       globalSuccessRate: number;
       totalPacked: number;
       totalCollected: number;
+      deliveredWithGifts: number;
+      deliveredWithoutGifts: number;
     };
   };
 }
 
 type BaseMember = { id: string; name: string };
-type CommercialStat = BaseMember & { sales: number; delivered: number; cancelled: number; interventions: number; interventionsDelivered: number; revenue: number; convRate: number; prime: number };
+type CommercialStat = BaseMember & { sales: number; delivered: number; deliveredWithGifts: number; deliveredWithoutGifts: number; cancelled: number; interventions: number; interventionsDelivered: number; revenue: number; convRate: number; prime: number };
 type DeliveryStat = BaseMember & { total: number; delivered: number; returned: number; revenue: number; successRate: number };
 type CollectorStat = BaseMember & { count: number; collected: number; unavailable: number; alternative: number; successRate: number };
 type PackingStat = BaseMember & { packed: number; completed: number; partial: number; score: number };
@@ -46,6 +48,8 @@ type DetailItem = {
 type DetailSummaryData = {
   total?: number;
   delivered?: number;
+  deliveredWithGifts?: number;
+  deliveredWithoutGifts?: number;
   returned?: number;
   collected?: number;
   unavailable?: number;
@@ -105,6 +109,29 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
   const detailRequestId = useRef(0);
   const router = useRouter();
 
+  const selectedMonth = useMemo(() => {
+    if (!dateFrom || !dateTo || !dateFrom.endsWith('-01')) return '';
+    const [year, month] = dateFrom.split('-').map(Number);
+    const monthEnd = localDateValue(new Date(year, month, 0));
+    const today = localDateValue(new Date());
+    return dateTo === monthEnd || (dateTo === today && dateFrom.slice(0, 7) === today.slice(0, 7))
+      ? dateFrom.slice(0, 7)
+      : '';
+  }, [dateFrom, dateTo]);
+
+  const selectMonth = (value: string) => {
+    if (!value) {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    if (!/^\d{4}-\d{2}$/.test(value)) return;
+    const [year, month] = value.split('-').map(Number);
+    if (year < 100 || month < 1 || month > 12) return;
+    setDateFrom(`${value}-01`);
+    setDateTo(localDateValue(new Date(year, month, 0)));
+  };
+
   const setQuickDate = (range: 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'all') => {
     const now = new Date();
     let from = '', to = localDateValue(now);
@@ -142,7 +169,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
     if (dateFrom === today && dateTo === today) return 'today';
     if (dateFrom === localDateValue(yesterday) && dateTo === localDateValue(yesterday)) return 'yesterday';
     if (dateFrom === localDateValue(weekStart) && dateTo === today) return 'week';
-    if (dateFrom === monthStart && dateTo === today) return 'month';
+    if (dateFrom === monthStart && (dateTo === today || dateTo === localDateValue(new Date(now.getFullYear(), now.getMonth() + 1, 0)))) return 'month';
     if (dateFrom === lastMonthStart && dateTo === lastMonthEnd) return 'lastMonth';
     return 'custom';
   }, [dateFrom, dateTo]);
@@ -218,6 +245,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
               <button className={`shortcut-btn ${activeRange === 'lastMonth' ? 'active' : ''}`} onClick={() => setQuickDate('lastMonth')}>Mois dernier</button>
             </div>
             <div className="perf-date-range">
+              <label><span>Mois</span><input type="month" className="filter-date" aria-label="Filtrer par mois et année" value={selectedMonth} onChange={e => selectMonth(e.target.value)} /></label>
               <label><span>Du</span><input type="date" className="filter-date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></label>
               <span style={{ color: 'var(--line)', fontSize: 10 }}>→</span>
               <label><span>Au</span><input type="date" className="filter-date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></label>
@@ -235,6 +263,8 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
       <div className="perf-stats">
         <StatCard label="CA Livré" value={formatPrice(stats.summary.totalRevenue)} icon={<TrendingUp size={18} />} accent />
         <StatCard label="Commandes" value={stats.summary.totalOrders} icon={<ShoppingBag size={18} />} />
+        <StatCard label="Livrées avec cadeaux" value={stats.summary.deliveredWithGifts} icon={<Package size={18} />} />
+        <StatCard label="Livrées sans cadeaux" value={stats.summary.deliveredWithoutGifts} icon={<ShoppingBag size={18} />} />
         <StatCard label="Panier Moyen" value={formatPrice(stats.summary.avgOrderValue)} icon={<Award size={18} />} />
         <StatCard label="Taux Livraison" value={`${stats.summary.globalSuccessRate}%`} icon={<Target size={18} />} />
         <StatCard label="Colis Emballés" value={stats.summary.totalPacked} icon={<Package size={18} />} />
@@ -242,6 +272,10 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
       </div>
 
       {/* ROLE TABS */}
+      <p className="text-xs text-[var(--brown-soft)] mb-4">
+        Livrées inclut les livraisons partielles. Avec cadeaux = au moins un article marqué cadeau dans la commande, comptée une seule fois.
+        Les compteurs globaux suivent la date de livraison ; le tableau commercial suit les commandes créées sur la période.
+      </p>
       <div className="perf-tabs">
         {roles.map(r => (
           <button key={r.key} onClick={() => setRoleFilter(r.key)} aria-pressed={roleFilter === r.key} className={`role-btn ${roleFilter === r.key ? 'active' : ''}`}>
@@ -260,7 +294,7 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
               <div className="perf-empty"><div className="perf-empty-icon">📞</div><p>Aucun commercial trouvé</p></div>
             ) : (
               <table>
-                <thead><tr><th>#</th><th>Commercial</th><th>Total</th><th>Livrées</th><th>Annulées</th><th title="Alertes livreur traitées puis commande livrée">Interv. & livré</th><th>CA Livré</th><th>Taux</th><th>Prime 1%</th><th style={{ width: 36 }}></th></tr></thead>
+                <thead><tr><th>#</th><th>Commercial</th><th>Total</th><th>Livrées</th><th>Livrées avec cadeaux</th><th>Livrées sans cadeaux</th><th>Annulées</th><th title="Alertes livreur traitées puis commande livrée">Interv. & livré</th><th>CA Livré</th><th>Taux</th><th>Prime 1%</th><th style={{ width: 36 }}></th></tr></thead>
                 <tbody>
                   {filtered.commercials.map((c, i) => (
                     <tr key={c.id}>
@@ -268,6 +302,8 @@ export default function PerformanceClient({ stats, initialDateFrom, initialDateT
                       <td><span className="cell-strong">{c.name}</span></td>
                       <td>{c.sales}</td>
                       <td><span style={{ color: 'var(--green)', fontWeight: 600 }}>{c.delivered}</span></td>
+                      <td>{c.deliveredWithGifts}</td>
+                      <td>{c.deliveredWithoutGifts}</td>
                       <td><span style={{ color: c.cancelled > 0 ? 'var(--red)' : 'var(--brown-soft)' }}>{c.cancelled}</span></td>
                       <td title={`${c.interventions || 0} intervention(s) sur alerte livreur, dont ${c.interventionsDelivered || 0} livrée(s)`}>
                         <span style={{ color: 'var(--green)', fontWeight: 600 }}>{c.interventionsDelivered || 0}</span>
@@ -430,6 +466,8 @@ function DetailSummary({ summary, role }: { summary: DetailSummaryData; role: st
       <div className="detail-stats-row">
         <div className="detail-stat-box"><div className="detail-stat-label">Commandes</div><div className="detail-stat-value">{summary.total}</div></div>
         <div className="detail-stat-box"><div className="detail-stat-label">Livrées</div><div className="detail-stat-value" style={{ color: 'var(--green)' }}>{summary.delivered}</div></div>
+        <div className="detail-stat-box"><div className="detail-stat-label">Livrées avec cadeaux</div><div className="detail-stat-value">{summary.deliveredWithGifts}</div></div>
+        <div className="detail-stat-box"><div className="detail-stat-label">Livrées sans cadeaux</div><div className="detail-stat-value">{summary.deliveredWithoutGifts}</div></div>
         <div className="detail-stat-box"><div className="detail-stat-label">Taux</div><div className="detail-stat-value">{summary.convRate}%</div></div>
         <div className="detail-stat-box" title={`${summary.interventions || 0} intervention(s) sur alerte livreur, dont ${summary.interventionsDelivered || 0} livrée(s)`}>
           <div className="detail-stat-label">Interv. & livré</div>
