@@ -66,6 +66,20 @@ function operationLabel(type: string) {
   return "Correction";
 }
 
+function groupSessionsByMonth(sessions: any[]) {
+  const months = new Map<string, any[]>();
+  const sortedSessions = [...sessions].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+  for (const session of sortedSessions) {
+    const month = dateInputValue(session.date).slice(0, 7);
+    const entries = months.get(month) || [];
+    entries.push(session);
+    months.set(month, entries);
+  }
+  return months;
+}
+
 // Valeur signee sur la caisse : positive = credit (entree), negative = debit (sortie).
 // Une CORRECTION porte deja son signe (negative => elle diminue la caisse), une
 // EXPENSE est toujours un debit. Aligne sur summarizeOperations cote serveur.
@@ -155,6 +169,9 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
   const closedSessions = workspace.sessions
     .filter((session: any) => session.status === "CLOSED")
     .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Regroupement par journée comptable, et non par date de traitement.
+  const closedSessionMonths = groupSessionsByMonth(closedSessions);
+  const ledgerSessionMonths = groupSessionsByMonth(workspace.sessions);
 
   const closeSession = async (processedAt: string) => {
     setClosePending(true);
@@ -651,8 +668,18 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
             <div className="border-b border-[var(--line)] bg-[var(--cream)] px-4 py-2.5 text-[11px] font-bold text-[var(--brown-soft)]">
               Cliquez sur une journee pour afficher ses ecritures. Le bouton Detail ouvre la cloture et la validation des livreurs.
             </div>
-            <div className="divide-y divide-[var(--cream-2)]">
-              {workspace.sessions.map((session: any) => {
+            <div className="space-y-3 p-3">
+              <p className="text-[11px] text-[var(--brown-soft)]">Classées par mois de la session, puis par date décroissante.</p>
+              {Array.from(ledgerSessionMonths.entries()).map(([month, sessions], monthIndex) => (
+                <details key={month} open={monthIndex === 0} className="group overflow-hidden rounded-lg border border-[var(--line)]">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 bg-[var(--cream)] px-3 py-3 text-[13px] font-bold text-[var(--ink)] [&::-webkit-details-marker]:hidden">
+                    <ChevronRight size={16} className="shrink-0 transition-transform group-open:rotate-90" />
+                    <Calendar size={16} className="shrink-0 text-[var(--orange)]" />
+                    <span className="flex-1 capitalize">{new Date(`${month}-01T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+                    <span className="rounded-full bg-white px-2 py-1 text-[11px] text-[var(--brown-soft)]">{sessions.length} session(s)</span>
+                  </summary>
+                  <div className="divide-y divide-[var(--cream-2)]">
+              {sessions.map((session: any) => {
                 const open = session.status !== "CLOSED";
                 const isCurrent = session.id === workspace.session.id;
                 const isToday = dateInputValue(session.date) === todayValue;
@@ -716,6 +743,9 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                   </div>
                 );
               })}
+                  </div>
+                </details>
+              ))}
             </div>
           </>
         )}
@@ -726,8 +756,18 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
           {closedSessions.length === 0 ? (
             <EmptyState icon={<Lock size={22} />} title="Aucune session cloturee" description="Les journees verrouillees apparaitront ici avec leur date de traitement." />
           ) : (
-            <div className="divide-y divide-[var(--cream-2)]">
-              {closedSessions.map((session: any) => {
+            <div className="space-y-3 p-3">
+              <p className="text-[11px] text-[var(--brown-soft)]">Classées par mois de la session, puis par date décroissante.</p>
+              {Array.from(closedSessionMonths.entries()).map(([month, sessions], monthIndex) => (
+                <details key={month} open={monthIndex === 0} className="group overflow-hidden rounded-lg border border-[var(--line)]">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 bg-[var(--cream)] px-3 py-3 text-[13px] font-bold text-[var(--ink)] [&::-webkit-details-marker]:hidden">
+                    <ChevronRight size={16} className="shrink-0 transition-transform group-open:rotate-90" />
+                    <Calendar size={16} className="shrink-0 text-[var(--orange)]" />
+                    <span className="flex-1 capitalize">{new Date(`${month}-01T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</span>
+                    <span className="rounded-full bg-white px-2 py-1 text-[11px] text-[var(--brown-soft)]">{sessions.length} session(s)</span>
+                  </summary>
+                  <div className="divide-y divide-[var(--cream-2)]">
+              {sessions.map((session: any) => {
                 const isCurrent = session.id === workspace.session.id;
                 // Solde de caisse negatif : on remonte les motifs des ecritures en
                 // debit (sortie ou correction negative) pour expliquer le decouvert.
@@ -797,6 +837,9 @@ export default function AccountingClient({ workspace }: AccountingClientProps) {
                   </div>
                 );
               })}
+                  </div>
+                </details>
+              ))}
             </div>
           )}
         </TableCard>
