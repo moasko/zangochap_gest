@@ -8,7 +8,7 @@ import { addOrderHistoryEntry } from "@/modules/orders/actions";
 import { updateOrderStatus } from "@/modules/orders/actions/status-actions";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Package, X, Search } from "lucide-react";
-import { markItemNotPacked, toggleItemVerification } from "@/modules/logistics/verification/actions";
+import { markItemNotPacked, toggleItemPacking } from "@/modules/logistics/verification/actions";
 import { useResponsiveMode } from "@/lib/hooks";
 import LogisticsMobileStyles from "@/modules/logistics/components/LogisticsMobileStyles";
 import { motion, AnimatePresence } from "framer-motion";
@@ -140,7 +140,7 @@ function usePackingFilters(orders: PackingOrder[], products: ProductWithVariants
         } else if (filter === 'PREPARING') {
           // Suivies = commandes dont au moins un article a été coché, mais pas encore emballées
           if (o.status === 'PACKED') return false;
-          if (!o.items.some(i => i.isVerified)) return false;
+          if (!o.items.some(i => i.packingStatus === 'PACKED')) return false;
         } else if (filter !== 'all' && o.status !== filter) return false;
 
         // Filtre Recherche
@@ -253,13 +253,13 @@ export default function PackingClient({ initialOrders, products: initialProducts
   }, [filtered]);
 
   const toggleCheckItem = useCallback((orderId: string, item: PackingOrderItem) => {
-    const newStatus = !item.isVerified;
+    const newStatus = item.packingStatus !== 'PACKED';
 
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
       return {
         ...o,
-        items: o.items.map(i => i.id === item.id ? { ...i, isVerified: newStatus, packingStatus: newStatus ? 'PACKED' : 'PENDING' } : i)
+        items: o.items.map(i => i.id === item.id ? { ...i, packingStatus: newStatus ? 'PACKED' : 'PENDING' } : i)
       };
     }));
 
@@ -269,14 +269,14 @@ export default function PackingClient({ initialOrders, products: initialProducts
       return next;
     });
 
-    toggleItemVerification(item.id, newStatus)
+    toggleItemPacking(item.id, newStatus)
       .catch((error: unknown) => {
         showToast(error instanceof Error ? error.message : "Erreur de sauvegarde", "error");
         setOrders(prev => prev.map(o => {
           if (o.id !== orderId) return o;
           return {
             ...o,
-            items: o.items.map(i => i.id === item.id ? { ...i, isVerified: !newStatus, packingStatus: item.packingStatus } : i)
+            items: o.items.map(i => i.id === item.id ? { ...i, packingStatus: item.packingStatus } : i)
           };
         }));
       })
@@ -296,7 +296,7 @@ export default function PackingClient({ initialOrders, products: initialProducts
         setOrders(prev => prev.map(order => order.id !== orderId ? order : {
           ...order,
           items: order.items.map(current => current.id === item.id
-            ? { ...current, isVerified: false, verifiedAt: null, packingStatus: result.packingStatus }
+            ? { ...current, packingStatus: result.packingStatus }
             : current),
         }));
         showToast(result.packingStatus === 'NOT_PACKED'
@@ -316,9 +316,9 @@ export default function PackingClient({ initialOrders, products: initialProducts
     if (!order) return;
 
     if (status === 'PACKED') {
-      const unverifiedCount = order.items.filter(i => !i.isVerified).length;
+      const unverifiedCount = order.items.filter(i => i.packingStatus !== 'PACKED').length;
       if (unverifiedCount > 0) {
-        showToast(`${unverifiedCount} article(s) doivent encore être vérifiés.`, 'error');
+        showToast(`${unverifiedCount} article(s) doivent encore être emballés.`, 'error');
         return;
       }
     }
@@ -355,11 +355,11 @@ export default function PackingClient({ initialOrders, products: initialProducts
     if (selectedIds.size === 0) return;
     const selectedOrders = orders.filter(order => selectedIds.has(order.id));
     const eligibleOrders = status === 'PACKED'
-      ? selectedOrders.filter(order => order.items.every(item => item.isVerified))
+      ? selectedOrders.filter(order => order.items.every(item => item.packingStatus === 'PACKED'))
       : selectedOrders;
     const blockedCount = selectedOrders.length - eligibleOrders.length;
     if (eligibleOrders.length === 0) {
-      showToast('Aucune commande sélectionnée n’est entièrement vérifiée.', 'error');
+      showToast('Aucune commande sélectionnée n’est entièrement emballée.', 'error');
       return;
     }
     const warning = blockedCount > 0 ? ` ${blockedCount} commande(s) incomplète(s) seront ignorées.` : '';

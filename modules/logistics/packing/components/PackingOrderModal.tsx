@@ -45,7 +45,7 @@ export default function PackingOrderModal({
 
   if (!order) return null;
 
-  const progress = order.items.filter((i) => i.isVerified).length;
+  const progress = order.items.filter((i) => (i.packingStatus === 'PACKED')).length;
   const total = order.items.length;
   const isComplete = total > 0 && progress === total;
   const isPartial = progress > 0 && progress < total;
@@ -69,7 +69,7 @@ export default function PackingOrderModal({
                 <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'UNAVAILABLE')} disabled={isPending} style={{ color: 'var(--red)', borderColor: '#F3C5C1' }}>Indisponible</button>
                 <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'PARTIAL')} disabled={isPending || !isPartial} style={{ color: '#9A5A00', borderColor: '#F1D49D' }}>Partiel</button>
                 <button className="btn-secondary" onClick={onClose}>Fermer</button>
-                <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined} style={{ gridColumn: '1 / -1' }}>
+                <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Emballez tous les articles avant de valider" : undefined} style={{ gridColumn: '1 / -1' }}>
                   <Check size={16} /> Emballé
                 </button>
               </>
@@ -87,7 +87,7 @@ export default function PackingOrderModal({
               <div style={{ fontWeight: 900, fontSize: 16 }}>{progress} / {total}</div>
             </div>
           </div>
-          <div className="progress-bar-bg" style={{ height: 7, marginTop: -10, marginBottom: 18 }} aria-label={`${progress} articles vérifiés sur ${total}`}>
+          <div className="progress-bar-bg" style={{ height: 7, marginTop: -10, marginBottom: 18 }} aria-label={`${progress} articles emballés sur ${total}`}>
             <div className="progress-bar-fill" style={{ width: `${total > 0 ? (progress / total) * 100 : 0}%`, background: isComplete ? '#24A967' : '#F15A24' }} />
           </div>
 
@@ -95,7 +95,7 @@ export default function PackingOrderModal({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {order.items.map((item, idx: number) => {
             const p = productMap.get(item.productId || "");
-            const isChecked = item.isVerified;
+            const isChecked = (item.packingStatus === 'PACKED');
             const isSaving = savingChecks.has(item.id);
             const giftBlocked = item.isGift && item.giftApprovalStatus !== 'APPROVED';
             return (
@@ -272,7 +272,7 @@ export default function PackingOrderModal({
               <button className="btn-secondary" onClick={() => onMarkPacking(order.id, 'PARTIAL')} disabled={isPending || !isPartial} title={!isPartial ? "Cochez au moins un article et laissez les articles manquants décochés" : undefined} style={{ borderColor: 'var(--amber)', color: 'var(--amber)' }}>
                 Incomplet
               </button>
-              <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Vérifiez tous les articles avant de valider" : undefined}>
+              <button className="btn-orange" onClick={() => onMarkPacking(order.id, 'PACKED')} disabled={isPending || !isComplete} title={!isComplete ? "Emballez tous les articles avant de valider" : undefined}>
                 <Check size={14} /> Prêt pour livraison ✓
               </button>
             </>
@@ -298,7 +298,7 @@ export default function PackingOrderModal({
       <SectionLabel>{"Checklist de l'emballeur"}</SectionLabel>
       {order.items.map((item, idx: number) => {
         const p = productMap.get(item.productId || "");
-        const isChecked = item.isVerified;
+        const isChecked = (item.packingStatus === 'PACKED');
         const isSaving = savingChecks.has(item.id);
         const giftBlocked = item.isGift && item.giftApprovalStatus !== 'APPROVED';
         return (

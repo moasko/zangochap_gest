@@ -89,9 +89,9 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     if (!PACKING_SOURCE_STATUSES.includes(order.status)) {
       throw new Error("Cette commande ne peut pas être déclarée emballée depuis son statut actuel.");
     }
-    const unverifiedItems = order.items.filter((item) => !item.isVerified);
+    const unverifiedItems = order.items.filter((item) => item.packingStatus !== 'PACKED');
     if (unverifiedItems.length > 0) {
-      throw new Error(`${unverifiedItems.length} article(s) doivent encore être vérifiés avant l'emballage.`);
+      throw new Error(`${unverifiedItems.length} article(s) doivent encore être marqués emballés.`);
     }
     const blockedGifts = order.items.filter(item => item.isGift && item.giftApprovalStatus !== 'APPROVED');
     if (blockedGifts.length > 0) {
@@ -102,9 +102,9 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     if (!PACKING_SOURCE_STATUSES.includes(order.status)) {
       throw new Error("Cette commande ne peut pas être déclarée partiellement emballée.");
     }
-    const verifiedCount = order.items.filter((item) => item.isVerified).length;
+    const verifiedCount = order.items.filter((item) => item.packingStatus === 'PACKED').length;
     if (verifiedCount === 0 || verifiedCount === order.items.length) {
-      throw new Error("Un emballage partiel doit contenir des articles vérifiés et des articles manquants.");
+      throw new Error("Un emballage partiel doit contenir des articles emballés et des articles manquants.");
     }
     if (!note?.trim()) throw new Error("Indiquez les articles ou quantités manquants.");
   }
@@ -152,13 +152,19 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     await prisma.$transaction(async (tx) => {
       const currentOrder = await tx.order.findUnique({
         where: { id: orderId },
-        include: { items: { select: { isVerified: true, isGift: true, giftApprovalStatus: true } } },
+        include: { items: { select: { packingStatus: true, isGift: true, giftApprovalStatus: true } } },
       });
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new Error("La commande a été modifiée par une autre personne. Actualisez puis réessayez.");
       }
-      if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => !item.isVerified)) {
-        throw new Error("La vérification des articles a changé. Tous les articles doivent être vérifiés.");
+      if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => item.packingStatus !== 'PACKED')) {
+        throw new Error("L'emballage des articles a changé. Tous les articles doivent être emballés.");
+      }
+      if (normalizedStatus === 'PARTIAL') {
+        const packedCount = currentOrder.items.filter(item => item.packingStatus === 'PACKED').length;
+        if (packedCount === 0 || packedCount === currentOrder.items.length) {
+          throw new Error("La sélection d'emballage a changé. Actualisez avant de valider l'emballage partiel.");
+        }
       }
       if (normalizedStatus === 'PACKED' && currentOrder.items.some(item => item.isGift && item.giftApprovalStatus !== 'APPROVED')) {
         throw new Error("L'autorisation d'un cadeau a changé. Actualisez la commande avant de continuer.");

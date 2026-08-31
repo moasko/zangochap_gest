@@ -83,6 +83,7 @@ export default function VerificationClient() {
 
   return (
     <div className="w-full p-5 animate-fade-in print:bg-white print:p-0">
+      <p className="mb-3 text-sm text-gray-600 print:hidden">La vérification est un contrôle distinct : cocher un article ici ne modifie pas son emballage.</p>
       {/* CONTROLS */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 md:p-4 rounded-md mb-6 border border-gray-200 print:hidden">
         <div className="flex items-center gap-2.5">

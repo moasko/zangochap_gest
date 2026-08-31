@@ -43,7 +43,7 @@ const PackingItem = React.memo(({
 }: PackingItemProps) => {
   
   const totalItems = o.items.length;
-  const checkedCount = o.items.filter((i: PackingOrderItem) => i.isVerified).length;
+  const checkedCount = o.items.filter((i: PackingOrderItem) => (i.packingStatus === 'PACKED')).length;
   const progress = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
 
   if (isMobile) {
@@ -224,7 +224,7 @@ const PackingItem = React.memo(({
       </td>
       <td>
         {o.items.map((i: PackingOrderItem, idx: number) => {
-          const isChecked = i.isVerified;
+          const isChecked = (i.packingStatus === 'PACKED');
           const imageUrl = i.image;
           const isSaving = savingChecks.has(i.id);
           const giftBlocked = i.isGift && i.giftApprovalStatus !== 'APPROVED';

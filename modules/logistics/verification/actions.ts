@@ -6,7 +6,8 @@ import { getSession } from "@/modules/auth/actions";
 import { checkOrderAccess, isRole } from "@/modules/orders/helpers";
 import type { Prisma } from "@prisma/client";
 
-const VERIFIABLE_STATUSES = ["CONFIRMED", "PREPARING", "PARTIAL", "UNAVAILABLE", "REPROGRAMMED", "ALTERNATIVE"];
+const PACKING_STATUSES = ["CONFIRMED", "PREPARING", "PARTIAL", "UNAVAILABLE", "REPROGRAMMED", "ALTERNATIVE"];
+const VERIFIABLE_STATUSES = [...PACKING_STATUSES, "PACKED", "ON_DELIVERY", "DELIVERED", "PARTIALLY_DELIVERED", "REPRO_DISPO"];
 
 export async function toggleItemVerification(orderItemId: string, isVerified: boolean) {
   const session = await getSession();
@@ -18,7 +19,7 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
     throw new Error("Accès refusé");
   }
   if (!VERIFIABLE_STATUSES.includes(existing.order.status)) {
-    throw new Error("Cette commande ne peut plus être modifiée depuis l'emballage.");
+    throw new Error("Cette commande ne peut pas être vérifiée dans son état actuel.");
   }
   if (isVerified && existing.isGift && existing.giftApprovalStatus !== "APPROVED") {
     throw new Error(existing.giftApprovalStatus === "REJECTED"
@@ -32,7 +33,6 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
       data: {
         isVerified,
         verifiedAt: isVerified ? new Date() : null,
-        packingStatus: isVerified ? "PACKED" : "PENDING",
       },
     });
     const currentOrder = await tx.order.findUnique({ where: { id: item.orderId }, select: { history: true } });
@@ -55,7 +55,7 @@ export async function toggleItemVerification(orderItemId: string, isVerified: bo
   return { success: true };
 }
 
-export async function markItemNotPacked(orderItemId: string) {
+async function updateItemPacking(orderItemId: string, packed?: boolean) {
   const session = await getSession();
   if (!session) throw new Error("Non authentifie");
 
@@ -64,16 +64,21 @@ export async function markItemNotPacked(orderItemId: string) {
   if (!isRole(session, "admin", "developer", "packing", "stock", "collection") || !checkOrderAccess(existing.order, session)) {
     throw new Error("Accès refusé");
   }
-  if (!VERIFIABLE_STATUSES.includes(existing.order.status)) {
+  if (!PACKING_STATUSES.includes(existing.order.status)) {
     throw new Error("Cette commande ne peut plus être modifiée depuis l'emballage.");
   }
 
-  const nextPackingStatus: "PENDING" | "NOT_PACKED" = existing.packingStatus === "NOT_PACKED" ? "PENDING" : "NOT_PACKED";
+  if (packed && existing.isGift && existing.giftApprovalStatus !== "APPROVED") {
+    throw new Error("Ce cadeau doit être autorisé avant son emballage.");
+  }
+  const nextPackingStatus: "PENDING" | "NOT_PACKED" | "PACKED" = packed === undefined
+    ? (existing.packingStatus === "NOT_PACKED" ? "PENDING" : "NOT_PACKED")
+    : (packed ? "PACKED" : "PENDING");
 
   await prisma.$transaction(async (tx) => {
     const item = await tx.orderItem.update({
       where: { id: orderItemId },
-      data: { isVerified: false, verifiedAt: null, packingStatus: nextPackingStatus },
+      data: { packingStatus: nextPackingStatus },
     });
     const currentOrder = await tx.order.findUnique({ where: { id: item.orderId }, select: { history: true } });
     const history: Prisma.InputJsonObject[] = Array.isArray(currentOrder?.history)
@@ -83,9 +88,7 @@ export async function markItemNotPacked(orderItemId: string) {
       : [];
     history.push({
       at: new Date().toISOString(),
-      action: nextPackingStatus === "NOT_PACKED"
-        ? `Emballage : Article "${item.name}" marqué PAS EMBALLÉ`
-        : `Emballage : État PAS EMBALLÉ retiré pour l'article "${item.name}"`,
+      action: `Emballage : Article "${item.name}" — ${nextPackingStatus === "PACKED" ? "EMBALLÉ" : nextPackingStatus === "NOT_PACKED" ? "PAS EMBALLÉ" : "EN ATTENTE"}`,
       by: session.email,
       byName: session.name,
     });
@@ -94,4 +97,12 @@ export async function markItemNotPacked(orderItemId: string) {
 
   revalidatePath("/zangochap-manager/logistics/packing");
   return { success: true, packingStatus: nextPackingStatus };
+}
+
+export async function toggleItemPacking(orderItemId: string, packed: boolean) {
+  return updateItemPacking(orderItemId, packed);
+}
+
+export async function markItemNotPacked(orderItemId: string) {
+  return updateItemPacking(orderItemId);
 }
