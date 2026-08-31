@@ -18,7 +18,7 @@ export async function getDepositAdminData() {
   return prisma.order.findMany({
     where: { deletedAt: null, commune: { equals: "Hors Abidjan", mode: "insensitive" }, depositVerificationStatus: { not: null } },
     select: {
-      id: true, ref: true, customerName: true, customerPhone: true, total: true, deliveryFee: true,
+      id: true, ref: true, customerName: true, customerPhone: true, total: true, deliveryFee: true, discount: true,
       paymentMethod: true, depositSenderPhone: true, depositTransactionRef: true,
       depositVerificationStatus: true, depositVerificationNote: true, depositVerifiedAt: true,
       depositVerifiedByName: true, commercialName: true, createdAt: true, status: true,
