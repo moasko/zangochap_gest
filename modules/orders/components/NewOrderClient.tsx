@@ -174,6 +174,8 @@ export default function NewOrderClient({ products, user, categories, relayPoints
   const todayInput = toDateInput(new Date());
 
   const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate());
+  const [isPaid, setIsPaid] = useState(false);
+  const requiresPayment = commune === 'Hors Abidjan' || isPaid;
   const [paymentMethod, setPaymentMethod] = useState('');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
   const [depositSenderPhone, setDepositSenderPhone] = useState('');
@@ -580,14 +582,14 @@ Ne passez pas à côté de cette belle surprise !`;
 
     startTransition(async () => {
       try {
-        const finalPaymentMethod = paymentMethod === 'Autres' ? customPaymentMethod : paymentMethod;
+        const finalPaymentMethod = (paymentMethod === 'Autres' ? customPaymentMethod : paymentMethod).trim();
 
-        // Validation for Hors Abidjan
-        if (commune === 'Hors Abidjan' && !finalPaymentMethod) {
-          showToast('Veuillez préciser le mode de règlement pour une expédition', 'error');
+        // Payment details are required for expeditions and orders declared paid.
+        if (requiresPayment && !finalPaymentMethod) {
+          showToast('Veuillez préciser le moyen de paiement du client', 'error');
           return;
         }
-        if (commune === 'Hors Abidjan' && !depositSenderPhone.trim()) {
+        if (requiresPayment && !onlyDigits(depositSenderPhone)) {
           showToast('Veuillez saisir le numéro ayant effectué le dépôt', 'error');
           return;
         }
@@ -604,9 +606,10 @@ Ne passez pas à côté de cette belle surprise !`;
           items,
           type: orderType || undefined,
           deliveryDate,
-          paymentMethod: finalPaymentMethod || undefined,
-          depositSenderPhone: depositSenderPhone || undefined,
-          depositTransactionRef: depositTransactionRef.trim() || undefined,
+          isPaid: requiresPayment,
+          paymentMethod: requiresPayment ? finalPaymentMethod : undefined,
+          depositSenderPhone: requiresPayment ? depositSenderPhone : undefined,
+          depositTransactionRef: requiresPayment ? depositTransactionRef.trim() || undefined : undefined,
           promoCode: discount.code || undefined,
           discount: discount.amount,
         };
@@ -1074,11 +1077,20 @@ Ne passez pas à côté de cette belle surprise !`;
                   <input className="field-input" value={deliveryNote} onChange={e => setDeliveryNote(e.target.value)} placeholder="Ex. Appeler avant de venir" />
                 </div>
 
-                {commune === 'Hors Abidjan' && (
+                {commune !== 'Hors Abidjan' && (
+                  <div className="form-row" style={{ gridColumn: '1 / -1' }}>
+                    <label className="field-label-sm" htmlFor="customer-paid">LE CLIENT A SOLDÉ ?</label>
+                    <select id="customer-paid" className="field-input" value={isPaid ? 'yes' : 'no'} onChange={e => setIsPaid(e.target.value === 'yes')}>
+                      <option value="no">Non, paiement à la livraison</option>
+                      <option value="yes">Oui, le client a soldé</option>
+                    </select>
+                  </div>
+                )}
+                {requiresPayment && (
                   <>
                     <div className="form-row" style={{ gridColumn: '1 / -1' }}>
-                      <label className="field-label-sm" style={{ color: 'var(--orange)', fontWeight: 800 }}>SOLDER PAR (OBLIGATOIRE) *</label>
-                      <select className="field-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ border: '2.5px solid var(--orange-soft)', fontWeight: 800 }}>
+                      <label className="field-label-sm" style={{ color: 'var(--orange)', fontWeight: 800 }}>MOYEN DE PAIEMENT (OBLIGATOIRE) *</label>
+                      <select aria-label="Moyen de paiement" required className="field-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ border: '2.5px solid var(--orange-soft)', fontWeight: 800 }}>
                         <option value="">Sélectionner le mode de règlement...</option>
                         <option value="MTN Money">MTN Money</option>
                         <option value="Orange Money">Orange Money</option>
@@ -1091,12 +1103,12 @@ Ne passez pas à côté de cette belle surprise !`;
                     {paymentMethod === 'Autres' && (
                       <div className="form-row" style={{ gridColumn: '1 / -1' }}>
                         <label className="field-label-sm">PRÉCISER LE MODE DE RÈGLEMENT</label>
-                        <input className="field-input" value={customPaymentMethod} onChange={e => setCustomPaymentMethod(e.target.value)} placeholder="Ex. Western Union, Ria..." />
+                        <input aria-label="Préciser le moyen de paiement" required className="field-input" value={customPaymentMethod} onChange={e => setCustomPaymentMethod(e.target.value)} placeholder="Ex. Western Union, Ria..." />
                       </div>
                     )}
                     <div className="form-row" style={{ gridColumn: '1 / -1' }}>
                       <label className="field-label-sm" style={{ color: 'var(--orange)', fontWeight: 800 }}>NUMÉRO AYANT EFFECTUÉ LE DÉPÔT *</label>
-                      <input className="field-input" value={depositSenderPhone} onChange={e => setDepositSenderPhone(onlyDigits(e.target.value))} inputMode="numeric" autoComplete="off" maxLength={15} placeholder="Ex. 0700000000" style={{ border: '2.5px solid var(--orange-soft)', fontWeight: 800 }} />
+                      <input aria-label="Numéro ayant effectué le paiement" required className="field-input" value={depositSenderPhone} onChange={e => setDepositSenderPhone(onlyDigits(e.target.value))} inputMode="numeric" autoComplete="off" maxLength={15} placeholder="Ex. 0700000000" style={{ border: '2.5px solid var(--orange-soft)', fontWeight: 800 }} />
                       <div style={{ fontSize: 10, color: 'var(--brown-soft)', marginTop: 4 }}>Numéro utilisé par le client pour effectuer le paiement.</div>
                     </div>
                     <div className="form-row" style={{ gridColumn: '1 / -1' }}>

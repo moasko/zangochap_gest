@@ -7559,8 +7559,18 @@ function OrderDetailModal({
                         <CreditCard size={12} />
 
                         <span>
-                          SOLDER PAR : {order.paymentMethod.toUpperCase()}
+                          SOLDÉ PAR : {order.paymentMethod.toUpperCase()}
                         </span>
+                      </div>
+                    )}
+                    {order.depositSenderPhone && (
+                      <div style={{ marginTop: 8, fontSize: 12 }}>
+                        <strong>Numéro de paiement :</strong> {order.depositSenderPhone}
+                      </div>
+                    )}
+                    {order.depositTransactionRef && (
+                      <div style={{ marginTop: 4, fontSize: 12 }}>
+                        <strong>Référence de transaction :</strong> {order.depositTransactionRef}
                       </div>
                     )}
                   </>

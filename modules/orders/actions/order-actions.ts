@@ -101,6 +101,7 @@ export async function createOrder(data: {
   type?: string;
   total?: number;
   deliveryDate?: string;
+  isPaid?: boolean;
   paymentMethod?: string;
   depositSenderPhone?: string;
   depositTransactionRef?: string;
@@ -210,12 +211,13 @@ export async function createOrder(data: {
   // + mêmes articles = ruse client fréquente pour se faire livrer deux fois.
   // Les reprogrammations restent autorisées (flux légitime).
   const isExpedition = data.commune?.trim().toLowerCase() === 'hors abidjan';
-  if (isExpedition && !isWebOrder && !data.paymentMethod?.trim()) {
-    throw new Error("Le moyen de paiement est obligatoire pour une expédition hors Abidjan.");
+  const requiresPayment = !isWebOrder && (isExpedition || data.isPaid === true || (data.isPaid !== false && !!data.paymentMethod?.trim()));
+  if (requiresPayment && !data.paymentMethod?.trim()) {
+    throw new Error("Le moyen de paiement est obligatoire pour une commande soldée ou une expédition hors Abidjan.");
   }
   const depositSenderPhone = String(data.depositSenderPhone || '').replace(/\D/g, '');
-  if (isExpedition && !isWebOrder && !depositSenderPhone) {
-    throw new Error("Le numéro ayant effectué le dépôt est obligatoire pour une expédition hors Abidjan.");
+  if (requiresPayment && !depositSenderPhone) {
+    throw new Error("Le numéro ayant effectué le paiement est obligatoire pour une commande soldée ou une expédition hors Abidjan.");
   }
   if (isExpedition && data.type !== 'Reprogrammé') {
     const toSuffix = (p?: string | null) => {
@@ -451,9 +453,9 @@ export async function createOrder(data: {
             total: finalTotal,
             deliveryFee: Number(data.deliveryFee || 0),
             deliveryNote: relayDeliveryNote,
-            paymentMethod: data.paymentMethod,
-            depositSenderPhone: isExpedition ? depositSenderPhone || null : null,
-            depositTransactionRef: isExpedition ? data.depositTransactionRef?.trim() || null : null,
+            paymentMethod: requiresPayment || isWebOrder ? data.paymentMethod?.trim() || null : null,
+            depositSenderPhone: requiresPayment || isExpedition ? depositSenderPhone || null : null,
+            depositTransactionRef: requiresPayment || isExpedition ? data.depositTransactionRef?.trim() || null : null,
             depositVerificationStatus: isExpedition && !isWebOrder ? 'PENDING' : null,
             status,
             commercialId: isWebOrder ? (assignedCommercial?.id || null) : (session?.id || null),
