@@ -111,6 +111,7 @@ function SupplierCombobox({ suppliers, value, onChange }: { suppliers: any[], va
 
 interface ProductFormProps {
   initialData?: any;
+  defaultIsGift?: boolean;
   categories: any[];
   suppliers: any[];
   warehouses: any[];
@@ -148,6 +149,7 @@ const splitVariantValues = (value: string) =>
 
 export default function ProductForm({
   initialData,
+  defaultIsGift = false,
   categories,
   suppliers,
   warehouses,
@@ -201,7 +203,7 @@ export default function ProductForm({
   const [variants, setVariants] = useState<ProductFormVariant[]>(initialVariants);
   const [isUnpublished, setIsUnpublished] = useState(initialData ? initialData.status !== 'PUBLISHED' : false);
   const [isFeatured, setIsFeatured] = useState(initialData?.isFeatured ?? false);
-  const [isGift, setIsGift] = useState(initialData?.isGift ?? false);
+  const [isGift, setIsGift] = useState(initialData?.isGift ?? defaultIsGift);
 
   // -- Handlers --
   const addImageFiles = async (files: File[]) => {

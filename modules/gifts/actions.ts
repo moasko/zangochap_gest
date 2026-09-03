@@ -66,7 +66,34 @@ export async function getGiftQuotaAdminData() {
     where: { status: "PENDING" },
     orderBy: { createdAt: "asc" },
   });
-  return JSON.parse(JSON.stringify({ usage, requests }));
+  const { start, end } = monthBounds();
+  const [gifts, monthlyItems] = await Promise.all([
+    prisma.product.findMany({
+      where: { isGift: true },
+      select: { id: true, name: true, ref: true, emoji: true, stock: true, lowStockThreshold: true, status: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.orderItem.findMany({
+      where: {
+        isGift: true,
+        giftApprovalStatus: "APPROVED",
+        order: { deletedAt: null, status: { not: "CANCELLED" }, createdAt: { gte: start, lt: end } },
+      },
+      select: { productId: true, qty: true, giftUnitValue: true },
+    }),
+  ]);
+  const quantities = new Map<string, number>();
+  for (const item of monthlyItems) {
+    if (item.productId) quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.qty);
+  }
+  return JSON.parse(JSON.stringify({ usage, requests,
+    gifts: gifts.map(gift => ({ ...gift, monthlyQuantity: quantities.get(gift.id) || 0 })),
+    statistics: {
+      month: start.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }),
+      quantity: monthlyItems.reduce((total, item) => total + item.qty, 0),
+      value: monthlyItems.reduce((total, item) => total + item.qty * item.giftUnitValue, 0),
+    },
+  }));
 }
 
 export async function updateCommercialGiftQuota(commercialId: string, quantity: number, value: number) {

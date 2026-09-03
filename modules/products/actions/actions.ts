@@ -232,6 +232,7 @@ export async function createProduct(data: {
   }));
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/");
   return JSON.parse(JSON.stringify(product));
@@ -301,6 +302,7 @@ export async function updateProductVariants(productId: string, variants: Array<{
   await syncProductStock(productId);
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/zangochap-manager/logistics");
   revalidatePath("/zangochap-manager/logistics/packing");
   revalidatePath("/zangochap-manager/logistics/collection");
@@ -391,6 +393,7 @@ export async function updateProductVariantsById(productId: string, variants: Arr
   await syncProductStock(productId);
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/zangochap-manager/logistics");
   revalidatePath("/zangochap-manager/logistics/packing");
   revalidatePath("/zangochap-manager/logistics/collection");
@@ -529,6 +532,7 @@ export async function updateProductVariantStockLevels(productId: string, data: {
   await syncProductStock(productId);
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/zangochap-manager/logistics");
   revalidatePath("/zangochap-manager/logistics/packing");
   revalidatePath("/zangochap-manager/logistics/collection");
@@ -761,6 +765,7 @@ export async function updateProduct(id: string, data: Partial<{
   }
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/");
   return { success: true };
 }
@@ -811,6 +816,7 @@ export async function deleteProduct(id: string) {
   }
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/");
   return { success: true };
 }
@@ -823,6 +829,7 @@ export async function markProductSent(productId: string) {
     data: { sentToSupplierAt: new Date() },
   });
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   return { success: true };
 }
 
@@ -840,6 +847,7 @@ export async function fixAllProductStocks() {
   }
 
   revalidatePath("/zangochap-manager/products");
+  revalidatePath("/zangochap-manager/admin/settings/gifts");
   revalidatePath("/zangochap-manager/dashboard");
   revalidatePath("/");
 

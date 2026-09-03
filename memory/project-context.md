@@ -1,6 +1,6 @@
 # Contexte durable — ZangoChap Gest
 
-Dernière vérification statique : 2026-08-17.
+Dernière vérification statique : 2026-08-26.
 
 ## Finalité
 
@@ -48,6 +48,8 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
 
 ## Invariants importants
 
+- Emballage et vérification sont indépendants : `OrderItem.packingStatus` pour la préparation, `isVerified`/`verifiedAt` pour le contrôle. Ne jamais les synchroniser automatiquement.
+
 - Une session staff doit être vérifiée côté serveur avant toute mutation.
 - `getSession()` revalide actuellement l'utilisateur JWT en base.
 - Le rôle développeur est autorisé implicitement par `ensureAuth()`.
@@ -55,14 +57,73 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
 - Le stock existe à trois niveaux : produit, variante et niveau par entrepôt.
 - Toute mutation de commande peut avoir un impact sur stock, livraison et settlement.
 - Les historiques de plusieurs entités sont conservés dans des champs JSON.
+- Le décrément de stock intervient au passage à `PACKED`, dans la même transaction
+  Prisma que le changement de statut.
+- `TO_PROCESS` est réservé à l'entrée des commandes publiques et ne peut pas être
+  choisi via l'action générique de changement de statut.
+- Les statuts de clôture livraison (`RETURNED`, `CANCELLED`, `REPRO_DISPO`)
+  exigent un motif ; `REPRO_DISPO` exige aussi une nouvelle date.
+- Les nouvelles commandes staff `Hors Abidjan` portent un contrôle de dépôt. Tant
+  que `depositVerificationStatus` n'est pas `RECEIVED`, elles ne peuvent pas être
+  emballées ni passer en livraison. Les anciennes commandes sans état restent compatibles.
+- Une commande clôturée ne peut être rouverte après rattachement à un settlement.
+- La livraison partielle mutile actuellement les lignes livrées et crée des lignes
+  de retour : toute correction ultérieure doit tenir compte de cette transformation.
+
+## Flux métier observés
+
+### Commande publique et staff
+
+- La boutique publique couvre catalogue, recherche, fiche produit, panier et compte.
+- Les commandes staff et publiques convergent dans `modules/orders/actions`.
+- Les commandes publiques entrent dans la file `TO_PROCESS`; prise en charge,
+  confirmation, packing, livraison et règlement sont ensuite opérés côté staff.
+- Les façades `modules/orders/actions/index.ts` et `modules/products/actions/index.ts`
+  sont les points d'import à privilégier depuis l'extérieur des modules.
+
+### Stock
+
+- `StockLevel` est la source détaillée par variante et entrepôt.
+- `ProductVariant.stock` est un agrégat des niveaux d'entrepôt et `Product.stock`
+  est un agrégat des variantes.
+- Les sorties créent des `StockMovement` et consomment plusieurs niveaux si besoin.
+- L'idempotence reste pilotée principalement par `Order.stockDecremented`.
+- Les retours cherchent les mouvements de vente précédents pour choisir l'entrepôt,
+  mais le modèle ne relie pas un mouvement à une ligne de commande précise.
+
+### Livraison et règlement
+
+- L'assignation livreur, les statuts terrain, les tentatives et les corrections admin
+  sont répartis entre `delivery-actions.ts` et `status-actions.ts`.
+- `amountReceived` est distinct du total théorique et alimente le settlement.
+- Un `Settlement` agrège plusieurs commandes et sépare produits/frais au niveau global,
+  sans lignes de snapshot immuables par commande.
+- `REPRO_DISPO` représente une tentative clôturée/replanifiée sur la même commande,
+  tandis qu'un autre flux de reprogrammation peut dupliquer la commande : cette
+  dualité doit être clarifiée avant tout changement de comportement.
+
+### Comptabilité et intégrations
+
+- La comptabilité est structurée en sessions journalières, opérations, catégories,
+  groupes, rapports et journaux d'audit.
+- Une contrainte unique évite deux opérations comptables `DELIVERY` pour le même
+  identifiant de commande.
+- WhatsApp utilise la Cloud API et conserve réglages/journaux opérationnels via CMS.
+- Les médias peuvent être envoyés vers Cloudflare R2; `public/uploads` reste monté
+  en volume dans Docker.
+- Chat et alertes rider utilisent notamment SSE et une file d'événements en mémoire.
 
 ## État technique vérifié
 
-- Environ 362 fichiers hors dépendances lors de l'analyse du 2026-08-17.
+- 361 fichiers hors dépendances, build et uploads lors du comptage du 2026-08-26,
+  dont 291 fichiers TypeScript/TSX.
 - `npx.cmd tsc --noEmit --incremental false` réussit.
-- `npm.cmd run lint` échoue avec 851 problèmes : 768 erreurs et 83 avertissements.
+- Le dernier audit lint documenté reste en échec massif; il n'a pas été relancé le
+  2026-08-26 afin de ne pas confondre dette historique et analyse de connaissance.
 - Aucun framework de test structuré n'est déclaré dans `package.json`.
 - Beaucoup de composants sont encore très volumineux et orientés client.
+- Environ 811 occurrences textuelles de `any` ont été relevées dans `app`, `modules`,
+  `lib` et `components`; seulement 7 fichiers importent actuellement Zod.
 
 ## Risques connus
 
@@ -71,13 +132,30 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
 3. Restauration de stock multi-entrepôts potentiellement approximative.
 4. Settlement sans snapshot immuable détaillé par commande.
 5. Validation Zod inégale ; plusieurs frontières serveur utilisent encore `any`.
-6. Autorisations inégales : certaines routes vérifient seulement l'authentification.
+6. Autorisations et validation inégales : certaines frontières vérifient seulement
+   l'authentification et beaucoup de payloads utilisent encore `any`.
 7. Authentification client basée sur un cookie d'identifiant non signé.
-8. `lib/prisma.ts` supprime actuellement le singleton global avant de le recréer.
-9. `scripts/start-prod.sh` utilise `prisma db push --accept-data-loss`.
+8. Inscription client sans schéma serveur robuste; le modèle `User.email` obligatoire
+   rend aussi le contrat du formulaire client particulièrement sensible.
+9. API promos désormais protégée, mais validation de payload incomplète et suppression
+   physique des usages lors de la suppression d'un code.
 10. SSE et événements internes en mémoire, donc non partagés entre plusieurs instances.
-11. Duplication probable de plusieurs composants de fiche produit.
-12. Dette ESLint importante et absence de tests automatisés complets.
+11. `middleware.ts` et `proxy.ts` coexistent avec la même garde; surveiller la convention
+   attendue lors des montées de version Next.js.
+12. Duplication probable de plusieurs composants de fiche produit.
+13. Dette ESLint importante et absence de tests automatisés complets.
+14. Très gros composants clients (jusqu'à ~186 Ko pour `OrdersClient.tsx`) qui
+   concentrent état, calculs, modales et rendu.
+
+## Correctifs de sécurité déjà présents (ne pas les régresser)
+
+- `getSession()` vérifie le JWT puis recharge l'utilisateur courant en base.
+- En production, un `JWT_SECRET` absent ou égal à l'ancien secret compromis échoue fermé.
+- `lib/prisma.ts` réutilise correctement le singleton global en développement.
+- `app/api/promos/route.ts` exige désormais un rôle admin/développeur et dérive
+  `creatorId` de la session.
+- `scripts/start-prod.sh` n'exécute plus aucune migration ni `db push` automatique.
+- Le démarrage Docker exige explicitement `DATABASE_URL` et `JWT_SECRET`.
 
 ## Fichiers à consulter selon la tâche
 
@@ -97,6 +175,16 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
 3. Ajouter des snapshots de settlement.
 4. Uniformiser validation et autorisation aux frontières serveur.
 5. Sécuriser l'authentification client.
-6. Remplacer `db push --accept-data-loss` par des migrations contrôlées.
+6. Remplacer le cookie client non signé par une session vérifiable et valider
+   strictement inscription/connexion client.
 7. Découper les composants monolithiques et ajouter des tests de parcours.
 
+## Discipline d'intervention
+
+- Ne jamais lancer de migration, seed, réparation ou écriture de données sans accord
+  explicite du propriétaire; commencer par un audit en lecture seule.
+- Considérer `prisma/schema.prisma`, le code et `AGENT.md` comme sources d'autorité.
+- `AGENT.md` mentionne un `AGENTS.md` obligatoire, mais aucun fichier de ce nom
+  n'existait dans le dépôt au 2026-08-26 : ne pas inventer ses règles.
+- Préserver les modifications locales et vérifier `git status --short` avant édition.
+- Après code : exécuter TypeScript, puis lint en distinguant les erreurs préexistantes.

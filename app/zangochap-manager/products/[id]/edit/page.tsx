@@ -10,7 +10,8 @@ import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ gift?: string }> }) {
+  const giftMode = (await searchParams).gift === "1";
   const { id } = await params;
   const product = await getProductById(id);
   
@@ -31,7 +32,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   ]);
   
   return (
-    <EditProductClient 
+    <EditProductClient giftMode={giftMode}
       product={JSON.parse(JSON.stringify(product))}
       warehouses={JSON.parse(JSON.stringify(warehouses))} 
       categories={JSON.parse(JSON.stringify(categories))} 

@@ -13,16 +13,16 @@ export default async function GiftQuotaPage() {
 
   try {
     const data = await getGiftQuotaAdminData();
-    return <><Topbar title="Configuration" subtitle="quotas cadeaux" /><GiftQuotaClient initialData={data} /></>;
+    return <><Topbar title="Configuration" subtitle="gestion des cadeaux" /><GiftQuotaClient initialData={data} /></>;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erreur inconnue";
     return <>
-      <Topbar title="Configuration" subtitle="quotas cadeaux" />
+      <Topbar title="Configuration" subtitle="gestion des cadeaux" />
       <div className="content">
         <div className="empty" style={{ maxWidth: 680, margin: "40px auto" }}>
-          <h4>Configuration de la base requise</h4>
-          <p>Votre accès est autorisé, mais les tables des quotas cadeaux ne sont pas encore disponibles.</p>
-          <p className="cell-muted">Appliquez, après sauvegarde, le script <code>prisma/manual-migrations/20260828_add_gift_quotas.sql</code>, puis actualisez cette page.</p>
+          <h4>Impossible de charger les cadeaux</h4>
+          <p>Le chargement des cadeaux a échoué. Réessayez dans quelques instants.</p>
+          <p className="cell-muted">Si les tables des quotas sont manquantes, appliquez après sauvegarde le script <code>prisma/manual-migrations/20260828_add_gift_quotas.sql</code>, puis actualisez cette page.</p>
           <details style={{ marginTop: 12, textAlign: "left" }}><summary>Détail technique</summary><pre style={{ whiteSpace: "pre-wrap" }}>{message}</pre></details>
         </div>
       </div>
