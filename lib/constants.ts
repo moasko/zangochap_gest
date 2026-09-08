@@ -17,6 +17,7 @@ export const COMMUNES: Record<string, string> = {
   'Abidjan BJ': 'BJ',
   'Boutique': 'BT',
   'Hors Abidjan': 'EXP',
+  'Bouake': 'BK',
 };
 
 // Tarifs de livraison standards par commune
@@ -37,6 +38,7 @@ export const DELIVERY_FEES: Record<string, number> = {
   'Songon': 2000,
   'Abidjan BJ': 1500,
   'Hors Abidjan': 2500,
+  'Bouake': 2500,
 };
 
 export const ROLE_LABELS: Record<string, string> = {
