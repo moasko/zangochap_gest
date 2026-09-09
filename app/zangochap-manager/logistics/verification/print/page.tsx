@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { formatDay } from "@/lib/constants";
+import type { Prisma } from "@prisma/client";
 import React from "react";
 
 import PrintActions from "@/modules/logistics/verification/PrintActions";
@@ -21,9 +21,21 @@ export default async function VerificationPrintPage({
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
-  let dateFilter: any;
+  const operationalDateFilter: Prisma.OrderWhereInput = {
+    OR: [
+      { confirmedAt: { gte: startOfDay, lte: endOfDay } },
+      {
+        AND: [
+          { confirmedAt: null },
+          { createdAt: { gte: startOfDay, lte: endOfDay } },
+        ],
+      },
+    ],
+  };
+
+  let dateFilter: Prisma.OrderWhereInput;
   if (type === 'created') {
-    dateFilter = { createdAt: { gte: startOfDay, lte: endOfDay } };
+    dateFilter = operationalDateFilter;
   } else {
     dateFilter = {
       OR: [
@@ -31,7 +43,7 @@ export default async function VerificationPrintPage({
         { 
           AND: [
             { deliveryDate: null },
-            { createdAt: { gte: startOfDay, lte: endOfDay } }
+            operationalDateFilter,
           ]
         }
       ]
@@ -116,3 +128,4 @@ export default async function VerificationPrintPage({
     </div>
   );
 }
+
