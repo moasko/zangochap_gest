@@ -16,12 +16,27 @@ export async function getTodayLabels() {
 
   const orders = await prisma.order.findMany({
     where: {
-      createdAt: {
-        gte: startOfDay,
-        lte: endOfDay,
-      },
+      OR: [
+        {
+          confirmedAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+        {
+          AND: [
+            { confirmedAt: null },
+            {
+              createdAt: {
+                gte: startOfDay,
+                lte: endOfDay,
+              },
+            },
+          ],
+        },
+      ],
       status: {
-        notIn: ["CANCELLED", "REPRO_DISPO"],
+        notIn: ["CANCELLED", "PENDING", "TO_PROCESS", "REPRO_DISPO"],
       },
       ref: {
         not: null,
@@ -34,6 +49,7 @@ export async function getTodayLabels() {
       labeledAt: true,
       labeledByName: true,
       createdAt: true,
+      confirmedAt: true,
       items: {
         select: {
           id: true,
@@ -46,9 +62,10 @@ export async function getTodayLabels() {
         },
       },
     },
-    orderBy: {
-      createdAt: "asc",
-    },
+    orderBy: [
+      { confirmedAt: "asc" },
+      { createdAt: "asc" },
+    ],
   });
 
   return orders;
@@ -61,7 +78,7 @@ export async function toggleLabelStatus(orderId: string, isLabeled: boolean) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: { history: true } });
   if (!order) throw new Error("Commande introuvable");
 
-  const history = Array.isArray(order.history) ? [...(order.history as any[])] : [];
+  const history = Array.isArray(order.history) ? [...order.history] : [];
   history.push({
     at: new Date().toISOString(),
     action: isLabeled ? "Étiquette marquée comme posée" : "Étiquette décochée",
@@ -110,3 +127,4 @@ export async function checkAllLabels(orderIds: string[], isLabeled: boolean) {
   revalidatePath("/zangochap-manager/orders");
   return { success: true };
 }
+
