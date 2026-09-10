@@ -12,11 +12,12 @@ interface UserProps {
   role?: string;
 }
 
-export function ProfileView({ user, stats, navigate, logout }: {
+export function ProfileView({ user, stats, navigate, logout, gpsSettingsRef }: {
   user: UserProps;
   stats: RiderStats;
   navigate: (tab: "missions" | "history" | "wallet") => void;
   logout: () => void;
+  gpsSettingsRef?: (element: HTMLDivElement | null) => void;
 }) {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const initials = user.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join("").toUpperCase();
@@ -34,6 +35,7 @@ export function ProfileView({ user, stats, navigate, logout }: {
       </div>
       <div className="mt-3 flex items-start gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600"><Mail size={15} className="mt-0.5 shrink-0" /><span className="break-all">{user.email}</span></div>
     </div>
+    {user.role?.toUpperCase() === "LIVREUR" && <div ref={gpsSettingsRef} />}
     <div className="grid grid-cols-2 gap-2">
       <button onClick={() => navigate("missions")} className="rounded-lg border border-slate-200 bg-white p-3 text-left"><span className="text-xs text-slate-500">Missions à traiter</span><strong className="mt-1 block text-xl text-slate-900">{stats.count}</strong></button>
       <button onClick={() => navigate("history")} className="rounded-lg border border-slate-200 bg-white p-3 text-left"><span className="text-xs text-slate-500">Livrées aujourd’hui</span><strong className="mt-1 block text-xl text-slate-900">{stats.deliveredToday}</strong></button>
