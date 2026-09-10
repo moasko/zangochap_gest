@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get("mode") || "live";
   try {
     const riders = await prisma.user.findMany({
-      where: { role: "LIVREUR" }, select: { id: true, name: true }, orderBy: { name: "asc" },
+      where: { role: "LIVREUR" }, select: { id: true, name: true, phone: true }, orderBy: { name: "asc" },
     });
     if (mode === "live") {
       const states = await prisma.riderTrackingState.findMany({

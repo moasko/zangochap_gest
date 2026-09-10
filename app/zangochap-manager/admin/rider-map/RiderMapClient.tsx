@@ -31,7 +31,7 @@ export default function RiderMapClient() {
   const points = useMemo(() => mode === "history" && riderId && validPeriod ? history.data?.points || [] : [], [mode, riderId, validPeriod, history.data]);
   const states = live.data?.states;
   const riders = live.data?.riders;
-  const markers = useMemo<MapMarker[]>(() => mode !== "live" ? [] : (states || []).filter(s => (!riderId || s.riderId === riderId) && s.latitude !== null && s.longitude !== null && s.capturedAt).map(s => ({ id: s.riderId, name: riders?.find(r => r.id === s.riderId)?.name || "Livreur", latitude: s.latitude!, longitude: s.longitude!, accuracy: s.accuracy || 0, time: s.capturedAt!, status: trackingStatus(s, now) })), [states, riders, mode, riderId, now]);
+  const markers = useMemo<MapMarker[]>(() => mode !== "live" ? [] : (states || []).filter(s => (!riderId || s.riderId === riderId) && s.latitude !== null && s.longitude !== null && s.capturedAt).map(s => ({ id: s.riderId, name: riders?.find(r => r.id === s.riderId)?.name || "Livreur", phone: riders?.find(r => r.id === s.riderId)?.phone || null, latitude: s.latitude!, longitude: s.longitude!, accuracy: s.accuracy || 0, time: s.capturedAt!, status: trackingStatus(s, now) })), [states, riders, mode, riderId, now]);
   useEffect(() => { setCursor(0); setPlaying(false); }, [riderId, day, from, to, mode]);
   useEffect(() => {
     if (!playing) return;

@@ -2,8 +2,8 @@
 
 ## Fonctionnement
 - `/zangochap-manager/admin/rider-map` : carte Leaflet/OpenStreetMap, accès ADMIN/DEVELOPER seulement. Positions actuelles interrogées toutes les 10 secondes, historique par livreur et jour/plage horaire Abidjan (UTC). Lecture point par point. Au maximum 10 000 points par recherche, dépassement visible, invitation à réduire les heures.
-- Le livreur démarre volontairement depuis son portail. HTTPS et permission GPS nécessaires. Mesure environ toutes les 10 secondes, envoi si déplacement >= 20 m ou dernière transmission >= 60 secondes. Le GPS n'est pas exact : la précision annoncée par le téléphone est affichée.
-- Aucun démarrage automatique, aucun stockage local de coordonnées. Arrêt local immédiat ; les tokens d'arrêt non confirmés sont conservés en sessionStorage et réessayés à la reconnexion. Fermeture/pagehide tente l'arrêt avec keepalive. Un arrêt réseau n'est pas garanti à la fermeture brutale : la carte signale les positions anciennes.
+- Le suivi démarre automatiquement à l’ouverture du portail, sous réserve de l’autorisation GPS du téléphone. HTTPS et permission GPS nécessaires. Mesure environ toutes les 10 secondes, envoi si déplacement >= 20 m ou dernière transmission >= 60 secondes. Le GPS n'est pas exact : la précision annoncée par le téléphone est affichée.
+- Démarrage automatique ; arrêt manuel mémorisé dans sessionStorage pour cet onglet, jusqu’à réactivation. Aucun stockage local de coordonnées. Arrêt local immédiat ; les tokens d'arrêt non confirmés sont conservés en sessionStorage et réessayés à la reconnexion. Fermeture/pagehide tente l'arrêt avec keepalive. Un arrêt réseau n'est pas garanti à la fermeture brutale : la carte signale les positions anciennes.
 - Le navigateur peut suspendre GPS et timers en arrière-plan/écran verrouillé. Ce portail web ne garantit pas un suivi permanent en arrière-plan. Pas de reconstitution des trajets hors réseau.
 - Les tracés sont interrompus entre sessions ou après plus de 5 minutes sans point. Les traits ne sont pas des itinéraires routiers calculés.
 

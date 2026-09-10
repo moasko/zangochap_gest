@@ -192,3 +192,9 @@ Les entrées les plus récentes sont placées en premier.
 - Routes GPS avec rôle/origine/identité serveur, validation, session d'appareil, sérialisation transactionnelle des points et arrêts, limitation d'envoi et déduplication.
 - Deux modèles Prisma et migration manuelle 20260910_add_rider_tracking.sql préparés ; client généré localement, aucune migration appliquée. Accord explicite requis pour zangochapdb. Historique sans purge automatique.
 - Tests GPS sur base simulée et tests historique OK, TypeScript OK, lint ciblé OK ; lint global : 755 erreurs / 83 avertissements préexistants. Validation sur téléphone restant à faire après activation.
+
+## 2026-09-10 — Points livreurs nominatifs
+- Carte directe : nom visible sur chaque repère, clic ou clavier pour ouvrir la fiche (statut, dernier point, précision, téléphone cliquable si renseigné). Fiche maintenue ouverte aux actualisations. Téléphone ajouté à la sélection API admin uniquement ; aucune migration supplémentaire.
+
+## 2026-09-10 — GPS automatique et discret
+- À la demande du propriétaire, démarrage GPS à l’ouverture du portail avec permission navigateur ; tentative à la reconnexion si nécessaire, pas de boucle après refus GPS. Contrôle compact avec état visible, arrêt et détails repliables. Arrêt manuel conservé dans cet onglet jusqu’à réactivation, sans stockage de coordonnées. Aucune modification de base.

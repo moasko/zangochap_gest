@@ -21,7 +21,7 @@ export type RiderTrackState = {
   accuracy: number | null;
 };
 export type RiderTrackingResponse = {
-  riders: { id: string; name: string }[];
+  riders: { id: string; name: string; phone: string | null }[];
   states: RiderTrackState[];
   points: RiderTrackPoint[];
   total: number;

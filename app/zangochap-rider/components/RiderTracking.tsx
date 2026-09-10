@@ -31,6 +31,10 @@ export function RiderTracking({ riderId }: { riderId: string }) {
   const [last, setLast] = useState<{ time: string; accuracy: number } | null>(null);
   const token = useRef<string | null>(null);
   const generation = useRef(0);
+  const starting = useRef(false);
+  const permissionDenied = useRef(false);
+  const paused = useRef(false);
+  const pauseKey = "rider-gps-paused:" + riderId;
   const mounted = useRef(false);
   const sampling = useRef(false);
   const sent = useRef<SentPosition | null>(null);
@@ -54,6 +58,7 @@ export function RiderTracking({ riderId }: { riderId: string }) {
 
   const stop = useCallback(() => {
     generation.current++;
+    starting.current = false;
     const sessionId = token.current;
     token.current = null;
     sent.current = null;
@@ -116,9 +121,9 @@ export function RiderTracking({ riderId }: { riderId: string }) {
       catch (error) {
         if (token.current !== sessionId || !mounted.current) return;
         if (error instanceof Error && error.message === "SESSION_STOPPED") {
-          stop(); setNotice("Cette tournée a été arrêtée ou remplacée sur un autre appareil.");
+          paused.current = true; stop(); setNotice("Cette tournée a été arrêtée ou remplacée sur un autre appareil.");
         } else if (typeof error === "object" && error && "code" in error && error.code === 1) {
-          stop(); setNotice("Autorisation GPS retirée. Suivi arrêté.");
+          permissionDenied.current = true; stop(); setNotice("Autorisation GPS retirée. Suivi arrêté.");
         } else setNotice(error instanceof Error ? error.message : "Position indisponible. Nouvelle tentative dans 10 secondes.");
       } finally { sampling.current = false; }
     };
@@ -126,10 +131,11 @@ export function RiderTracking({ riderId }: { riderId: string }) {
     return () => window.clearInterval(timer);
   }, [active, upload, stop]);
 
-  const start = async () => {
-    if (busy || token.current) return;
+  const start = useCallback(async () => {
+    if (starting.current || token.current) return;
     if (!window.isSecureContext || !navigator.geolocation) { setNotice("Le GPS nécessite HTTPS et un navigateur compatible."); return; }
     if (!navigator.onLine) { setNotice("Connectez-vous au réseau pour démarrer."); return; }
+    starting.current = true;
     setBusy(true); setNotice("Autorisez la localisation pour partager votre position pendant la tournée.");
     const version = ++generation.current;
     let newSession: string | null = null;
@@ -147,22 +153,40 @@ export function RiderTracking({ riderId }: { riderId: string }) {
       if (newSession && token.current !== newSession) {
         pendingStops.current.add(newSession); saveStops(); void flushStops();
       }
-      if (mounted.current) setNotice(error instanceof Error ? error.message : "GPS indisponible ou autorisation refusée. Vérifiez les réglages du téléphone.");
-    } finally { if (mounted.current) setBusy(false); }
+      if (typeof error === "object" && error && "code" in error && error.code === 1) permissionDenied.current = true;
+      if (mounted.current && version === generation.current) setNotice(error instanceof Error ? error.message : "GPS indisponible ou autorisation refusée. Vérifiez les réglages du téléphone.");
+    } finally {
+      if (version === generation.current) { starting.current = false; if (mounted.current) setBusy(false); }
+    }
+  }, [flushStops, saveStops, upload]);
+
+  useEffect(() => {
+    try { paused.current = sessionStorage.getItem(pauseKey) === "1"; } catch { /* Optional preference storage. */ }
+    const autoStart = () => { if (!paused.current && !permissionDenied.current) void start(); };
+    // Deferred so Strict Mode's trial mount does not request GPS twice.
+    const timer = window.setTimeout(autoStart, 0);
+    window.addEventListener("online", autoStart);
+    return () => { window.clearTimeout(timer); window.removeEventListener("online", autoStart); };
+  }, [pauseKey, start]);
+
+  const toggle = () => {
+    paused.current = active || busy;
+    try { sessionStorage.setItem(pauseKey, paused.current ? "1" : "0"); } catch { /* Keep the in-memory preference. */ }
+    if (paused.current) stop();
+    else { permissionDenied.current = false; void start(); }
   };
 
-  return <section className="mb-3 rounded-md border border-slate-200 bg-white p-3" aria-label="Partage de position">
-    <div className="flex items-center gap-2">
-      <LocateFixed size={17} className={active ? "text-green-700" : "text-slate-500"} />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-slate-900">{active ? "Position partagée avec le bureau" : "Suivi de tournée désactivé"}</p>
-        {active && last && <p className="text-[11px] text-slate-500">Dernier envoi {last.time} · précision ±{last.accuracy} m</p>}
-      </div>
-      <button type="button" disabled={busy && !active} onClick={active ? stop : () => { void start(); }} className={`min-h-11 rounded-md px-3 text-xs font-bold disabled:opacity-50 ${active ? "bg-red-50 text-red-700" : "bg-slate-900 text-white"}`}>{active ? "Arrêter" : busy ? "GPS…" : "Démarrer"}</button>
+  return <section className="mb-2 px-1" aria-label="Partage de position">
+    <div className="flex min-h-9 items-center gap-2 text-xs">
+      <LocateFixed size={14} className={active ? "text-green-700" : "text-slate-400"} />
+      <span role="status" className="min-w-0 flex-1 text-slate-500">{active ? "GPS partagé avec le bureau" : busy ? "Connexion GPS…" : "GPS désactivé"}</span>
+      <button type="button" onClick={toggle} className="min-h-10 rounded-md px-2 text-xs font-medium text-slate-600 underline underline-offset-2">{active || busy ? "Arrêter" : "Activer"}</button>
     </div>
-    {notice && <p role="status" className="mt-2 text-xs text-amber-800">{notice}</p>}
-    <details className="mt-1 text-xs text-slate-500"><summary className="cursor-pointer py-2">Comment fonctionne le suivi ?</summary>
-      <p>En démarrant, vous partagez votre position GPS avec les administrateurs. Les points sont enregistrés dans l’historique : environ toutes les 10 secondes en déplacement, toutes les minutes à l’arrêt. Gardez cette page ouverte ; le suivi peut être suspendu écran verrouillé. Vous pouvez arrêter à tout moment. Aucun suivi ne démarre automatiquement.</p>
+    <details className="text-[11px] text-slate-500">
+      <summary className="w-fit cursor-pointer py-1">{notice && !busy ? "GPS : informations" : "Détails du suivi"}</summary>
+      {notice && <p role="status" className="my-1 text-amber-800">{notice}</p>}
+      {active && last && <p className="my-1">Dernier envoi {last.time} · précision ±{last.accuracy} m</p>}
+      <p className="mt-1">Le suivi démarre à l’ouverture avec l’autorisation GPS du téléphone. Votre position est partagée avec les administrateurs et enregistrée environ toutes les 10 secondes en déplacement, toutes les minutes à l’arrêt. Un arrêt manuel reste mémorisé dans cet onglet jusqu’à réactivation. Gardez cette page ouverte ; le suivi peut être suspendu écran verrouillé.</p>
     </details>
   </section>;
 }
