@@ -3,6 +3,7 @@ import GlobalChatAccess from "@/components/GlobalChatAccess";
 import { getSession } from "@/modules/auth/actions";
 import { redirect } from "next/navigation";
 import "../zangochap-manager/chat/chat.css";
+import "./rider.css";
 
 export const metadata: Metadata = {
   title: "ZangoChap Rider",
@@ -11,11 +12,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F5F5F7",
+  themeColor: "#FFFFFF",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 

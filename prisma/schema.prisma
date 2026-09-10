@@ -117,6 +117,35 @@ enum AccountingSessionStatus {
   CLOSED
 }
 
+model RiderTrackingState {
+  riderId        String   @id
+  rider          User     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  sessionId      String
+  active         Boolean  @default(false)
+  startedAt      DateTime @default(now())
+  stoppedAt      DateTime?
+  lastReceivedAt DateTime?
+  capturedAt     DateTime?
+  latitude       Float?
+  longitude      Float?
+  accuracy       Float?
+}
+
+model RiderLocationPoint {
+  id         String   @id
+  riderId    String
+  rider      User     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  sessionId  String
+  latitude   Float
+  longitude  Float
+  accuracy   Float
+  capturedAt DateTime
+  receivedAt DateTime @default(now())
+
+  @@index([riderId, capturedAt])
+  @@index([receivedAt])
+}
+
 model User {
   id           String       @id @default(cuid())
   email        String       @unique
@@ -125,6 +154,8 @@ model User {
   password     String
   role         Role         @default(COMMERCIAL)
   initials     String?
+  trackingState RiderTrackingState?
+  locationPoints RiderLocationPoint[]
   phone2       String? // Second numéro
   serviceLabel String? // Libellé si numéro de service
   isPaused     Boolean      @default(false)

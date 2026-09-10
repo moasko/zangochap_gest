@@ -1,8 +1,7 @@
 "use client";
 
-import React from "react";
-import { Banknote, CheckCircle2, Clock3, PackageCheck, ReceiptText, Wallet } from "lucide-react";
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { Banknote, CheckCircle2, ChevronRight, Search } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 import { RiderOrder, RiderRevenueDay, RiderStats } from "../types";
 import { calculateOrderCollectionTotal } from "../utils";
@@ -11,208 +10,61 @@ type WalletViewProps = {
   stats: RiderStats;
   ordersToSettle: RiderOrder[];
   revenueHistory: RiderRevenueDay[];
+  onOpen: (order: RiderOrder) => void;
 };
 
-function formatTime(value: string | Date) {
-  return new Date(value).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-}
+export function WalletView({ stats, ordersToSettle, revenueHistory, onOpen }: WalletViewProps) {
+  const [period, setPeriod] = useState("today");
+  const [status, setStatus] = useState("all");
+  const [search, setSearch] = useState("");
+  const [limit, setLimit] = useState(15);
+  const today = new Date().toISOString().slice(0, 10);
+  const allOrders = Array.from(new Map([...revenueHistory.flatMap(d => d.orders), ...ordersToSettle].map(o => [o.id, o])).values());
+  const pendingTotal = ordersToSettle.reduce((sum, o) => sum + calculateOrderCollectionTotal(o), 0);
+  const pendingFees = ordersToSettle.reduce((sum, o) => sum + Math.min(Math.max(0, o.deliveryFee), calculateOrderCollectionTotal(o)), 0);
+  const query = search.trim().toLocaleLowerCase("fr");
+  const filtered = allOrders.filter(o => {
+    const date = new Date(o.deliveredAt || o.deliveryDate || o.updatedAt || o.createdAt).toISOString().slice(0, 10);
+    return (period === "all" || date === today)
+      && (status === "all" || (status === "pending" ? !o.settlementId : Boolean(o.settlementId)))
+      && (!query || [o.ref, o.customerName, o.customerPhone, o.commune].some(v => v?.toLocaleLowerCase("fr").includes(query)));
+  }).sort((a, b) => new Date(b.deliveredAt || b.deliveryDate || b.updatedAt).getTime() - new Date(a.deliveredAt || a.deliveryDate || a.updatedAt).getTime());
+  const filteredTotal = filtered.reduce((sum, o) => sum + calculateOrderCollectionTotal(o), 0);
 
-export function WalletView({ stats, ordersToSettle, revenueHistory }: WalletViewProps) {
-  const latestPending = ordersToSettle.slice(0, 5);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-4 py-2 pb-10"
-    >
-      <div className="flex items-center justify-between px-1">
-        <div>
-          <h2 className="text-[20px] font-black text-[#111827]">Mes revenus</h2>
-          <p className="text-[11px] font-bold text-[#64748B]">Point cash et versements</p>
-        </div>
-        <span className="inline-flex items-center gap-1.5 rounded-sm border border-[#BBF7D0] bg-[#F0FDF4] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-[#166534]">
-          <span className="h-1.5 w-1.5 rounded-sm bg-[#166534]" />
-          Vue personnelle
-        </span>
-      </div>
-
-      <section className="relative overflow-hidden rounded-md bg-[#111827] p-5 text-white shadow-sm">
-        <div className="absolute -right-7 -top-7 text-white/5">
-          <Wallet size={118} strokeWidth={1.2} />
-        </div>
-        <div className="relative">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">
-            À verser à la caisse
-          </p>
-          <h3 className="mb-5 text-[34px] font-black leading-none tracking-tight tabular-nums">
-            {formatPrice(stats.amountToSettle)}
-          </h3>
-
-          <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-4">
-            <RevenueMiniStat icon={<Banknote size={14} />} label="Cash du jour" value={formatPrice(stats.todayCash)} />
-            <RevenueMiniStat icon={<PackageCheck size={14} />} label="Colis livrés" value={`${stats.deliveredToday}`} />
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-2">
-        <MetricCard
-          icon={<CheckCircle2 size={16} />}
-          label="Livrés aujourd'hui"
-          value={`${stats.deliveredToday}`}
-          helper={stats.partiallyDeliveredToday > 0 ? `${stats.partiallyDeliveredToday} partiel(s)` : "Complets et partiels"}
-        />
-        <MetricCard
-          icon={<Clock3 size={16} />}
-          label="En attente"
-          value={`${ordersToSettle.length}`}
-          helper={formatPrice(stats.amountToSettle)}
-        />
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
-            À verser
-          </h4>
-          <span className="text-[10px] font-black text-[#64748B]">{ordersToSettle.length} colis</span>
-        </div>
-
-        <div className="overflow-hidden rounded-md border border-[#E5E7EB] bg-white shadow-sm">
-          {latestPending.length === 0 ? (
-            <div className="p-7 text-center">
-              <p className="text-[12px] font-black text-[#111827]">Aucun versement en attente</p>
-              <p className="mt-1 text-[10px] font-semibold text-[#94A3B8]">Tous les encaissements visibles sont déjà pointés.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-[#F1F5F9]">
-              {latestPending.map((order) => (
-                <RevenueOrderRow key={order.id} order={order} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
-            Historique revenus
-          </h4>
-          <span className="text-[10px] font-black text-[#64748B]">{revenueHistory.length} jour(s)</span>
-        </div>
-
-        <div className="space-y-2">
-          {revenueHistory.length === 0 ? (
-            <div className="rounded-md border border-[#E5E7EB] bg-white p-7 text-center shadow-sm">
-              <ReceiptText size={22} className="mx-auto mb-2 text-[#CBD5E1]" />
-              <p className="text-[12px] font-black text-[#111827]">Aucun revenu livré</p>
-              <p className="mt-1 text-[10px] font-semibold text-[#94A3B8]">Les livraisons clôturées apparaîtront ici.</p>
-            </div>
-          ) : (
-            revenueHistory.slice(0, 12).map((day) => (
-              <article key={day.key} className="rounded-md border border-[#E5E7EB] bg-white p-3 shadow-sm">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[13px] font-black capitalize text-[#111827]">{day.label}</p>
-                    <p className="text-[10px] font-bold text-[#64748B]">
-                      {day.delivered + day.partial} colis livré(s) · {day.partial} partiel(s)
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[14px] font-black tabular-nums text-[#111827]">{formatPrice(day.total)}</p>
-                    <p className="text-[9px] font-black uppercase text-[#64748B]">encaissé</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <HistoryAmount label="Déjà versé" value={day.settled} tone="green" />
-                  <HistoryAmount label="Reste à verser" value={day.pending} tone={day.pending > 0 ? "orange" : "slate"} />
-                </div>
-
-                <div className="mt-3 divide-y divide-[#F1F5F9] border-t border-[#F1F5F9] pt-1">
-                  {day.orders.slice(0, 4).map((order) => (
-                    <RevenueOrderRow key={order.id} order={order} compact />
-                  ))}
-                  {day.orders.length > 4 && (
-                    <p className="px-1 pt-2 text-[10px] font-bold text-[#94A3B8]">
-                      +{day.orders.length - 4} autre(s) colis
-                    </p>
-                  )}
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-    </motion.div>
-  );
-}
-
-function RevenueMiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="rounded-sm border border-white/10 bg-white/5 p-2.5">
-      <div className="mb-1 flex items-center gap-1.5 text-white/55">
-        {icon}
-        <span className="text-[9px] font-black uppercase tracking-wider">{label}</span>
-      </div>
-      <p className="text-[14px] font-black tabular-nums text-white">{value}</p>
+  return <section className="space-y-3">
+    <div className="flex items-center justify-between">
+      <h2 className="text-xl font-bold text-slate-900">Ma caisse</h2>
+      <Banknote size={20} className="text-slate-500" />
     </div>
-  );
-}
-
-function MetricCard({ icon, label, value, helper }: { icon: React.ReactNode; label: string; value: string; helper: string }) {
-  return (
-    <div className="rounded-md border border-[#E5E7EB] bg-white p-3 shadow-sm">
-      <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-sm bg-[#F8FAFC] text-[#334155]">
-        {icon}
+    <section className="rounded-lg bg-slate-900 p-4 text-white">
+      <p className="text-xs font-semibold text-slate-300">Encaissements à régulariser · toutes dates</p>
+      <p className="mt-1 text-3xl font-extrabold tabular-nums">{formatPrice(pendingTotal)}</p>
+      <p className="mt-1 text-xs text-slate-300">{ordersToSettle.length} commande(s) sans règlement enregistré</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/15 pt-3">
+        <div><p className="text-xs text-slate-300">Part articles</p><p className="text-sm font-bold tabular-nums">{formatPrice(pendingTotal - pendingFees)}</p></div>
+        <div><p className="text-xs text-slate-300">Dont frais de livraison</p><p className="text-sm font-bold tabular-nums">{formatPrice(pendingFees)}</p></div>
       </div>
-      <p className="text-[10px] font-black uppercase tracking-wider text-[#94A3B8]">{label}</p>
-      <p className="mt-1 text-[22px] font-black leading-none text-[#111827]">{value}</p>
-      <p className="mt-1 text-[10px] font-bold text-[#64748B]">{helper}</p>
+    </section>
+    <div className="grid grid-cols-2 gap-2">
+      <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Encaissé aujourd’hui</p><p className="mt-1 text-lg font-extrabold tabular-nums text-slate-900">{formatPrice(stats.todayCash)}</p></div>
+      <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Livraisons du jour</p><p className="mt-1 text-lg font-extrabold text-slate-900">{stats.deliveredToday}<span className="ml-2 text-xs font-normal text-slate-500">dont {stats.partiallyDeliveredToday} partielles</span></p></div>
     </div>
-  );
-}
-
-function HistoryAmount({ label, value, tone }: { label: string; value: number; tone: "green" | "orange" | "slate" }) {
-  const toneClass = {
-    green: "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]",
-    orange: "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]",
-    slate: "border-[#E2E8F0] bg-[#F8FAFC] text-[#475569]",
-  }[tone];
-
-  return (
-    <div className={`rounded-sm border px-2.5 py-2 ${toneClass}`}>
-      <p className="text-[9px] font-black uppercase tracking-wider opacity-75">{label}</p>
-      <p className="text-[12px] font-black tabular-nums">{formatPrice(value)}</p>
-    </div>
-  );
-}
-
-function RevenueOrderRow({ order, compact = false }: { order: RiderOrder; compact?: boolean }) {
-  const amount = calculateOrderCollectionTotal(order);
-  const dateValue = order.updatedAt || order.deliveryDate || order.createdAt;
-
-  return (
-    <div className={`flex items-center justify-between gap-3 ${compact ? "px-1 py-2" : "p-3"}`}>
-      <div className="min-w-0">
-        <div className="mb-0.5 flex items-center gap-2">
-          <span className="text-[12px] font-black text-[#111827]">#{order.ref}</span>
-          <span className="max-w-[130px] truncate text-[10px] font-bold text-[#64748B]">{order.customerName}</span>
-        </div>
-        <p className="text-[10px] font-bold uppercase text-[#94A3B8]">
-          {formatTime(dateValue)} · {order.settlementId ? "Versé" : "À verser"}
-        </p>
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {[["today", "Aujourd’hui"], ["all", "Toutes dates"]].map(([value, label]) => <button key={value} aria-pressed={period === value} onClick={() => { setPeriod(value); setLimit(15); }} className={`min-h-11 flex-1 rounded-md border px-3 text-sm font-semibold ${period === value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600"}`}>{label}</button>)}
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-[13px] font-black tabular-nums text-[#111827]">{formatPrice(amount)}</p>
-        <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-black uppercase ${
-          order.settlementId ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]" : "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]"
-        }`}>
-          {order.settlementId ? "Pointé" : "Cash"}
-        </span>
-      </div>
+      <label className="relative block"><Search size={16} className="absolute left-3 top-3.5 text-slate-400" /><input aria-label="Rechercher un encaissement" value={search} onChange={e => { setSearch(e.target.value); setLimit(15); }} placeholder="Référence, client, téléphone…" className="h-11 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-base" /></label>
+      <select aria-label="État du règlement" value={status} onChange={e => { setStatus(e.target.value); setLimit(15); }} className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-base"><option value="all">Tous les règlements</option><option value="pending">À régulariser</option><option value="settled">Règlement enregistré</option></select>
     </div>
-  );
+    <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-500"><span>{filtered.length} commande(s) affichable(s)</span><strong className="text-slate-700">{formatPrice(filteredTotal)} encaissés</strong></div>
+    <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {filtered.length === 0 ? <div className="p-6 text-center"><CheckCircle2 size={24} className="mx-auto text-slate-400" /><p className="mt-2 text-sm font-semibold">Aucun encaissement pour ces filtres</p><button onClick={() => { setPeriod("all"); setStatus("all"); setSearch(""); setLimit(15); }} className="mt-2 min-h-11 text-sm font-bold text-orange-700">Afficher les commandes disponibles</button></div> :
+        filtered.slice(0, limit).map(o => <button key={o.id} type="button" onClick={() => onOpen(o)} className="flex w-full items-center gap-2 p-3 text-left active:bg-slate-50">
+          <div className="min-w-0 flex-1"><p className="break-words text-[15px] font-extrabold text-slate-900">#{o.ref}</p><p className="truncate text-xs text-slate-500">{o.customerName}</p><p className="mt-1 text-[11px] text-slate-500">{new Date(o.deliveredAt || o.deliveryDate || o.updatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Africa/Abidjan" })} · {o.status === "PARTIALLY_DELIVERED" ? "Livraison partielle" : "Livrée"}</p></div>
+          <div className="shrink-0 text-right"><p className="text-sm font-extrabold tabular-nums text-slate-900">{formatPrice(calculateOrderCollectionTotal(o))}</p><p className={`mt-1 text-[11px] font-semibold ${o.settlementId ? "text-green-700" : "text-amber-700"}`}>{o.settlementId ? "Règlement enregistré" : "À régulariser"}</p></div><ChevronRight size={16} className="shrink-0 text-slate-400" />
+        </button>)}
+    </div>
+    {filtered.length > limit && <button onClick={() => setLimit(v => v + 15)} className="min-h-11 w-full rounded-md border border-slate-200 bg-white text-sm font-semibold">Voir la suite ({filtered.length - limit})</button>}
+    <p className="text-xs leading-relaxed text-slate-500">Les règlements sont validés par le bureau. Tous les encaissements non régularisés sont inclus ; les commandes déjà réglées sont limitées à l’historique récent chargé. Utilisez l’onglet Historique pour rechercher une date ancienne.</p>
+  </section>;
 }

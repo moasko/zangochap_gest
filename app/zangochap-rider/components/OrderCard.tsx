@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { AlertTriangle, CalendarClock, MapPin, Package, ChevronRight, Banknote, Clock, StickyNote } from "lucide-react";
+import { AlertTriangle, CalendarDays, MapPin, Package, ChevronRight, StickyNote, UserRound } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatPrice } from "@/lib/constants";
 import { StatusBadge } from "./StatusBadge";
@@ -15,93 +14,51 @@ interface OrderCardProps {
 }
 
 export function OrderCard({ order, onClick, index = 0 }: OrderCardProps) {
-  const total = calculateOrderCollectionTotal(order);
-  const totalQty = order.items?.reduce((sum, i) => sum + i.qty, 0) ?? 0;
-  const time = new Date(order.updatedAt || order.createdAt).toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const deliveryDate = order.deliveryDate
-    ? new Date(order.deliveryDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })
-    : "Jour J";
-  const hasIssue = ["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(order.status);
-  const cardNote = order.deliveryNote || order.notes;
+  const paid = ["DELIVERED", "PARTIALLY_DELIVERED"].includes(order.status);
+  const issue = ["RETURNED", "CANCELLED", "REPRO_DISPO"].includes(order.status);
+  const active = ["PACKED", "ON_DELIVERY"].includes(order.status);
+  const dateValue = paid ? order.deliveredAt || order.deliveryDate : issue ? order.lastDeliveryAttemptAt || order.deliveryDate : order.deliveryDate;
+  const date = dateValue ? new Date(dateValue) : null;
+  const dateLabel = date && Number.isFinite(date.getTime())
+    ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Africa/Abidjan" })
+    : "Date non précisée";
+  const overdue = active && order.deliveryDate && order.deliveryDate.slice(0, 10) < new Date().toISOString().slice(0, 10);
+  const quantity = order.items.reduce((sum, item) => sum + item.qty, 0);
+  const note = issue ? order.returnReason || "Motif non renseigné" : order.deliveryNote || order.notes;
+  const tone = overdue || issue ? "attention" : paid ? "completed" : "active";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-    >
-      <button
-        onClick={onClick}
-        className="w-full bg-white rounded-sm border border-[#E5E7EB] p-3 text-left active:scale-[0.98] transition-all duration-150 group"
-      >
-        <div className="flex flex-col gap-3">
-          {/* Top Row: Ref & Price */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="bg-[#F3F4F6] px-2 py-0.5 rounded-sm">
-                <span className="text-[14px] font-extrabold text-[#111827] tabular-nums">#{order.ref}</span>
-              </div>
-              <div className="flex items-center gap-1 text-[#6B7280]">
-                <Clock size={12} />
-                <span className="text-[10px] font-medium">{time}</span>
-              </div>
-              <div className="flex items-center gap-1 text-[#6B7280]">
-                <CalendarClock size={12} />
-                <span className="text-[10px] font-medium">{deliveryDate}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#334155]/5 px-2 py-1 rounded-sm border border-[#334155]/10">
-              <Banknote size={12} className="text-[#334155]" />
-              <span className="text-[13px] font-extrabold text-[#334155] tabular-nums">
-                {formatPrice(total)}
-              </span>
-            </div>
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, delay: Math.min(index, 4) * 0.025 }}>
+      <button type="button" onClick={onClick} aria-label={`Ouvrir la commande ${order.ref}, ${order.customerName}`} className={`rider-order-card rider-delivery-card ${tone}`}>
+        <div className="rider-card-heading">
+          <span className="rider-card-reference">#{order.ref}</span>
+          <StatusBadge status={order.status} />
+        </div>
+        <div className="rider-card-address">
+          <MapPin size={17} aria-hidden="true" />
+          <div>
+            <h3>{order.commune || "Commune non renseignée"}</h3>
+            <p>{order.customerLocation || "Adresse à préciser"}</p>
           </div>
-
-          {/* Middle Row: Location (priorité livreur) & Customer */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-[#334155]">
-              <MapPin size={15} className="text-[#334155] shrink-0" />
-              <span className="text-[16px] font-extrabold truncate">{order.commune || "Commune non renseignée"}</span>
-            </div>
-            <p className="pl-[21px] text-[14px] font-bold leading-snug text-[#475569] line-clamp-2">
-              {order.customerLocation || "Lieu exact non renseigné"}
-            </p>
-            <h3 className="text-[12px] font-medium text-[#6B7280] leading-tight">
-              {order.customerName}
-            </h3>
-            {cardNote && (
-              <div className="flex items-start gap-1.5 rounded-sm bg-[#F8FAFC] px-2 py-1.5 text-[#475569] border border-[#E2E8F0]">
-                <StickyNote size={12} className="shrink-0 mt-0.5" />
-                <span className="text-[11px] font-semibold leading-snug line-clamp-2">
-                  {cardNote}
-                </span>
-              </div>
-            )}
-            {hasIssue && (
-              <div className="flex items-start gap-1.5 rounded-sm bg-[#FFFBEB] px-2 py-1.5 text-[#92400E] border border-[#FDE68A]">
-                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                <span className="text-[11px] font-bold leading-snug line-clamp-2">
-                  {order.returnReason || "Motif non renseigné"}
-                </span>
-              </div>
-            )}
+        </div>
+        <div className="rider-card-customer">
+          <UserRound size={13} aria-hidden="true" /><span>{order.customerName}</span>
+          {overdue && <strong>En retard</strong>}
+        </div>
+        {note && <div className={`rider-card-note ${issue ? "has-issue" : ""}`}>
+          {issue ? <AlertTriangle size={13} aria-hidden="true" /> : <StickyNote size={13} aria-hidden="true" />}
+          <span>{note}</span>
+        </div>}
+        <div className="rider-card-footer">
+          <div className="rider-card-meta">
+            <span><CalendarDays size={12} aria-hidden="true" />{dateLabel}</span>
+            <span><Package size={12} aria-hidden="true" />{quantity} article{quantity > 1 ? "s" : ""}</span>
           </div>
-
-          {/* Bottom Row: Status & Items */}
-          <div className="flex items-center justify-between pt-1 border-t border-[#F3F4F6]">
-            <StatusBadge status={order.status} />
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 text-[#9CA3AF]">
-                <Package size={12} />
-                <span className="text-[11px] font-semibold">{totalQty} art.</span>
-              </div>
-              <ChevronRight size={16} className="text-[#9CA3AF] group-hover:translate-x-0.5 transition-transform" />
-            </div>
+          <div className="rider-card-amount">
+            <span>{paid ? "Encaissé" : issue ? "Montant commande" : "À encaisser"}</span>
+            <strong>{formatPrice(calculateOrderCollectionTotal(order))}</strong>
           </div>
+          <ChevronRight size={17} className="rider-card-chevron" aria-hidden="true" />
         </div>
       </button>
     </motion.div>

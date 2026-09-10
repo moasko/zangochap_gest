@@ -1,0 +1,338 @@
+[
+  {
+    "ref": "TEST-RIDER-MISSION-01",
+    "status": "ON_DELIVERY",
+    "deliveryDayOffset": 0,
+    "eventDayOffset": 0,
+    "customerName": "CLIENT FICTIF MISSION-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Cocody",
+    "total": 12000,
+    "deliveryFee": 1500,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif MISSION-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 12000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-MISSION-02",
+    "status": "PACKED",
+    "deliveryDayOffset": 0,
+    "eventDayOffset": 0,
+    "customerName": "CLIENT FICTIF MISSION-02",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Yopougon",
+    "total": 18000,
+    "deliveryFee": 2000,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif MISSION-02",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 18000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-MISSION-03",
+    "status": "ON_DELIVERY",
+    "deliveryDayOffset": 0,
+    "eventDayOffset": 0,
+    "customerName": "CLIENT FICTIF MISSION-03",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Marcory",
+    "total": 8500,
+    "deliveryFee": 1500,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif MISSION-03",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 8500,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-RETARD-01",
+    "status": "ON_DELIVERY",
+    "deliveryDayOffset": -1,
+    "eventDayOffset": -1,
+    "customerName": "CLIENT FICTIF RETARD-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Cocody",
+    "total": 22000,
+    "deliveryFee": 1500,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif RETARD-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 22000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-RETARD-02",
+    "status": "PACKED",
+    "deliveryDayOffset": -3,
+    "eventDayOffset": -3,
+    "customerName": "CLIENT FICTIF RETARD-02",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Abobo",
+    "total": 10000,
+    "deliveryFee": 2000,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif RETARD-02",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 10000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-LIVREE-01",
+    "status": "DELIVERED",
+    "deliveryDayOffset": 0,
+    "eventDayOffset": 0,
+    "customerName": "CLIENT FICTIF LIVREE-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Cocody",
+    "total": 12000,
+    "deliveryFee": 1500,
+    "amountReceived": 13500,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif LIVREE-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 12000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-LIVREE-02",
+    "status": "DELIVERED",
+    "deliveryDayOffset": -1,
+    "eventDayOffset": -1,
+    "customerName": "CLIENT FICTIF LIVREE-02",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Marcory",
+    "total": 8500,
+    "deliveryFee": 1500,
+    "amountReceived": 10000,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif LIVREE-02",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 8500,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-PARTIELLE-01",
+    "status": "PARTIALLY_DELIVERED",
+    "deliveryDayOffset": -4,
+    "eventDayOffset": -4,
+    "customerName": "CLIENT FICTIF PARTIELLE-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Yopougon",
+    "total": 6000,
+    "deliveryFee": 2000,
+    "amountReceived": 8000,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif PARTIELLE-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 6000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-RETOUR-01",
+    "status": "RETURNED",
+    "deliveryDayOffset": -6,
+    "eventDayOffset": -6,
+    "customerName": "CLIENT FICTIF RETOUR-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Abobo",
+    "total": 10000,
+    "deliveryFee": 2000,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif RETOUR-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 10000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": false,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-REPORT-01",
+    "status": "REPRO_DISPO",
+    "deliveryDayOffset": 1,
+    "eventDayOffset": 0,
+    "customerName": "CLIENT FICTIF REPORT-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Cocody",
+    "total": 12000,
+    "deliveryFee": 1500,
+    "amountReceived": null,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif REPORT-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 12000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": false,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-HISTORIQUE-01",
+    "status": "DELIVERED",
+    "deliveryDayOffset": -20,
+    "eventDayOffset": -20,
+    "customerName": "CLIENT FICTIF HISTORIQUE-01",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Marcory",
+    "total": 8500,
+    "deliveryFee": 1500,
+    "amountReceived": 10000,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif HISTORIQUE-01",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 8500,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  },
+  {
+    "ref": "TEST-RIDER-HISTORIQUE-02",
+    "status": "DELIVERED",
+    "deliveryDayOffset": -90,
+    "eventDayOffset": -90,
+    "customerName": "CLIENT FICTIF HISTORIQUE-02",
+    "customerPhone": "TEST-NON-JOIGNABLE",
+    "customerLocation": "Adresse fictive - ne pas livrer",
+    "commune": "Yopougon",
+    "total": 18000,
+    "deliveryFee": 2000,
+    "amountReceived": 20000,
+    "notes": "DONNEES DE TEST RIDER - AUCUNE LIVRAISON REELLE",
+    "stockDecremented": false,
+    "items": [
+      {
+        "name": "Article fictif HISTORIQUE-02",
+        "size": "Test",
+        "color": "Test",
+        "qty": 1,
+        "price": 18000,
+        "isCustom": true,
+        "isGift": false,
+        "isDelivered": true,
+        "packingStatus": "PACKED"
+      }
+    ]
+  }
+]

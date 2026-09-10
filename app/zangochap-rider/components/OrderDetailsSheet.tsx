@@ -111,8 +111,7 @@ export function OrderDetailsSheet({
 
   const openWhatsApp = (msg?: string) => {
     let p = order.customerPhone.replace(/\D/g, "");
-    if (p.startsWith("0")) p = "225" + p.slice(1);
-    else if (!p.startsWith("225")) p = "225" + p;
+    if (p.length === 10) p = "225" + p;
     
     const text = msg || `Bonjour ${order.customerName}, votre livreur ZangoChap est en route.`;
     window.open(`https://wa.me/${p}?text=${encodeURIComponent(text)}`, "_blank");
@@ -143,7 +142,7 @@ export function OrderDetailsSheet({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="relative z-10 w-full max-w-md h-[92dvh] bg-[#F3F4F6] rounded-t-sm flex flex-col overflow-hidden border-t border-[#E5E7EB]"
+        className="rider-detail-sheet relative z-10 w-full max-w-md h-[92dvh] bg-[#F3F4F6] rounded-t-sm flex flex-col overflow-hidden border-t border-[#E5E7EB]"
       >
         {/* ── Header ── */}
         <div className="shrink-0 px-3 pt-2 pb-3 bg-white border-b border-[#F3F4F6]">
@@ -475,6 +474,7 @@ export function OrderDetailsSheet({
                 disabled={isPending}
                 onClick={() => onStatusUpdate(order.id, "RETURNED")}
                 className="flex-1 h-14 bg-[#B91C1C]/10 rounded-md text-[#B91C1C] flex items-center justify-center active:scale-[0.98] transition-all border border-[#B91C1C]/10 disabled:opacity-40"
+                aria-label="Déclarer un retour"
                 title="Retour"
               >
                 <RotateCcw size={20} strokeWidth={2.5} />
@@ -483,7 +483,8 @@ export function OrderDetailsSheet({
                 disabled={isPending}
                 onClick={() => onStatusUpdate(order.id, "REPRO_DISPO")}
                 className="flex-1 h-14 bg-[#B45309]/10 rounded-md text-[#B45309] flex items-center justify-center active:scale-[0.98] transition-all border border-[#B45309]/10 disabled:opacity-40"
-                title="Repro-dispo demain"
+                aria-label="Reporter la livraison"
+                title="Reporter la livraison"
               >
                 <CalendarClock size={20} strokeWidth={2.5} />
               </button>

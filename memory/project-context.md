@@ -188,3 +188,9 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
   n'existait dans le dépôt au 2026-08-26 : ne pas inventer ses règles.
 - Préserver les modifications locales et vérifier `git status --short` avant édition.
 - Après code : exécuter TypeScript, puis lint en distinguant les erreurs préexistantes.
+
+### Portail livreur — 2026-09-10
+L’historique interactif utilise history-actions.ts, séparé du chargement des missions et du portefeuille. Les dates demandées sont des jours Abidjan/UTC, avec fin exclusive au lendemain. Les livraisons réussies utilisent deliveredAt et les échecs lastDeliveryAttemptAt, avec repli deliveryDate puis updatedAt pour les anciennes lignes. Pagination serveur par 30 ; recherche sur référence, nom, téléphone, commune et adresse. Les encaissements sans règlement sont chargés indépendamment du plafond de l’historique initial.
+
+### Géolocalisation des livreurs — 2026-09-10
+Module modules/rider-tracking et routes /api/rider-tracking (livreur connecté) /api/admin/rider-tracking (admin/developer). Carte /zangochap-manager/admin/rider-map : live 10 s, historique par jour et heures Abidjan, 10 000 points maximum explicités. Partage volontaire RiderTracking, token par démarrage, dernier état RiderTrackingState et historique RiderLocationPoint ; aucun lien avec les mutations métier des commandes. Voir modules/rider-tracking/README.md pour les limites web, la conservation et la validation. Migration manuelle SQL préparée, NON exécutée ; accord propriétaire requis avant activation sur zangochapdb. Aucune purge automatique, aucune coordonnée en stockage local.

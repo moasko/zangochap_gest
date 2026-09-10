@@ -33,6 +33,7 @@
     "framer-motion": "^12.38.0",
     "heic2any": "^0.0.4",
     "jose": "^6.2.3",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.16.0",
     "next": "15.2.1",
     "pg": "^8.20.0",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",

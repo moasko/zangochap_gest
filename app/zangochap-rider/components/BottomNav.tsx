@@ -21,17 +21,18 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { key: "missions", label: "Missions", icon: LayoutDashboard },
   { key: "history",  label: "Historique", icon: History },
-  { key: "wallet",   label: "Revenus",  icon: Wallet },
+  { key: "wallet",   label: "Caisse",  icon: Wallet },
   { key: "profile",  label: "Compte",   icon: User },
 ];
 
 export function BottomNav({ activeTab, setActiveTab, pendingCount, historyCount }: BottomNavProps) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-md"
+      aria-label="Navigation principale"
+      className="rider-bottom-nav"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="flex items-center justify-around bg-white border-t border-[#E5E7EB] px-2 pt-2 pb-2">
+      <div className="rider-nav-inner">
         {NAV_ITEMS.map((item) => (
           <NavBtn
             key={item.key}
@@ -58,10 +59,11 @@ interface NavBtnProps {
 function NavBtn({ icon: Icon, label, active, badge, onClick }: NavBtnProps) {
   return (
     <button
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className="relative flex flex-col items-center justify-center gap-1 pt-1.5 pb-1 px-4 transition-colors duration-150"
+      className={`rider-nav-item ${active ? "is-active" : ""}`}
     >
-      <div className="relative">
+      <div className="rider-nav-icon">
         <Icon
           size={20}
           strokeWidth={active ? 2.5 : 2}
@@ -74,7 +76,7 @@ function NavBtn({ icon: Icon, label, active, badge, onClick }: NavBtnProps) {
         )}
       </div>
       <span
-        className={`text-[9px] font-bold tracking-wide ${
+        className={`text-[11px] font-bold tracking-wide ${
           active ? "text-[#111827]" : "text-[#9CA3AF]"
         }`}
       >

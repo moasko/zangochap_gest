@@ -150,3 +150,45 @@ Les entrées les plus récentes sont placées en premier.
 - Création de `AGENT.md` et du dossier `memory/`.
 - Ajout du contexte architectural et métier issu d'une analyse statique complète.
 - Aucun code applicatif ni comportement métier modifié.
+
+## 2026-09-10 — Prise en main du portail livreur
+- Historique dédié avec recherche serveur, période personnalisée / date précise, raccourcis, statut et pagination de 30 résultats. Contrôle du rôle et de l’attribution, dates d’événement en UTC (Abidjan), repli anciennes commandes.
+- Missions : filtres jour / retard / commune, cartes adaptatives, actualisation manuelle. Compte : guide de tournée, navigation tactile et zoom accessibles.
+- Encaissements non réglés chargés indépendamment des 300 commandes récentes ; résolution des anciens identifiants d’emballeur par email.
+- Tests sans base : scripts/test-rider-history.mjs (bornes, ancienneté, droits, pagination, trois fuseaux). TypeScript et lint ciblé vérifiés ; lint global avec dette historique. Pas de validation visuelle sur session mobile authentifiée.
+
+## 2026-09-10 — Démonstration Rider temporaire autorisée
+- 12 commandes fictives TEST-RIDER insérées en transaction dans zangochapdb après confirmation explicite de la cible distante. Articles personnalisés sans lien au catalogue ou au stock ; aucun compte modifié.
+- scripts/rider-demo.mjs propose audit et insert, refuse les doublons ; fixtures dans scripts/fixtures/rider-demo.json.
+- L’utilisateur demande leur suppression après les essais. Le manifeste local ignoré par Git scratch/rider-demo-manifest.json contient les IDs exacts. Le conserver ; vérifier les liens comptables, articles et éventuels effets des essais avant suppression ciblée. Ne jamais supprimer par préfixe seul.
+- Vérification après insertion : 12 références présentes, attribuées au livreur cible. Ne pas recopier les identifiants de compte ou mots de passe dans la mémoire.
+
+## 2026-09-10 — Présentation mobile Rider
+- En-tête compact, résumé de tournée dans la zone défilante, navigation inférieure ancrée dans le conteneur plein écran, zones de sécurité iOS/Android.
+- Thème blanc / ardoise / orange dans app/zangochap-rider/rider.css, cartes et fiches arrondies, contrôles tactiles, focus visible et mouvement réduit.
+- Refactoring de présentation uniquement ; filtres et actions conservés. TypeScript et lint ciblé contrôlés ; validation visuelle sur appareil non effectuée.
+
+## 2026-09-10 — Densité visuelle Rider
+- Arrondis réduits à 6–10 px, fiches à 12 px ; espacements, cartes, en-tête et navigation resserrés.
+- Historique : raccourcis et recherche visibles, période personnalisée et statut dans un panneau repliable avec résumé des filtres actifs. Cibles tactiles conservées.
+
+## 2026-09-10 — Cartes de livraison compactes
+- Référence et statut en tête, adresse prioritaire, client séparé, note compacte, pied avec date / quantité / montant contextualisé.
+- Angles à 7 px, repère latéral par état, libellés encaissé / à encaisser, dates Abidjan. Aucun changement de mutation ou de données.
+
+## 2026-09-10 — Caisse Rider
+- Total non régularisé toutes dates avec ventilation articles / frais inclus ; point du jour distinct.
+- Filtres aujourd’hui par défaut / toutes dates, recherche et état du règlement ; liste progressive par 15, ouverture du détail.
+- Limite de l’historique réglé explicitée. Aucune écriture comptable ou changement des règles de règlement.
+
+## 2026-09-10 — Profil Rider compact
+- Identité, rôle et email lisibles ; compteurs liés aux missions et livraisons du jour.
+- Accès rapides fonctionnels aux missions, caisse, historique et messagerie ; guide et aide repliables, confirmation locale de déconnexion.
+- Présentation compacte, angles discrets ; aucune modification de compte ou de données.
+
+## 2026-09-10 — Carte administrateur et suivi GPS volontaire
+- Ajout /zangochap-manager/admin/rider-map, entrée Sidebar, carte Leaflet/OSM avec précision et état récent/ancien, filtres livreur/jour/heures UTC, historique plafonné à 10 000 points et lecture du parcours.
+- RiderTracking : activation volontaire, cadence ~10 s en mouvement / 60 s stationnaire, arrêt immédiat et retry des notifications d'arrêt, aucun démarrage automatique. Arrière-plan web non garanti.
+- Routes GPS avec rôle/origine/identité serveur, validation, session d'appareil, sérialisation transactionnelle des points et arrêts, limitation d'envoi et déduplication.
+- Deux modèles Prisma et migration manuelle 20260910_add_rider_tracking.sql préparés ; client généré localement, aucune migration appliquée. Accord explicite requis pour zangochapdb. Historique sans purge automatique.
+- Tests GPS sur base simulée et tests historique OK, TypeScript OK, lint ciblé OK ; lint global : 755 erreurs / 83 avertissements préexistants. Validation sur téléphone restant à faire après activation.

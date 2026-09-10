@@ -34,7 +34,7 @@ export default async function DeliveryPage() {
     },
   } satisfies Prisma.OrderInclude;
 
-  const [activeOrdersRaw, historyOrdersRaw] = await Promise.all([
+  const [activeOrdersRaw, historyOrdersRaw, unsettledOrdersRaw] = await Promise.all([
     prisma.order.findMany({
       where: {
         deletedAt: null,
@@ -75,10 +75,14 @@ export default async function DeliveryPage() {
       include: orderInclude,
       take: 300,
     }),
+    prisma.order.findMany({
+      where: { deletedAt: null, deliverymanId: user.id, status: { in: ["DELIVERED", "PARTIALLY_DELIVERED"] }, settlementId: null },
+      include: orderInclude,
+    }),
   ]);
 
   const ordersById = new Map(
-    [...activeOrdersRaw, ...historyOrdersRaw].map((order) => [order.id, order]),
+    [...activeOrdersRaw, ...historyOrdersRaw, ...unsettledOrdersRaw].map((order) => [order.id, order]),
   );
   const ordersRaw = Array.from(ordersById.values());
 
@@ -94,11 +98,11 @@ export default async function DeliveryPage() {
   const allStaffIds = Array.from(new Set([...packerIds, ...collectorIds]));
   
   const staffUsers = await prisma.user.findMany({
-    where: { id: { in: allStaffIds } },
-    select: { id: true, name: true, phone: true }
+    where: { OR: [{ id: { in: allStaffIds } }, { email: { in: allStaffIds } }] },
+    select: { id: true, email: true, name: true, phone: true }
   });
 
-  const staffMap = new Map(staffUsers.map(u => [u.id, u]));
+  const staffMap = new Map(staffUsers.flatMap(u => [[u.id, u], [u.email, u]] as const));
 
   // Safe serialization for Client Components
   const orders: RiderOrder[] = ordersRaw.map(o => {
