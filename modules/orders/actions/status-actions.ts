@@ -64,7 +64,27 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   };
 
   const normalizedStatus = newStatus.toUpperCase();
-  if (String(session.role).toUpperCase() === 'COMMERCIAL' && ['DELIVERED', 'PARTIALLY_DELIVERED'].includes(normalizedStatus)) {
+  const sessionRole = String(session.role).toUpperCase();
+
+  if (sessionRole === 'LIVREUR') {
+    const riderTargetStatuses = ['DELIVERED', 'RETURNED', 'REPRO_DISPO'];
+    if (!riderTargetStatuses.includes(normalizedStatus)) {
+      throw new Error("Ce changement de statut n'est pas autorise depuis l'espace livreur.");
+    }
+    if (!['PACKED', 'ON_DELIVERY'].includes(order.status)) {
+      throw new Error("Cette mission n'est plus active. Actualisez la liste.");
+    }
+    if (order.settlementId) {
+      throw new Error("Cette commande est deja rattachee a un reglement livreur.");
+    }
+  }
+
+  if (['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(order.status)
+      && ['DELIVERED', 'PARTIALLY_DELIVERED', 'RETURNED', 'CANCELLED', 'REPRO_DISPO'].includes(normalizedStatus)) {
+    throw new Error("Cette livraison est deja cloturee. Utilisez la correction administrateur.");
+  }
+
+  if (sessionRole === 'COMMERCIAL' && ['DELIVERED', 'PARTIALLY_DELIVERED'].includes(normalizedStatus)) {
     throw new Error("Les commerciaux ne sont pas autorisés à déclarer une commande livrée.");
   }
   const isExpedition = order.commune?.trim().toLowerCase() === 'hors abidjan';
@@ -157,6 +177,13 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
       if (!currentOrder || currentOrder.status !== order.status) {
         throw new Error("La commande a été modifiée par une autre personne. Actualisez puis réessayez.");
       }
+      if (sessionRole === 'LIVREUR' && (
+        currentOrder.deliverymanId !== session.id
+        || currentOrder.settlementId
+        || !['PACKED', 'ON_DELIVERY'].includes(currentOrder.status)
+      )) {
+        throw new Error("Cette mission ne vous est plus attribuee ou a deja ete cloturee.");
+      }
       if (normalizedStatus === 'PACKED' && currentOrder.items.some((item) => item.packingStatus !== 'PACKED')) {
         throw new Error("L'emballage des articles a changé. Tous les articles doivent être emballés.");
       }
@@ -199,7 +226,7 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
     }
 
     if (['PACKED', 'PARTIAL'].includes(normalizedStatus)) {
-      updateData.packedBy = session.email;
+      updateData.packedBy = session.id || session.email;
       updateData.packedByName = session.name;
       updateData.packedAt = new Date();
     }
@@ -348,7 +375,8 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
   const session = await getSession();
   if (!session) throw new Error("Non authentifié");
 
-  if (session.role.toUpperCase() === 'COMMERCIAL') {
+  const sessionRole = session.role.toUpperCase();
+  if (!['LIVREUR', 'ADMIN', 'DEVELOPER'].includes(sessionRole)) {
     throw new Error("Action réservée aux livreurs et administrateurs.");
   }
 
@@ -360,6 +388,12 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
   if (!checkOrderAccess(order, session)) throw new Error("Accès refusé");
   if (['DELIVERED', 'PARTIALLY_DELIVERED'].includes(order.status)) {
     throw new Error("Cette commande a déjà été livrée.");
+  }
+  if (sessionRole === 'LIVREUR' && !['PACKED', 'ON_DELIVERY'].includes(order.status)) {
+    throw new Error("Cette mission n'est plus active. Actualisez la liste.");
+  }
+  if (order.settlementId) {
+    throw new Error("Cette commande est deja rattachee a un reglement livreur.");
   }
 
   const normalizedQuantities = new Map<string, number>();
@@ -401,88 +435,104 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
     });
   }
 
-  let newSubtotal = 0;
-
-  for (const item of order.items) {
-    const dQty = normalizedQuantities.get(item.id) || 0;
-    const returnedQty = item.qty - dQty;
-
-    if (dQty === 0) {
-      await prisma.orderItem.update({
-        where: { id: item.id },
-        data: { isDelivered: false }
-      });
-    } else if (dQty === item.qty) {
-      await prisma.orderItem.update({
-        where: { id: item.id },
-        data: { isDelivered: true }
-      });
-      newSubtotal += (item.price * item.qty);
-    } else if (dQty > 0 && dQty < item.qty) {
-      await prisma.orderItem.update({
-        where: { id: item.id },
-        data: {
-          qty: dQty,
-          isDelivered: true,
-          notes: `[Livré partiellement: ${dQty}/${item.qty} — original: ${item.qty}]${item.notes ? ' ' + item.notes : ''}`
-        }
-      });
-      newSubtotal += (item.price * dQty);
-
-      await prisma.orderItem.create({
-        data: {
-          orderId: order.id,
-          name: item.name,
-          size: item.size,
-          color: item.color,
-          qty: returnedQty,
-          price: item.price,
-          emoji: item.emoji,
-          image: item.image,
-          productId: item.productId,
-          variantId: item.variantId,
-          isCustom: item.isCustom,
-          isGift: item.isGift,
-          isDelivered: false,
-          notes: `[Retour: ${returnedQty}/${item.qty} — original: ${item.qty}]`
-        }
-      });
+  const partiallyDelivered = await prisma.$transaction(async (tx) => {
+    const currentOrder = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!currentOrder || currentOrder.status !== order.status) {
+      throw new Error("La commande a ete modifiee. Actualisez puis reessayez.");
+    }
+    if (sessionRole === 'LIVREUR' && (
+      currentOrder.deliverymanId !== session.id
+      || currentOrder.settlementId
+      || !['PACKED', 'ON_DELIVERY'].includes(currentOrder.status)
+    )) {
+      throw new Error("Cette mission ne vous est plus attribuee ou a deja ete cloturee.");
     }
 
-    // Restore stock for returned items
-    if (returnedQty > 0 && order.stockDecremented && item.productId) {
-      await restoreStockForOrderItem({
-        order,
-        item,
-        quantity: returnedQty,
-        session,
-        type: "RESTOCK",
-        reason: `Retour suite à livraison partielle (Qté: ${returnedQty})`,
-      });
+    let newSubtotal = 0;
+
+    for (const item of currentOrder.items) {
+      const dQty = normalizedQuantities.get(item.id) || 0;
+      const returnedQty = item.qty - dQty;
+
+      if (dQty === 0) {
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: { isDelivered: false },
+        });
+      } else if (dQty === item.qty) {
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: { isDelivered: true },
+        });
+        newSubtotal += item.price * item.qty;
+      } else {
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: {
+            qty: dQty,
+            isDelivered: true,
+            notes: `[Livre partiellement: ${dQty}/${item.qty} - original: ${item.qty}]${item.notes ? ' ' + item.notes : ''}`,
+          },
+        });
+        newSubtotal += item.price * dQty;
+
+        await tx.orderItem.create({
+          data: {
+            orderId: currentOrder.id,
+            name: item.name,
+            size: item.size,
+            color: item.color,
+            qty: returnedQty,
+            price: item.price,
+            emoji: item.emoji,
+            image: item.image,
+            productId: item.productId,
+            variantId: item.variantId,
+            isCustom: item.isCustom,
+            isGift: item.isGift,
+            isDelivered: false,
+            notes: `[Retour: ${returnedQty}/${item.qty} - original: ${item.qty}]`,
+          },
+        });
+      }
+
+      if (returnedQty > 0 && currentOrder.stockDecremented && item.productId) {
+        await restoreStockForOrderItem({
+          order: currentOrder,
+          item,
+          quantity: returnedQty,
+          session,
+          type: "RESTOCK",
+          reason: `Retour suite a livraison partielle (Qte: ${returnedQty})`,
+        }, tx);
+      }
     }
-  }
 
-  const finalDeliveryFee = includeDeliveryFee ? order.deliveryFee : 0;
-  const expectedAmount = Math.max(0, newSubtotal + finalDeliveryFee - (order.discount || 0));
-  const finalAmountReceived = normalizedAmountReceived ?? expectedAmount;
-  history.push({
-    at: new Date().toISOString(),
-    action: `Montant reçu livreur: ${finalAmountReceived} F`,
-    by: session.email,
-    byName: session.name,
-  });
+    const finalDeliveryFee = includeDeliveryFee ? currentOrder.deliveryFee : 0;
+    const expectedAmount = Math.max(0, newSubtotal + finalDeliveryFee - (currentOrder.discount || 0));
+    const finalAmountReceived = normalizedAmountReceived ?? expectedAmount;
+    history.push({
+      at: new Date().toISOString(),
+      action: `Montant recu livreur: ${finalAmountReceived} F`,
+      by: session.email,
+      byName: session.name,
+    });
 
-  const partiallyDelivered = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: 'PARTIALLY_DELIVERED',
-      total: newSubtotal,
-      deliveryFee: finalDeliveryFee,
-      amountReceived: finalAmountReceived,
-      deliveredAt: new Date().toISOString(),
-      history,
-    },
-    include: { items: true },
+    return tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PARTIALLY_DELIVERED',
+        total: newSubtotal,
+        deliveryFee: finalDeliveryFee,
+        amountReceived: finalAmountReceived,
+        deliveredAt: new Date().toISOString(),
+        history,
+      },
+      include: { items: true },
+    });
   });
 
   // Automatisations (best-effort).

@@ -25,6 +25,7 @@ export interface RiderOrder {
   total: number;
   deliveryFee: number;
   amountReceived?: number | null;
+  deliveredAt?: string | null;
   deliveryNote?: string | null;
   notes?: string | null;
   deliveryDate?: string | null;

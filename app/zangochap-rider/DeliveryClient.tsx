@@ -99,7 +99,10 @@ function getHistoryEventDate(order: RiderOrder) {
   ) {
     return order.lastDeliveryAttemptAt;
   }
-  return order.updatedAt || order.deliveryDate || order.createdAt;
+  if (["DELIVERED", "PARTIALLY_DELIVERED"].includes(order.status) && order.deliveredAt) {
+    return order.deliveredAt;
+  }
+  return order.deliveryDate || order.updatedAt || order.createdAt;
 }
 
 // ── Main Component ───────────────────────────────────────────
@@ -122,7 +125,7 @@ export default function DeliveryClient({
   // ── PWA / Offline / Notifications ──
   useEffect(() => {
     const handleOnline = () => { setIsOffline(false); showToast("Connexion rétablie ! Synchronisation...", "success"); };
-    const handleOffline = () => { setIsOffline(true); showToast("Mode hors-ligne activé. 📡", "error"); };
+    const handleOffline = () => { setIsOffline(true); showToast("Connexion absente : les actions sont suspendues.", "error"); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     setIsOffline(!navigator.onLine);
@@ -463,7 +466,7 @@ export default function DeliveryClient({
       <div className="max-w-md mx-auto relative h-full flex flex-col w-full overflow-hidden bg-[#F3F4F6]">
         {isOffline && (
           <div className="bg-[#B91C1C] text-white text-[10px] font-bold py-1 px-4 flex items-center justify-center gap-2 uppercase tracking-wider shrink-0">
-            <WifiOff size={12} /> Mode hors-ligne
+            <WifiOff size={12} /> Hors ligne · actions suspendues
           </div>
         )}
 
@@ -757,7 +760,7 @@ export default function DeliveryClient({
             onStatusUpdate={(id, status, amountReceived) => executeStatusUpdate(id, status, undefined, amountReceived)}
             onPartialConfirm={handlePartialConfirm}
             onSupportAlert={handleSupportAlert}
-            isPending={isPending}
+            isPending={isPending || isOffline}
           />
         )}
         <StatusReasonModal

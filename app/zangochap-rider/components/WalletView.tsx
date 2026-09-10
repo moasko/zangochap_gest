@@ -33,7 +33,7 @@ export function WalletView({ stats, ordersToSettle, revenueHistory }: WalletView
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-sm border border-[#BBF7D0] bg-[#F0FDF4] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-[#166534]">
           <span className="h-1.5 w-1.5 rounded-sm bg-[#166534]" />
-          En service
+          Vue personnelle
         </span>
       </div>
 

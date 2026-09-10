@@ -4,6 +4,7 @@ import { getSession } from "@/modules/auth/actions";
 import { redirect } from "next/navigation";
 import DeliveryClient from "./DeliveryClient";
 import { RiderOrder } from "./types";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -23,49 +24,63 @@ export default async function DeliveryPage() {
   const completedStatuses = ["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED", "CANCELLED", "REPRO_DISPO"] as const;
   const readyMissionStatuses = ["PACKED", "ON_DELIVERY"] as const;
 
-  const ordersRaw = await prisma.order.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        {
-          // Missions actives du jour uniquement : on borne par la date de
-          // livraison planifiee pour eviter d'afficher d'anciennes commandes
-          // PACKED/ON_DELIVERY jamais cloturees des jours precedents.
-          deliverymanId: user.id,
-          status: { in: [...readyMissionStatuses] },
-          OR: [
-            { deliveryDate: { gte: startOfDay, lte: endOfDay } },
-            // Repli : commande sans date de livraison mais touchee aujourd'hui.
-            { deliveryDate: null, updatedAt: { gte: startOfDay } },
-          ],
-        },
-        {
-          deliverymanId: user.id,
-          status: { in: [...completedStatuses] },
-          updatedAt: { gte: historyStart },
-        },
-        {
-          lastDeliveryAttemptRiderId: user.id,
-          status: { in: ["RETURNED", "CANCELLED", "REPRO_DISPO"] },
-          updatedAt: { gte: historyStart },
-        },
-      ],
-    },
-    orderBy: [
-      { updatedAt: "desc" },
-      { status: "asc" },
-    ],
-    include: { 
-      items: true,
-      commercial: {
-        select: {
-          name: true,
-          phone: true,
-        }
+  const orderInclude = {
+    items: true,
+    commercial: {
+      select: {
+        name: true,
+        phone: true,
       },
     },
-    take: 150,
-  });
+  } satisfies Prisma.OrderInclude;
+
+  const [activeOrdersRaw, historyOrdersRaw] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        deliverymanId: user.id,
+        status: { in: [...readyMissionStatuses] },
+        OR: [
+          // Les missions en retard restent visibles jusqu'a leur cloture.
+          { deliveryDate: { lte: endOfDay } },
+          { deliveryDate: null },
+        ],
+      },
+      orderBy: [
+        { deliveryDate: "asc" },
+        { updatedAt: "desc" },
+      ],
+      include: orderInclude,
+    }),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          {
+            deliverymanId: user.id,
+            status: { in: [...completedStatuses] },
+            updatedAt: { gte: historyStart },
+          },
+          {
+            lastDeliveryAttemptRiderId: user.id,
+            status: { in: ["RETURNED", "CANCELLED", "REPRO_DISPO"] },
+            updatedAt: { gte: historyStart },
+          },
+        ],
+      },
+      orderBy: [
+        { updatedAt: "desc" },
+        { status: "asc" },
+      ],
+      include: orderInclude,
+      take: 300,
+    }),
+  ]);
+
+  const ordersById = new Map(
+    [...activeOrdersRaw, ...historyOrdersRaw].map((order) => [order.id, order]),
+  );
+  const ordersRaw = Array.from(ordersById.values());
 
   // Get all order IDs to fetch collection records
   const orderIds = ordersRaw.map(o => o.id);
@@ -104,6 +119,7 @@ export default async function DeliveryPage() {
       total: Number(o.total),
       deliveryFee: Number(o.deliveryFee),
       amountReceived: o.amountReceived ?? null,
+      deliveredAt: o.deliveredAt,
       discount: Number(o.discount || 0),
       deliveryNote: o.deliveryNote,
       notes: o.notes,
