@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LocateFixed } from "lucide-react";
 import { distanceMeters } from "@/modules/rider-tracking/validation";
 
@@ -24,7 +25,7 @@ function locate(): Promise<GeolocationPosition> {
   }));
 }
 
-export function RiderTracking({ riderId }: { riderId: string }) {
+export function RiderTracking({ riderId, settingsTarget, openSettings }: { riderId: string; settingsTarget: HTMLDivElement | null; openSettings: () => void }) {
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -180,13 +181,19 @@ export function RiderTracking({ riderId }: { riderId: string }) {
     <div className="flex min-h-9 items-center gap-2 text-xs">
       <LocateFixed size={14} className={active ? "text-green-700" : "text-slate-400"} />
       <span role="status" className="min-w-0 flex-1 text-slate-500">{active ? "GPS partagé avec le bureau" : busy ? "Connexion GPS…" : "GPS désactivé"}</span>
-      <button type="button" onClick={toggle} className="min-h-10 rounded-md px-2 text-xs font-medium text-slate-600 underline underline-offset-2">{active || busy ? "Arrêter" : "Activer"}</button>
+      <button type="button" onClick={openSettings} className="min-h-10 rounded-md px-2 text-xs font-medium text-slate-500">Paramètres</button>
     </div>
-    <details className="text-[11px] text-slate-500">
-      <summary className="w-fit cursor-pointer py-1">{notice && !busy ? "GPS : informations" : "Détails du suivi"}</summary>
+    {settingsTarget && createPortal(<section className="rounded-lg border border-slate-200 bg-white p-3" aria-label="Paramètres GPS">
+      <h3 className="text-sm font-bold text-slate-900">Paramètres · Localisation</h3>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="flex-1 text-sm text-slate-600">{active ? "GPS partagé avec le bureau" : busy ? "Connexion GPS…" : "GPS désactivé"}</span>
+        <button type="button" onClick={toggle} className="min-h-11 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700">{active || busy ? "Désactiver le GPS" : "Activer le GPS"}</button>
+      </div>
+      <div className="mt-2 text-xs leading-relaxed text-slate-500">
       {notice && <p role="status" className="my-1 text-amber-800">{notice}</p>}
       {active && last && <p className="my-1">Dernier envoi {last.time} · précision ±{last.accuracy} m</p>}
       <p className="mt-1">Le suivi démarre à l’ouverture avec l’autorisation GPS du téléphone. Votre position est partagée avec les administrateurs et enregistrée environ toutes les 10 secondes en déplacement, toutes les minutes à l’arrêt. Un arrêt manuel reste mémorisé dans cet onglet jusqu’à réactivation. Gardez cette page ouverte ; le suivi peut être suspendu écran verrouillé.</p>
-    </details>
+      </div>
+    </section>, settingsTarget)}
   </section>;
 }
