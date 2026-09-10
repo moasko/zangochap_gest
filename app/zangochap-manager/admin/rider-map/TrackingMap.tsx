@@ -1,18 +1,24 @@
 "use client";
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { trackSegments } from "@/modules/rider-tracking/segments";
 import { placeLabel } from "./place-label";
 import { riderColor } from "@/modules/rider-tracking/colors";
 import "leaflet/dist/leaflet.css";
+import type { ViewerPosition, SelectedPosition } from "@/modules/rider-tracking/viewer-position";
 import type { RiderTrackPoint } from "@/modules/rider-tracking/types";
 export type MapMarker = { id: string; name: string; phone: string | null; latitude: number; longitude: number; accuracy: number; time: string; status: string };
-export default function TrackingMap({ markers, points, cursor, viewKey }: { markers: MapMarker[]; points: RiderTrackPoint[]; cursor: number; viewKey: string }) {
+export default function TrackingMap({ markers, points, cursor, viewKey, followId, onStopFollowing, riderNames, viewerPosition, destination }: { markers: MapMarker[]; points: RiderTrackPoint[]; cursor: number; viewKey: string; followId: string; onStopFollowing: () => void; riderNames: Record<string, string>; viewerPosition: ViewerPosition | null; destination: SelectedPosition | null }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layers = useRef<L.LayerGroup | null>(null);
   const cursorLayer = useRef<L.LayerGroup | null>(null);
+  const viewerLayer = useRef<L.LayerGroup | null>(null);
+  const viewerBounds = useRef<L.LatLngBounds | null>(null);
   const bounds = useRef<L.LatLngBounds | null>(null);
   const fitted = useRef("");
+  const stopFollowing = useRef(onStopFollowing);
+  useEffect(() => { stopFollowing.current = onStopFollowing; }, [onStopFollowing]);
   useEffect(() => {
     if (!container.current) return;
     const instance = L.map(container.current).setView([5.36, -4.008], 11);
@@ -20,9 +26,17 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
     map.current = instance;
     layers.current = L.layerGroup().addTo(instance);
     cursorLayer.current = L.layerGroup().addTo(instance);
+    viewerLayer.current = L.layerGroup().addTo(instance);
+    const manual = () => stopFollowing.current();
+    instance.on("dragstart", manual);
+    instance.on("zoomstart", manual);
+    const surface = container.current;
+    surface.addEventListener("wheel", manual, { passive: true });
+    const key = (event: KeyboardEvent) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "-"].includes(event.key)) manual(); };
+    surface.addEventListener("keydown", key);
     const resize = new ResizeObserver(() => instance.invalidateSize());
     resize.observe(container.current);
-    return () => { resize.disconnect(); instance.remove(); map.current = null; };
+    return () => { resize.disconnect(); surface.removeEventListener("wheel", manual); surface.removeEventListener("keydown", key); instance.remove(); map.current = null; };
   }, []);
   useEffect(() => {
     if (!map.current || !layers.current) return;
@@ -79,23 +93,24 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
       if (openId === marker.id) pin.openPopup();
       if (markers.length === 1) L.circle(position, { interactive: false, radius: marker.accuracy, color: riderColor(marker.id), weight: 1, fillOpacity: 0.06 }).addTo(group);
     }
-    let segment: L.LatLngExpression[] = [];
-    let segmentRider = "";
-    const draw = () => { if (segment.length > 1) L.polyline(segment, { color: riderColor(segmentRider), weight: 4 }).addTo(group); };
-    points.forEach((point, i) => {
-      const previous = points[i - 1];
-      if (previous && (previous.riderId !== point.riderId || previous.sessionId !== point.sessionId || Date.parse(point.capturedAt) - Date.parse(previous.capturedAt) > 300000)) { draw(); segment = []; }
-      const position: L.LatLngExpression = [point.latitude, point.longitude];
-      segmentRider = point.riderId;
-      coords.push(position); segment.push(position);
-    });
-    draw();
+    for (const segment of trackSegments(points)) {
+      const positions: L.LatLngExpression[] = segment.map(point => [point.latitude, point.longitude]);
+      coords.push(...positions);
+      const label = document.createElement("span");
+      label.textContent = riderNames[segment[0].riderId] || "Livreur";
+      if (positions.length > 1) L.polyline(positions, { color: riderColor(segment[0].riderId), weight: 4 }).bindTooltip(label).addTo(group);
+      else L.circleMarker(positions[0], { radius: 4, color: riderColor(segment[0].riderId) }).bindTooltip(label).addTo(group);
+    }
     bounds.current = coords.length ? L.latLngBounds(coords) : null;
     if (bounds.current && fitted.current !== viewKey) {
       map.current.fitBounds(bounds.current, { padding: [35, 35], maxZoom: 16 });
       fitted.current = viewKey;
     }
-  }, [markers, points, viewKey]);
+  }, [markers, points, viewKey, riderNames]);
+  useEffect(() => {
+    const target = markers.find(marker => marker.id === followId);
+    if (target && map.current) map.current.panTo([target.latitude, target.longitude], { animate: false });
+  }, [markers, followId]);
   useEffect(() => {
     const group = cursorLayer.current;
     if (!group) return;
@@ -103,13 +118,32 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
     const point = points[cursor];
     if (!point) return;
     const label = document.createElement("div");
-    label.textContent = new Date(point.capturedAt).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" }) + " · précision ±" + Math.round(point.accuracy) + " m";
+    label.textContent = (riderNames[point.riderId] || "Livreur") + " · " + new Date(point.capturedAt).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" }) + " · précision ±" + Math.round(point.accuracy) + " m";
     const place = placeLabel(point.latitude, point.longitude);
     label.append(place.element);
     L.circleMarker([point.latitude, point.longitude], { radius: 8, color: "#fff", weight: 2, fillColor: riderColor(point.riderId), fillOpacity: 1 }).bindPopup(label).on("click", () => { void place.load(); }).addTo(group);
-  }, [points, cursor]);
+  }, [points, cursor, riderNames]);
+  useEffect(() => {
+    const group = viewerLayer.current;
+    if (!group || !map.current) return;
+    group.clearLayers(); viewerBounds.current = null;
+    if (!viewerPosition) return;
+    const start: L.LatLngExpression = [viewerPosition.latitude, viewerPosition.longitude];
+    const label = document.createElement("strong"); label.textContent = "Ma position";
+    L.circleMarker(start, { radius: 9, color: "#fff", weight: 2, fillColor: "#0284c7", fillOpacity: 1 }).bindTooltip(label, { permanent: true, direction: "top" }).addTo(group);
+    L.circle(start, { radius: viewerPosition.accuracy, color: "#0284c7", weight: 1, fillOpacity: 0.06, interactive: false }).addTo(group);
+    const positions: L.LatLngExpression[] = [start];
+    if (destination) {
+      const end: L.LatLngExpression = [destination.latitude, destination.longitude];
+      positions.push(end);
+      const label = document.createElement("span"); label.textContent = "Liaison à vol d’oiseau vers " + destination.name;
+      L.polyline([start, end], { color: "#0284c7", weight: 3, dashArray: "7 7" }).bindTooltip(label).addTo(group);
+    }
+    viewerBounds.current = L.latLngBounds(positions);
+  }, [viewerPosition, destination]);
   return <div className="relative overflow-hidden rounded-lg border border-slate-200">
     <div ref={container} className="h-[55vh] min-h-[320px] w-full lg:h-[65vh]" style={{ zIndex: 0 }} aria-label="Carte des positions des livreurs" />
-    <button type="button" className="absolute right-3 top-3 z-10 rounded-md bg-white px-3 py-2 text-xs font-semibold shadow" onClick={() => { if (map.current && bounds.current) map.current.fitBounds(bounds.current, { padding: [35, 35], maxZoom: 16 }); }}>Recentrer</button>
+    {viewerPosition && <button type="button" className="absolute bottom-8 right-3 z-10 rounded-md bg-white px-3 py-2 text-xs font-semibold shadow" onClick={() => { onStopFollowing(); if (map.current && viewerBounds.current) map.current.fitBounds(viewerBounds.current, { padding: [40, 40], maxZoom: 16 }); }}>{destination ? "Voir les deux positions" : "Centrer sur moi"}</button>}
+    <button type="button" className="absolute right-3 top-3 z-10 rounded-md bg-white px-3 py-2 text-xs font-semibold shadow" onClick={() => { onStopFollowing(); if (map.current && bounds.current) map.current.fitBounds(bounds.current, { padding: [35, 35], maxZoom: 16 }); }}>Recentrer</button>
   </div>;
 }

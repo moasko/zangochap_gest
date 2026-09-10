@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, RefreshCw } from "lucide-react";
-import { trackingStatus, type RiderTrackingResponse } from "@/modules/rider-tracking/types";
+import { positionAge, trackingStatus, type RiderTrackingResponse } from "@/modules/rider-tracking/types";
 import { riderColor } from "@/modules/rider-tracking/colors";
 import { useTrackingStream } from "./use-tracking-stream";
+import ViewerPositionPanel from "./ViewerPositionPanel";
+import type { ViewerPosition, SelectedPosition } from "@/modules/rider-tracking/viewer-position";
 import type { MapMarker } from "./TrackingMap";
 const TrackingMap = dynamic(() => import("./TrackingMap"), { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-lg bg-slate-100" /> });
 const today = () => new Date().toISOString().slice(0, 10);
@@ -14,6 +16,13 @@ export default function RiderMapClient() {
   const [mode, setMode] = useState<"live" | "history">("live");
   const streamConnected = useTrackingStream(mode === "live");
   const [riderId, setRiderId] = useState("");
+  const [historyRiders, setHistoryRiders] = useState<string[]>([]);
+  const [hiddenRiders, setHiddenRiders] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [following, setFollowing] = useState(false);
+  const historyKey = [...historyRiders].sort().join(",");
+  const [viewerPosition, setViewerPosition] = useState<ViewerPosition | null>(null);
+  const [linkPosition, setLinkPosition] = useState(false);
   const [day, setDay] = useState(today);
   const [from, setFrom] = useState("00:00");
   const [to, setTo] = useState("23:59");
@@ -26,16 +35,23 @@ export default function RiderMapClient() {
     const data = await response.json(); if (!response.ok) throw new Error(data.error || "Carte indisponible."); return data;
   }, refetchInterval: mode === "live" ? (streamConnected ? 60000 : 10000) : false, retry: 1 });
   const validPeriod = Boolean(day && from && to && from <= to);
-  const history = useQuery<RiderTrackingResponse>({ queryKey: ["rider-tracking-history", riderId, day, from, to], enabled: mode === "history" && Boolean(riderId) && validPeriod, queryFn: async ({ signal }) => {
-    const params = new URLSearchParams({ mode: "history", riderId, day, from, to });
+  const history = useQuery<RiderTrackingResponse>({ queryKey: ["rider-tracking-history", historyKey, day, from, to], enabled: mode === "history" && historyRiders.length > 0 && validPeriod, queryFn: async ({ signal }) => {
+    const params = new URLSearchParams({ mode: "history", day, from, to });
+    for (const id of historyKey.split(",").filter(Boolean)) params.append("riderId", id);
     const response = await fetch("/api/admin/rider-tracking?" + params, { signal, cache: "no-store" });
     const data = await response.json(); if (!response.ok) throw new Error(data.error || "Historique indisponible."); return data;
   }, retry: 1 });
-  const points = useMemo(() => mode === "history" && riderId && validPeriod ? history.data?.points || [] : [], [mode, riderId, validPeriod, history.data]);
+  const points = useMemo(() => mode === "history" && historyRiders.length && validPeriod ? (history.data?.points || []).filter(point => !hiddenRiders.includes(point.riderId)) : [], [mode, historyRiders.length, validPeriod, history.data, hiddenRiders]);
   const states = live.data?.states;
   const riders = live.data?.riders;
-  const markers = useMemo<MapMarker[]>(() => mode !== "live" ? [] : (states || []).filter(s => (!riderId || s.riderId === riderId) && s.latitude !== null && s.longitude !== null && s.capturedAt).map(s => ({ id: s.riderId, name: riders?.find(r => r.id === s.riderId)?.name || "Livreur", phone: riders?.find(r => r.id === s.riderId)?.phone || null, latitude: s.latitude!, longitude: s.longitude!, accuracy: s.accuracy || 0, time: s.capturedAt!, status: trackingStatus(s, now) })), [states, riders, mode, riderId, now]);
-  useEffect(() => { setCursor(0); setPlaying(false); }, [riderId, day, from, to, mode]);
+  const riderNames = useMemo(() => Object.fromEntries((riders || []).map(r => [r.id, r.name])), [riders]);
+  const visibleRiders = useMemo(() => (riders || []).filter(r => {
+    const state = states?.find(s => s.riderId === r.id);
+    const status = state ? trackingStatus(state, now) : "Aucun partage";
+    return (!riderId || r.id === riderId) && (statusFilter === "all" || statusFilter === status);
+  }), [riders, states, now, riderId, statusFilter]);
+  const markers = useMemo<MapMarker[]>(() => mode !== "live" ? [] : (states || []).filter(s => visibleRiders.some(r => r.id === s.riderId) && s.latitude !== null && s.longitude !== null && s.capturedAt).map(s => ({ id: s.riderId, name: riderNames[s.riderId] || "Livreur", phone: riders?.find(r => r.id === s.riderId)?.phone || null, latitude: s.latitude!, longitude: s.longitude!, accuracy: s.accuracy || 0, time: s.capturedAt!, status: trackingStatus(s, now) })), [states, riders, riderNames, visibleRiders, mode, now]);
+  useEffect(() => { setCursor(0); setPlaying(false); }, [riderId, historyKey, hiddenRiders, day, from, to, mode]);
   useEffect(() => {
     if (!playing) return;
     const timer = window.setInterval(() => setCursor(index => {
@@ -46,29 +62,47 @@ export default function RiderMapClient() {
   }, [playing, points.length]);
   useEffect(() => { if (cursor >= points.length - 1) setPlaying(false); }, [cursor, points.length]);
   const selectedPoint = points[Math.min(cursor, Math.max(0, points.length - 1))];
+  const destination = useMemo<SelectedPosition | null>(() => {
+    if (mode === "history") return selectedPoint ? { ...selectedPoint, id: selectedPoint.id, name: riderNames[selectedPoint.riderId] || "Livreur", time: selectedPoint.capturedAt } : null;
+    const selected = markers.find(marker => marker.id === riderId);
+    return selected || null;
+  }, [mode, selectedPoint, riderNames, markers, riderId]);
   const error = mode === "live" ? live.error : history.error || live.error;
   const inputStyle = "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm min-w-0";
   return <div className="mx-auto w-full max-w-[1600px] space-y-4 p-4 lg:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="flex items-center gap-2 text-lg font-bold text-slate-900"><MapPin size={20} /> Suivi des livreurs</h1><p className="mt-1 text-xs text-slate-500">Positions partagées par les livreurs · Heures d’Abidjan (UTC)</p></div>
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1">{(["live", "history"] as const).map(value => <button key={value} onClick={() => setMode(value)} className={"rounded-md px-3 py-2 text-sm font-semibold " + (mode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{value === "live" ? "En direct" : "Historique"}</button>)}</div></div>
+      <div className="flex gap-1 rounded-lg bg-slate-100 p-1">{(["live", "history"] as const).map(value => <button key={value} onClick={() => { setMode(value); setFollowing(false); if (value === "history" && !historyRiders.length && riderId) setHistoryRiders([riderId]); }} className={"rounded-md px-3 py-2 text-sm font-semibold " + (mode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{value === "live" ? "En direct" : "Historique"}</button>)}</div></div>
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-3">
-      <label className="grid gap-1 text-xs font-medium text-slate-600">Livreur<select value={riderId} onChange={e => setRiderId(e.target.value)} className={inputStyle}><option value="">{mode === "live" ? "Tous les livreurs" : "Choisir un livreur"}</option>{riders?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+      {mode === "live" ? <>
+        <label className="grid gap-1 text-xs font-medium text-slate-600">Livreur<select value={riderId} onChange={e => { setRiderId(e.target.value); setFollowing(false); }} className={inputStyle}><option value="">Tous les livreurs</option>{riders?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+        <label className="grid gap-1 text-xs font-medium text-slate-600">État GPS<select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setFollowing(false); }} className={inputStyle}><option value="all">Tous les états</option>{["Suivi actif", "Position ancienne", "Arrêté", "En attente GPS", "Aucun partage"].map(status => <option key={status}>{status}</option>)}</select></label>
+      </> : <details className="relative rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+        <summary className="cursor-pointer">Livreurs : {historyRiders.length}/5</summary>
+        <div className="mt-2 max-h-48 min-w-52 space-y-1 overflow-y-auto">{riders?.map(r => <label key={r.id} className="flex min-h-9 cursor-pointer items-center gap-2"><input type="checkbox" checked={historyRiders.includes(r.id)} disabled={!historyRiders.includes(r.id) && historyRiders.length >= 5} onChange={e => { setHistoryRiders(ids => e.target.checked ? [...ids, r.id] : ids.filter(id => id !== r.id)); setHiddenRiders([]); }} /><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: riderColor(r.id) }} />{r.name}</label>)}</div>
+      </details>}
       {mode === "history" && <><label className="grid gap-1 text-xs font-medium text-slate-600">Jour<input type="date" value={day} max={today()} onChange={e => setDay(e.target.value)} className={inputStyle} /></label><label className="grid gap-1 text-xs font-medium text-slate-600">De<input type="time" value={from} onChange={e => setFrom(e.target.value)} className={inputStyle} /></label><label className="grid gap-1 text-xs font-medium text-slate-600">À<input type="time" value={to} onChange={e => setTo(e.target.value)} className={inputStyle} /></label><button className={inputStyle} onClick={() => { setDay(today()); setFrom("00:00"); setTo("23:59"); }}>Aujourd’hui</button></>}
-      <button aria-label="Actualiser les positions" className={inputStyle + " ml-auto"} disabled={mode === "history" && (!riderId || !validPeriod)} onClick={() => { if (mode === "live") void live.refetch(); else void history.refetch(); }}><RefreshCw size={16} /></button>
+      <button aria-label="Actualiser les positions" className={inputStyle + " ml-auto"} disabled={mode === "history" && (!historyRiders.length || !validPeriod)} onClick={() => { if (mode === "live") void live.refetch(); else void history.refetch(); }}><RefreshCw size={16} /></button>
     </div>
-    {mode === "live" && riderId && <button className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold" style={{ color: riderColor(riderId) }} onClick={() => { setDay(today()); setFrom("00:00"); setTo("23:59"); setMode("history"); }}>Voir le tracé du jour</button>}
+    {mode === "live" && riderId && <div className="flex flex-wrap items-center gap-2">
+      <button className={inputStyle + " font-semibold"} style={{ color: riderColor(riderId) }} onClick={() => { setDay(today()); setFrom("00:00"); setTo("23:59"); setHistoryRiders([riderId]); setHiddenRiders([]); setFollowing(false); setMode("history"); }}>Voir le tracé du jour</button>
+      <button aria-pressed={following} disabled={!following && !markers.some(m => m.id === riderId)} className={inputStyle + " font-semibold disabled:opacity-50"} onClick={() => setFollowing(!following)}>{following ? "Arrêter le centrage" : "Suivre sur la carte"}</button>
+      {following && <span className="text-xs text-slate-500">Centrage sur la dernière position connue. Déplacez la carte pour l’arrêter.</span>}
+    </div>}
+    <ViewerPositionPanel position={viewerPosition} destination={destination} linked={linkPosition} onPosition={setViewerPosition} onLink={value => { setLinkPosition(value); if (value) setFollowing(false); }} />
     {error && <div role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{error.message} Les positions conservées à l’écran peuvent être anciennes.</div>}
     {mode === "history" && !validPeriod && <p role="alert" className="text-sm text-red-700">Choisissez un jour et une plage horaire valide.</p>}
     <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
       <aside className="max-h-[35vh] space-y-2 overflow-y-auto lg:max-h-[65vh]">
-        {mode === "live" ? <>{live.isPending && <p className="p-3 text-sm text-slate-500">Chargement des livreurs…</p>}{riders?.filter(r => !riderId || r.id === riderId).map(r => { const state = states?.find(s => s.riderId === r.id); const status = trackingStatus(state, now); return <button key={r.id} onClick={() => setRiderId(r.id)} className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left"><span className="flex items-center gap-2 text-sm font-bold text-slate-900"><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: riderColor(r.id) }} />{r.name}</span><span className={"mt-1 block text-xs font-medium " + (status === "Suivi actif" ? "text-emerald-700" : "text-slate-500")}>{state ? status : "Aucun partage"}</span><span className="mt-2 block text-xs text-slate-500">{state?.capturedAt ? formatTime(state.capturedAt) + " · ±" + Math.round(state.accuracy || 0) + " m" : "Aucune position reçue"}</span></button>; })}{riders?.length === 0 && <p className="p-3 text-sm text-slate-500">Aucun livreur enregistré.</p>}<p className="p-2 text-xs leading-relaxed text-slate-500">{streamConnected ? "Connexion directe : chaque position reçue actualise la carte." : "Connexion directe en attente : actualisation de secours toutes les 10 s."} Chaque livreur garde sa couleur. Les repères en pointillés indiquent un suivi arrêté ou une position ancienne. La précision dépend du téléphone et du signal GPS.</p></> : <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <h2 className="font-bold">Parcours du jour</h2>{riderId && <p className="mt-2 flex items-center gap-2 font-semibold"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: riderColor(riderId) }} />{riders?.find(r => r.id === riderId)?.name || "Livreur"}</p>}<p className="mt-2 text-slate-500">{!riderId ? "Choisissez un livreur pour afficher son parcours." : history.isFetching ? "Chargement du parcours…" : points.length ? points.length + " positions affichées" : "Aucune position pour cette période."}</p>
-          {history.data?.truncated && <p className="mt-2 text-amber-700">{history.data.total} positions trouvées. Seules les 10 000 premières sont affichées : réduisez la plage horaire.</p>}
-          {selectedPoint && <><p className="mt-4 font-semibold">{formatTime(selectedPoint.capturedAt)}</p><p className="mt-1 text-xs text-slate-500">Précision ±{Math.round(selectedPoint.accuracy)} m · Point {cursor + 1}/{points.length}</p><input aria-label="Position dans le parcours" type="range" min={0} max={Math.max(0, points.length - 1)} value={Math.min(cursor, points.length - 1)} onChange={e => { setPlaying(false); setCursor(Number(e.target.value)); }} className="mt-4 w-full" /><button className={inputStyle + " mt-2 w-full"} onClick={() => { if (cursor >= points.length - 1) setCursor(0); setPlaying(!playing); }} disabled={points.length < 2}>{playing ? "Pause" : "Lire le parcours"}</button></>}
+        {mode === "live" ? <>{live.isPending && <p className="p-3 text-sm text-slate-500">Chargement des livreurs…</p>}{visibleRiders.map(r => { const state = states?.find(s => s.riderId === r.id); const status = trackingStatus(state, now); return <button key={r.id} onClick={() => { setRiderId(r.id); setFollowing(false); }} className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left"><span className="flex items-center gap-2 text-sm font-bold text-slate-900"><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: riderColor(r.id) }} />{r.name}</span><span className={"mt-1 block text-xs font-medium " + (status === "Suivi actif" ? "text-emerald-700" : "text-slate-500")}>{state ? status : "Aucun partage"}</span><span className="mt-2 block text-xs font-semibold text-slate-600">{positionAge(state?.capturedAt, now)}</span><span className="mt-1 block text-xs text-slate-500">{state?.capturedAt ? formatTime(state.capturedAt) + " · ±" + Math.round(state.accuracy || 0) + " m" : "Aucune position reçue"}</span></button>; })}{!live.isPending && visibleRiders.length === 0 && <p className="p-3 text-sm text-slate-500">Aucun livreur ne correspond à ces filtres.</p>}<p className="p-2 text-xs leading-relaxed text-slate-500">{streamConnected ? "Connexion directe : chaque position reçue actualise la carte." : "Connexion directe en attente : actualisation de secours toutes les 10 s."} Chaque livreur garde sa couleur. Les repères en pointillés indiquent un suivi arrêté ou une position ancienne. Une absence de signal ne signifie pas que le livreur est immobile. La précision dépend du téléphone et du signal GPS.</p></> : <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+          <h2 className="font-bold">Parcours comparés</h2>
+          {historyRiders.map(id => { const track = history.data?.tracks?.find(t => t.riderId === id); return <label key={id} className="mt-2 flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={!hiddenRiders.includes(id)} onChange={e => setHiddenRiders(ids => e.target.checked ? ids.filter(value => value !== id) : [...ids, id])} /><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: riderColor(id) }} /><span className="min-w-0"><strong className="block text-xs">{riderNames[id] || "Livreur"}</strong><span className="text-xs text-slate-500">{track ? track.shown + "/" + track.total + " points" + (track.truncated ? " · limité" : "") : "En attente"}</span></span></label>; })}
+          <p className="mt-2 text-slate-500">{!historyRiders.length ? "Sélectionnez jusqu’à 5 livreurs dans le filtre." : history.isFetching ? "Chargement des parcours…" : points.length ? points.length + " positions visibles" : "Aucune position visible pour cette sélection."}</p>
+          {history.data?.truncated && <p className="mt-2 text-amber-700">Certains parcours sont partiels : limite de {historyRiders.length === 1 ? "10 000" : "2 000"} points par livreur. Réduisez la plage horaire.</p>}
+          {selectedPoint && <><p className="mt-4 text-xs font-bold" style={{ color: riderColor(selectedPoint.riderId) }}>{riderNames[selectedPoint.riderId] || "Livreur"}</p><p className="mt-1 font-semibold">{formatTime(selectedPoint.capturedAt)}</p><p className="mt-1 text-xs text-slate-500">Précision ±{Math.round(selectedPoint.accuracy)} m · Point {cursor + 1}/{points.length}</p><input aria-label="Position dans le parcours" type="range" min={0} max={Math.max(0, points.length - 1)} value={Math.min(cursor, points.length - 1)} onChange={e => { setPlaying(false); setCursor(Number(e.target.value)); }} className="mt-4 w-full" /><button className={inputStyle + " mt-2 w-full"} onClick={() => { if (cursor >= points.length - 1) setCursor(0); setPlaying(!playing); }} disabled={points.length < 2}>{playing ? "Pause" : "Lire le parcours"}</button></>}
           <p className="mt-4 text-xs leading-relaxed text-slate-500">Le tracé relie les positions reçues. Les interruptions de plus de 5 minutes et les changements de session coupent le tracé. La lecture avance point par point.</p>
         </div>}
       </aside>
-      <TrackingMap markers={markers} points={points} cursor={cursor} viewKey={[mode, riderId, day, from, to].join("|")} />
+      <TrackingMap markers={markers} points={points} cursor={cursor} viewKey={[mode, riderId, historyKey, hiddenRiders.join(","), statusFilter, day, from, to].join("|")} followId={mode === "live" && following ? riderId : ""} onStopFollowing={() => setFollowing(false)} riderNames={riderNames} viewerPosition={viewerPosition} destination={linkPosition ? destination : null} />
     </div>
   </div>;
 }

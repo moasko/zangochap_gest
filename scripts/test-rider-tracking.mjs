@@ -116,3 +116,29 @@ assert.equal(trackingStatus({ active: true, capturedAt: new Date().toISOString()
 assert.equal(trackingStatus({ active: true, capturedAt: new Date(Date.now() - 180000).toISOString(), lastReceivedAt: new Date().toISOString() }, Date.now()), "Position ancienne");
 assert.equal(trackingStatus({ active: false }, Date.now()), "Arrêté");
 console.log("OK: roles, origin, ownership, validation, throttling, duplicate rollback, stop/restart tokens, bounded UTC history and stale positions. Mock database only.");
+
+// Multi-rider history: cap each rider fairly and never join different riders' paths.
+const firstPoint = { ...points[0] };
+points = Array.from({ length: 2001 }, (_, i) => ({ ...firstPoint, id: "a-" + i }));
+points.push({ ...firstPoint, id: "b-1", riderId: "rider-b" });
+const combined = await (await get("mode=history&riderId=rider-a&riderId=rider-b&day=" + day)).json();
+assert.equal(combined.points.length, 2001);
+assert.equal(combined.total, 2002);
+assert.equal(combined.truncated, true);
+assert.equal(combined.tracks.find(t => t.riderId === "rider-a").shown, 2000);
+assert.equal(combined.tracks.find(t => t.riderId === "rider-b").shown, 1);
+assert.equal((await get("mode=history&day=" + day)).status, 400);
+assert.equal((await get("mode=history&riderId=rider-a&riderId=unknown&day=" + day)).status, 400);
+assert.equal((await get("mode=history&day=" + day + "&riderId=1&riderId=2&riderId=3&riderId=4&riderId=5&riderId=6")).status, 400);
+const { trackSegments } = load("modules/rider-tracking/segments.ts");
+const sample = (id, riderId, minute, sessionId = "one") => ({ id, riderId, sessionId, capturedAt: "2026-09-10T08:" + String(minute).padStart(2, "0") + ":00.000Z" });
+const mixed = [sample("a1", "a", 0), sample("b1", "b", 1), sample("a2", "a", 2), sample("b2", "b", 3), sample("a3", "a", 10), sample("a4", "a", 11, "two")];
+const segments = trackSegments(mixed);
+assert.equal(segments.length, 4);
+assert.equal(segments[0].map(p => p.id).join(","), "a1,a2");
+assert.equal(segments[3].map(p => p.id).join(","), "b1,b2");
+assert.equal(mixed.map(p => p.id).join(","), "a1,b1,a2,b2,a3,a4", "does not reorder input");
+const { positionAge } = load("modules/rider-tracking/types.ts");
+assert.equal(positionAge(null, Date.now()), "Aucune position reçue");
+assert.equal(positionAge(new Date(Date.now() - 180000).toISOString(), Date.now()), "Position il y a 3 min");
+console.log("OK: multi-rider validation, per-rider limits, independent segments, interruptions and position age.");

@@ -223,3 +223,14 @@ Les entrées les plus récentes sont placées en premier.
 - SSE administrateur via LISTEN/NOTIFY PostgreSQL : signal après commit start/stop/point, snapshot authentifié rechargé, reconnexion et polling de secours. Aucun trigger/migration ; connexion directe optionnelle RIDER_STREAM_DATABASE_URL passée par Docker.
 - RiderTracking utilise watchPosition avec rythme d’envoi conservé et heartbeat stationnaire. Paramètre optionnel « Garder l’écran allumé » via Wake Lock, libéré à l’arrêt ou arrière-plan, indépendant du montage des réglages.
 - TypeScript, lint ciblé et tests GPS/SSE simulés passent. Tests physiques et déploiement non effectués ; aucune modification DB exécutée.
+
+## 2026-09-10 — Comparaison de parcours et filtres GPS
+- Comparaison jusqu’à 5 livreurs sélectionnés, couleurs stables et tracés masquables. API bornée à 2 000 points/personne en multi (10 000 en mono), totaux et avertissements explicites.
+- Tracés regroupés par livreur avant découpe des sessions/interruptions ; lecture avec identification du livreur courant.
+- Centrage automatique optionnel en direct, interrompu par navigation manuelle ; filtres par état GPS et âge des positions en secondes/minutes/heures.
+- TypeScript et lint ciblé OK ; tests simulés API multi et segments OK. Aucun accès DB ni déploiement effectué.
+
+## 2026-09-10 — Position administrateur et liaison locale
+- Bouton Afficher ma position avec autorisation navigateur, précision/horodatage, masquage et liaison à vol d’oiseau au livreur ou au point historique sélectionné. Centrage explicite sur les deux points. Position conservée uniquement en mémoire de page, sans écriture DB.
+- L’approbation automatique a rejeté le routage Geoapify et les liens Google Maps faute d’accord explicite pour transmettre les coordonnées administrateur/livreur à ces destinations. Aucune de ces fonctions n’a été ajoutée ou exécutée ; demander cet accord après livraison de la partie locale.
+- TypeScript et lint ciblé vérifiés. Validation physique GPS non effectuée.

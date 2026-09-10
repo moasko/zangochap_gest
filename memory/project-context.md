@@ -197,3 +197,6 @@ Module modules/rider-tracking et routes /api/rider-tracking (livreur connecté) 
 
 ### Flux GPS direct — 2026-09-10
 Carte admin SSE avec invalidations via pg_notify transactionnel / LISTEN (1 connexion dédiée par onglet visible), repli polling. Rider watchPosition, envoi ~10 s/60 s conservé. Option Wake Lock dans les paramètres profil, aucun suivi web garanti écran verrouillé. Connexion PostgreSQL directe requise pour LISTEN, RIDER_STREAM_DATABASE_URL optionnelle ; pas de migration supplémentaire. Voir README du module.
+
+### Carte GPS — comparaison
+Historique désormais multi-livreurs (1 à 5 IDs explicites, paramètre riderId répété), limite 2 000 points par livreur en comparaison / 10 000 en mono ; champs tracks pour totaux et troncature individuels. Tracés masquables, segmentation dans modules/rider-tracking/segments.ts. Direct avec filtres de fraîcheur et centrage optionnel sur un livreur.
