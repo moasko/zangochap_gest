@@ -194,3 +194,6 @@ L’historique interactif utilise history-actions.ts, séparé du chargement des
 
 ### Géolocalisation des livreurs — 2026-09-10
 Module modules/rider-tracking et routes /api/rider-tracking (livreur connecté) /api/admin/rider-tracking (admin/developer). Carte /zangochap-manager/admin/rider-map : live 10 s, historique par jour et heures Abidjan, 10 000 points maximum explicités. Partage automatique à l’ouverture via RiderTracking avec autorisation navigateur et arrêt manuel, token par démarrage, dernier état RiderTrackingState et historique RiderLocationPoint ; aucun lien avec les mutations métier des commandes. Voir modules/rider-tracking/README.md pour les limites web, la conservation et la validation. Migration manuelle SQL préparée, NON exécutée ; accord propriétaire requis avant activation sur zangochapdb. Aucune purge automatique, aucune coordonnée en stockage local.
+
+### Flux GPS direct — 2026-09-10
+Carte admin SSE avec invalidations via pg_notify transactionnel / LISTEN (1 connexion dédiée par onglet visible), repli polling. Rider watchPosition, envoi ~10 s/60 s conservé. Option Wake Lock dans les paramètres profil, aucun suivi web garanti écran verrouillé. Connexion PostgreSQL directe requise pour LISTEN, RIDER_STREAM_DATABASE_URL optionnelle ; pas de migration supplémentaire. Voir README du module.

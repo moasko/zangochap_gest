@@ -21,6 +21,7 @@ function matches(row, where) {
   });
 }
 const database = {
+  $queryRaw: async () => [],
   riderTrackingState: {
     upsert: async ({ create, update }) => { state = state ? { ...state, ...update } : { ...create }; },
     updateMany: async ({ where, data }) => { if (!matches(state, where)) return { count: 0 }; state = { ...state, ...data }; return { count: 1 }; },

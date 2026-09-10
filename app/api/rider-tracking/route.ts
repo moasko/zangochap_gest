@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
     const data = parsed.data;
     const now = new Date();
     if (data.action === "start") {
-      await prisma.riderTrackingState.upsert({
+      await prisma.$transaction(async tx => {
+      await tx.riderTrackingState.upsert({
         where: { riderId: user.id },
         create: { riderId: user.id, sessionId: data.sessionId, active: true, startedAt: now },
         update: {
@@ -33,12 +34,17 @@ export async function POST(req: NextRequest) {
           latitude: null, longitude: null, accuracy: null, capturedAt: null, lastReceivedAt: null,
         },
       });
+      await tx.$queryRaw`SELECT pg_notify('rider_tracking_changed', '')::text`;
+      });
       return json({ success: true });
     }
     if (data.action === "stop") {
-      await prisma.riderTrackingState.updateMany({
+      await prisma.$transaction(async tx => {
+      await tx.riderTrackingState.updateMany({
         where: { riderId: user.id, sessionId: data.sessionId },
         data: { active: false, stoppedAt: now },
+      });
+      await tx.$queryRaw`SELECT pg_notify('rider_tracking_changed', '')::text`;
       });
       return json({ success: true });
     }
@@ -68,6 +74,7 @@ export async function POST(req: NextRequest) {
           capturedAt, receivedAt: now,
         },
       });
+      await tx.$queryRaw`SELECT pg_notify('rider_tracking_changed', '')::text`;
       return { accepted: true, stopped: false };
     });
     return json(result, result.stopped ? 409 : 200);

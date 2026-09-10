@@ -198,3 +198,28 @@ Les entrées les plus récentes sont placées en premier.
 
 ## 2026-09-10 — GPS automatique et discret
 - À la demande du propriétaire, démarrage GPS à l’ouverture du portail avec permission navigateur ; tentative à la reconnexion si nécessaire, pas de boucle après refus GPS. Contrôle compact avec état visible, arrêt et détails repliables. Arrêt manuel conservé dans cet onglet jusqu’à réactivation, sans stockage de coordonnées. Aucune modification de base.
+
+## 2026-09-10 — Couleurs des parcours
+- Couleur stable dérivée de l’ID livreur sur repère, fiche, légende et tracé historique ; états anciens/arrêtés signalés en texte et pointillés. Accès « Voir le tracé du jour » après sélection d’un livreur en direct. Aucun chargement global des historiques ni changement DB.
+
+## 2026-09-10 — Réglage GPS dans le profil
+- Activation/désactivation déplacée dans Profil > Paramètres · Localisation. Écran principal limité à l’état GPS et un accès Paramètres. Contrôleur GPS toujours monté : changer d’onglet ne redémarre ni ne coupe le suivi. Démarrage par défaut et arrêt manuel mémorisé conservés.
+
+## 2026-09-10 — Suppression autorisée du lot de démonstration Rider
+- À la demande explicite du propriétaire, audit des 12 IDs du manifeste : 13 articles personnalisés, aucun lien stock, règlement, client, promotion, collecte ou cadeau.
+- Sauvegarde locale ignorée Git dans scratch, puis suppression transactionnelle ciblée via scripts/cleanup-rider-demo.mjs. Vérification : 0 commande et 0 article restants pour ces IDs. Aucun compte supprimé.
+- Manifeste conservé et marqué deleted avec chemin de sauvegarde. Le lot temporaire est nettoyé ; ne pas répéter sa suppression ni le recréer sans demande.
+
+## 2026-09-10 — Nom du lieu sur la carte
+- Recherche inverse au clic sur un point actuel ou historique, API admin avec validation et cache borné, délai réseau et limitation par processus. Affiche « Lieu proche », message explicite en cas de manque de couverture/service.
+- Geoapify préparé : GEOAPIFY_API_KEY serveur nécessaire, non configurée pendant cette intervention. Aucun appel réel de coordonnées ni modification DB. Pas de requête périodique de géocodage.
+
+## 2026-09-10 — Activation locale du géocodage
+- Clé fournie par le propriétaire enregistrée uniquement dans .env ignoré par Git. Aucun secret dans le code ou la mémoire.
+- Test Geoapify sur une position publique d’Abidjan : HTTP 200 et adresse reçue ; aucune position de livreur transmise.
+- Configuration locale validée. Variable GEOAPIFY_API_KEY à renseigner également dans l’environnement de production avant redéploiement ; production non modifiée ici.
+
+## 2026-09-10 — Flux direct et maintien d’écran
+- SSE administrateur via LISTEN/NOTIFY PostgreSQL : signal après commit start/stop/point, snapshot authentifié rechargé, reconnexion et polling de secours. Aucun trigger/migration ; connexion directe optionnelle RIDER_STREAM_DATABASE_URL passée par Docker.
+- RiderTracking utilise watchPosition avec rythme d’envoi conservé et heartbeat stationnaire. Paramètre optionnel « Garder l’écran allumé » via Wake Lock, libéré à l’arrêt ou arrière-plan, indépendant du montage des réglages.
+- TypeScript, lint ciblé et tests GPS/SSE simulés passent. Tests physiques et déploiement non effectués ; aucune modification DB exécutée.

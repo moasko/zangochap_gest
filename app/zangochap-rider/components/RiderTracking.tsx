@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useScreenAwake } from "./use-screen-awake";
 import { LocateFixed } from "lucide-react";
 import { distanceMeters } from "@/modules/rider-tracking/validation";
 
@@ -27,6 +28,7 @@ function locate(): Promise<GeolocationPosition> {
 
 export function RiderTracking({ riderId, settingsTarget, openSettings }: { riderId: string; settingsTarget: HTMLDivElement | null; openSettings: () => void }) {
   const [active, setActive] = useState(false);
+  const screenAwake = useScreenAwake(active, riderId);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [last, setLast] = useState<{ time: string; accuracy: number } | null>(null);
@@ -98,6 +100,7 @@ export function RiderTracking({ riderId, settingsTarget, openSettings }: { rider
   const upload = useCallback(async (position: GeolocationPosition, sessionId: string) => {
     if (token.current !== sessionId || !mounted.current) return;
     const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    if (sent.current && Date.now() - sent.current.sentAt < 10000) return;
     if (sent.current && Date.now() - sent.current.sentAt < 60000 && distanceMeters(sent.current, coords) < 20) return;
     const result = await trackingRequest({
       action: "point", sessionId, id: crypto.randomUUID(), ...coords,
@@ -113,23 +116,37 @@ export function RiderTracking({ riderId, settingsTarget, openSettings }: { rider
 
   useEffect(() => {
     if (!active) return;
-    const tick = async () => {
+    const watcherSession = token.current;
+    let latest: GeolocationPosition | null = null;
+    let disposed = false;
+    const handleError = (error: unknown) => {
+      if (disposed || !mounted.current || token.current !== watcherSession) return;
+      if (error instanceof Error && error.message === "SESSION_STOPPED") {
+        paused.current = true; stop(); setNotice("Cette tournée a été arrêtée ou remplacée sur un autre appareil.");
+      } else if (typeof error === "object" && error && "code" in error && error.code === 1) {
+        permissionDenied.current = true; stop(); setNotice("Autorisation GPS retirée. Suivi arrêté.");
+      } else setNotice(error instanceof Error ? error.message : "GPS temporairement indisponible. En attente d’une nouvelle position.");
+    };
+    const transmit = async () => {
       const sessionId = token.current;
-      if (!sessionId || sampling.current) return;
+      if (disposed || !sessionId || sampling.current || !latest) return;
       if (!navigator.onLine) { setNotice("Hors réseau : aucun envoi. Reprise à la reconnexion."); return; }
       sampling.current = true;
-      try { await upload(await locate(), sessionId); }
-      catch (error) {
-        if (token.current !== sessionId || !mounted.current) return;
-        if (error instanceof Error && error.message === "SESSION_STOPPED") {
-          paused.current = true; stop(); setNotice("Cette tournée a été arrêtée ou remplacée sur un autre appareil.");
-        } else if (typeof error === "object" && error && "code" in error && error.code === 1) {
-          permissionDenied.current = true; stop(); setNotice("Autorisation GPS retirée. Suivi arrêté.");
-        } else setNotice(error instanceof Error ? error.message : "Position indisponible. Nouvelle tentative dans 10 secondes.");
-      } finally { sampling.current = false; }
+      try {
+        // watchPosition may remain quiet while stationary: acquire a fresh heartbeat.
+        if (Date.now() - latest.timestamp > 50000) latest = await locate();
+        await upload(latest, sessionId);
+      }
+      catch (error) { if (token.current === sessionId) handleError(error); }
+      finally { sampling.current = false; }
     };
-    const timer = window.setInterval(() => { void tick(); }, 10000);
-    return () => window.clearInterval(timer);
+    const watch = navigator.geolocation.watchPosition(position => {
+      latest = position; void transmit();
+    }, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    const timer = window.setInterval(() => { void transmit(); }, 10000);
+    const online = () => { void transmit(); };
+    window.addEventListener("online", online);
+    return () => { disposed = true; navigator.geolocation.clearWatch(watch); window.clearInterval(timer); window.removeEventListener("online", online); };
   }, [active, upload, stop]);
 
   const start = useCallback(async () => {
@@ -188,6 +205,14 @@ export function RiderTracking({ riderId, settingsTarget, openSettings }: { rider
       <div className="mt-2 flex items-center gap-3">
         <span className="flex-1 text-sm text-slate-600">{active ? "GPS partagé avec le bureau" : busy ? "Connexion GPS…" : "GPS désactivé"}</span>
         <button type="button" onClick={toggle} className="min-h-11 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700">{active || busy ? "Désactiver le GPS" : "Activer le GPS"}</button>
+      </div>
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm text-slate-700">
+          Garder l’écran allumé
+          <input type="checkbox" checked={screenAwake.enabled} onChange={screenAwake.toggle} className="h-5 w-5 accent-orange-600" />
+        </label>
+        <p role="status" className="text-xs text-slate-500">{screenAwake.status}</p>
+        <p className="mt-1 text-xs text-slate-500">Pendant le suivi, tant que cette page reste visible. Consomme davantage de batterie.</p>
       </div>
       <div className="mt-2 text-xs leading-relaxed text-slate-500">
       {notice && <p role="status" className="my-1 text-amber-800">{notice}</p>}

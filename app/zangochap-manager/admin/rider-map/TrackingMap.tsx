@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { placeLabel } from "./place-label";
 import { riderColor } from "@/modules/rider-tracking/colors";
 import "leaflet/dist/leaflet.css";
 import type { RiderTrackPoint } from "@/modules/rider-tracking/types";
@@ -52,6 +53,8 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
         phone.style.display = "block"; phone.style.marginTop = "10px";
         label.append(phone);
       }
+      const place = placeLabel(marker.latitude, marker.longitude);
+      label.append(place.element);
       const badge = document.createElement("div");
       badge.style.cssText = "display:flex;align-items:center;gap:6px;width:max-content;max-width:180px;padding:6px 9px;background:white;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 2px 5px #0002;font:600 12px system-ui;color:#0f172a";
       const dot = document.createElement("span");
@@ -72,6 +75,7 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
         title: marker.name + " — voir les informations", alt: marker.name, keyboard: true,
         ...{ riderId: marker.id },
       }).bindPopup(label).addTo(group);
+      pin.on("click", () => { void place.load(); });
       if (openId === marker.id) pin.openPopup();
       if (markers.length === 1) L.circle(position, { interactive: false, radius: marker.accuracy, color: riderColor(marker.id), weight: 1, fillOpacity: 0.06 }).addTo(group);
     }
@@ -100,7 +104,9 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
     if (!point) return;
     const label = document.createElement("div");
     label.textContent = new Date(point.capturedAt).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" }) + " · précision ±" + Math.round(point.accuracy) + " m";
-    L.circleMarker([point.latitude, point.longitude], { radius: 8, color: "#fff", weight: 2, fillColor: riderColor(point.riderId), fillOpacity: 1 }).bindPopup(label).addTo(group);
+    const place = placeLabel(point.latitude, point.longitude);
+    label.append(place.element);
+    L.circleMarker([point.latitude, point.longitude], { radius: 8, color: "#fff", weight: 2, fillColor: riderColor(point.riderId), fillOpacity: 1 }).bindPopup(label).on("click", () => { void place.load(); }).addTo(group);
   }, [points, cursor]);
   return <div className="relative overflow-hidden rounded-lg border border-slate-200">
     <div ref={container} className="h-[55vh] min-h-[320px] w-full lg:h-[65vh]" style={{ zIndex: 0 }} aria-label="Carte des positions des livreurs" />
