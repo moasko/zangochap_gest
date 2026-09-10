@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import { riderColor } from "@/modules/rider-tracking/colors";
 import "leaflet/dist/leaflet.css";
 import type { RiderTrackPoint } from "@/modules/rider-tracking/types";
 export type MapMarker = { id: string; name: string; phone: string | null; latitude: number; longitude: number; accuracy: number; time: string; status: string };
@@ -39,6 +40,7 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
       const name = document.createElement("strong");
       name.textContent = marker.name;
       name.style.fontSize = "15px";
+      name.style.color = riderColor(marker.id);
       label.append(name);
       for (const text of [marker.status, "Dernière position : " + new Date(marker.time).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" }), "Précision : ±" + Math.round(marker.accuracy) + " m"]) {
         const line = document.createElement("div"); line.textContent = text; line.style.marginTop = "7px"; label.append(line);
@@ -53,9 +55,17 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
       const badge = document.createElement("div");
       badge.style.cssText = "display:flex;align-items:center;gap:6px;width:max-content;max-width:180px;padding:6px 9px;background:white;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 2px 5px #0002;font:600 12px system-ui;color:#0f172a";
       const dot = document.createElement("span");
-      dot.style.cssText = "width:10px;height:10px;border-radius:50%;flex-shrink:0;background:" + (marker.status === "Suivi actif" ? "#059669" : "#64748b");
+      dot.style.cssText = "width:10px;height:10px;border-radius:50%;flex-shrink:0;background:" + riderColor(marker.id);
       const title = document.createElement("span"); title.textContent = marker.name;
       title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      badge.style.borderColor = riderColor(marker.id);
+      if (marker.status !== "Suivi actif") {
+        badge.style.borderStyle = "dashed";
+        const state = document.createElement("span");
+        state.textContent = marker.status === "Arrêté" ? " · arrêté" : " · ancien";
+        state.style.cssText = "font-size:10px;color:#64748b";
+        title.append(state);
+      }
       badge.append(dot, title);
       const pin = L.marker(position, {
         icon: L.divIcon({ html: badge, className: "rider-name-marker", iconSize: [180, 30], iconAnchor: [14, 15], popupAnchor: [0, -14] }),
@@ -63,14 +73,16 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
         ...{ riderId: marker.id },
       }).bindPopup(label).addTo(group);
       if (openId === marker.id) pin.openPopup();
-      if (markers.length === 1) L.circle(position, { interactive: false, radius: marker.accuracy, color: "#64748b", weight: 1, fillOpacity: 0.06 }).addTo(group);
+      if (markers.length === 1) L.circle(position, { interactive: false, radius: marker.accuracy, color: riderColor(marker.id), weight: 1, fillOpacity: 0.06 }).addTo(group);
     }
     let segment: L.LatLngExpression[] = [];
-    const draw = () => { if (segment.length > 1) L.polyline(segment, { color: "#4f46e5", weight: 4 }).addTo(group); };
+    let segmentRider = "";
+    const draw = () => { if (segment.length > 1) L.polyline(segment, { color: riderColor(segmentRider), weight: 4 }).addTo(group); };
     points.forEach((point, i) => {
       const previous = points[i - 1];
-      if (previous && (previous.sessionId !== point.sessionId || Date.parse(point.capturedAt) - Date.parse(previous.capturedAt) > 300000)) { draw(); segment = []; }
+      if (previous && (previous.riderId !== point.riderId || previous.sessionId !== point.sessionId || Date.parse(point.capturedAt) - Date.parse(previous.capturedAt) > 300000)) { draw(); segment = []; }
       const position: L.LatLngExpression = [point.latitude, point.longitude];
+      segmentRider = point.riderId;
       coords.push(position); segment.push(position);
     });
     draw();
@@ -88,7 +100,7 @@ export default function TrackingMap({ markers, points, cursor, viewKey }: { mark
     if (!point) return;
     const label = document.createElement("div");
     label.textContent = new Date(point.capturedAt).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" }) + " · précision ±" + Math.round(point.accuracy) + " m";
-    L.circleMarker([point.latitude, point.longitude], { radius: 8, color: "#fff", weight: 2, fillColor: "#e11d48", fillOpacity: 1 }).bindPopup(label).addTo(group);
+    L.circleMarker([point.latitude, point.longitude], { radius: 8, color: "#fff", weight: 2, fillColor: riderColor(point.riderId), fillOpacity: 1 }).bindPopup(label).addTo(group);
   }, [points, cursor]);
   return <div className="relative overflow-hidden rounded-lg border border-slate-200">
     <div ref={container} className="h-[55vh] min-h-[320px] w-full lg:h-[65vh]" style={{ zIndex: 0 }} aria-label="Carte des positions des livreurs" />
