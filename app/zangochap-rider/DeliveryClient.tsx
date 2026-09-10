@@ -86,6 +86,7 @@ export default function DeliveryClient({
   user: { id: string; name: string; email: string; role?: string };
 }) {
   // ── State ──
+  const [gpsSettingsTarget, setGpsSettingsTarget] = useState<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>("missions");
   const [localOrders, setLocalOrders] = useState<RiderOrder[]>(orders);
   const [isOffline, setIsOffline] = useState(false);
@@ -385,7 +386,7 @@ export default function DeliveryClient({
         </header>
 
         <main className="rider-content flex-1 overflow-y-auto">
-          {user.role?.toUpperCase() === "LIVREUR" && <RiderTracking riderId={user.id} />}
+          {user.role?.toUpperCase() === "LIVREUR" && <RiderTracking riderId={user.id} settingsTarget={gpsSettingsTarget} openSettings={() => setActiveTab("profile")} />}
           <div className="rider-tour-summary">{activeTab === "missions" && (
             <div className="space-y-3">
               <div className="rounded-sm bg-white text-[#111827] p-3 border border-[#E5E7EB]">
@@ -445,7 +446,7 @@ export default function DeliveryClient({
             )}
             {activeTab === "history" && <RiderHistory onOpen={handleOpenOrder} />}
             {activeTab === "wallet" && <WalletView key="wallet" onOpen={handleOpenOrder} stats={stats} ordersToSettle={ordersToSettle} revenueHistory={revenueHistory} />}
-            {activeTab === "profile" && <ProfileView key="profile" user={user} stats={stats} navigate={setActiveTab} logout={() => logoutAction()} />}
+            {activeTab === "profile" && <ProfileView key="profile" gpsSettingsRef={setGpsSettingsTarget} user={user} stats={stats} navigate={setActiveTab} logout={() => logoutAction()} />}
           </AnimatePresence>
         </main>
 
