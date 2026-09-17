@@ -1,0 +1,20 @@
+.reprogramming-workspace { max-width: 1000px; margin: 0 auto; }
+.reprogramming-toolbar, .reprogramming-request header, .reprogramming-review > div { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.reprogramming-toolbar select { margin-left: 8px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; background: white; }
+.reprogramming-request { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 16px 0; overflow-wrap: anywhere; }
+.reprogramming-request h3 { margin: 0; }
+.reprogramming-request p, .reprogramming-request dd { line-height: 1.5; white-space: pre-wrap; }
+.reprogramming-request dl > div { margin: 10px 0; }
+.reprogramming-request dt { font-weight: 600; color: #475569; }
+.reprogramming-request dd { margin: 4px 0; }
+.reprogramming-request details { margin: 16px 0; }
+.reprogramming-request summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.reprogramming-status { padding: 5px 10px; border-radius: 6px; font-weight: 600; }
+.reprogramming-status.pending { background: #fff7ed; color: #9a3412; }
+.reprogramming-status.approved { background: #ecfdf5; color: #065f46; }
+.reprogramming-status.rejected { background: #fef2f2; color: #991b1b; }
+.reprogramming-review { display: grid; gap: 10px; margin-top: 20px; }
+.reprogramming-review textarea { width: 100%; min-height: 80px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; box-sizing: border-box; }
+.reprogramming-review > div { justify-content: flex-start; }
+.reprogramming-empty { padding: 24px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; }
+@media (max-width: 600px) { .reprogramming-request { padding: 14px; } .reprogramming-review button { width: 100%; } }

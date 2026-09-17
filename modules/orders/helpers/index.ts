@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { COMMUNES } from "@/lib/constants";
 
 // ============ ROLE HELPER ============
@@ -29,7 +30,7 @@ export function checkOrderAccess(order: any, session: any) {
 }
 
 // ============ REF GENERATOR ============
-export async function generateUniqueRef(commune?: string, typePrefix?: string) {
+export async function generateUniqueRef(commune?: string, typePrefix?: string, database: Prisma.TransactionClient = prisma) {
   const communePrefix = (commune && COMMUNES[commune]) || 'BJ';
   const suffixMinLength = 5;
 
@@ -46,7 +47,7 @@ export async function generateUniqueRef(commune?: string, typePrefix?: string) {
 
   // Keep the numeric part unique globally, including older refs that were
   // generated before this counter format existed.
-  const existingRefs = await prisma.order.findMany({
+  const existingRefs = await database.order.findMany({
     select: { ref: true },
   });
 
@@ -69,7 +70,7 @@ export async function generateUniqueRef(commune?: string, typePrefix?: string) {
 
     const sequenceStr = sequence.toString().padStart(suffixMinLength, '0');
     const candidate = `${basePrefix}${sequenceStr}`;
-    const existing = await prisma.order.findUnique({ where: { ref: candidate }, select: { id: true } });
+    const existing = await database.order.findUnique({ where: { ref: candidate }, select: { id: true } });
     if (!existing) return candidate;
   }
 
@@ -79,8 +80,8 @@ export async function generateUniqueRef(commune?: string, typePrefix?: string) {
 // ============ CUSTOMER UPSERT ============
 export async function upsertCustomerFromOrder(data: {
   name: string; phone: string; phone2?: string; location?: string; commune?: string; orderAmount: number;
-}) {
-  return prisma.customer.upsert({
+}, database: Prisma.TransactionClient = prisma) {
+  return database.customer.upsert({
     where: { phone: data.phone },
     update: {
       name: data.name,

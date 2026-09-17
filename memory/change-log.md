@@ -2,6 +2,14 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-09-17 — Validation administrateur des reprogrammations commerciales
+
+- Demandes commerciales en attente sans modifier la commande ; décision admin/developer, refus motivé, retour au demandeur et compteur dans Sidebar. Route `/zangochap-manager/orders/reprogramming` et écran métier `ReprogrammingRequestsClient`.
+- `modules/orders/actions/reprogramming-actions.ts`, `modules/orders/types/reprogramming.ts` : validation, droits, verrous, idempotence et détection de commande modifiée. Stockage CmsContent existant ; aucune migration nécessaire ou exécutée.
+- Création partagée dans `modules/orders/actions/order-creation-service.ts` pour intégrer commande/CRM/décision en transaction et déclencher les notifications après commit. Nouvelle commande attribuée au commercial demandeur, ou report de la commande existante pour REPRO_DISPO ; parcours directs admin/livreur conservés.
+- Tests isolés de `scripts/test-order-reprogramming.mjs` et cinq tests existants passent sur base/services simulés. TypeScript et lint des nouveaux fichiers vérifiés ; lint global garde une dette historique, détails dans `docs/PROGRESS.md`.
+- Dépendances installées selon lock et client Prisma généré avec URL factice sans connexion base. Aucun déploiement ou test UI authentifié réel ; pas de données de production modifiées. Documentation durable actualisée.
+
 ## 2026-08-31 — Grand livre regroupé par mois
 
 - L'onglet Sessions du Grand livre regroupe les journées par mois et année, de la plus récente à la plus ancienne.

@@ -533,6 +533,8 @@ export default function OrdersClient({
     onMutate: async ({ orderId, deliveryDate }) => {
       await queryClient.cancelQueries({ queryKey: ["orders"] });
 
+      if (user?.role === "commercial") return {};
+
       const previousData = queryClient.getQueryData(["orders", queryKey[1]]);
 
       queryClient.setQueryData(["orders", queryKey[1]], (old: any) => {
@@ -553,8 +555,8 @@ export default function OrdersClient({
       return { previousData };
     },
 
-    onSuccess: () => {
-      showToast("Commande mise en repro-dispo ✓", "success");
+    onSuccess: (result) => {
+      showToast(result.success && result.approvalRequired ? "Demande envoyée à l'administrateur. La commande reste inchangée." : "Commande mise en repro-dispo ✓", "success");
 
       setSelectedOrder(null);
     },
@@ -788,8 +790,8 @@ export default function OrdersClient({
     (orderId: string, data: any) => {
       startTransition(async () => {
         try {
-          await reprogramOrder(orderId, data);
-          showToast("Commande reprogrammée créée ✓", "success");
+          const result = await reprogramOrder(orderId, data);
+          showToast("approvalRequired" in result ? "Demande envoyée à l'administrateur. La commande reste inchangée." : "Commande reprogrammée créée ✓", "success");
           setOrderToReprogram(null);
           setSelectedOrder(null);
           queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -6452,6 +6454,7 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           isPending={isPending}
           onPreviewImage={setPreviewImage}
           products={products}
+          approvalRequired={user?.role === "commercial"}
         />
       )}
 
@@ -7262,7 +7265,7 @@ function OrderDetailModal({
                 {isPending ? (
                   <div className="animate-spin" />
                 ) : (
-                  "Confirmer la repro-dispo"
+                  user?.role === "commercial" ? "Demander la validation administrateur" : "Confirmer la repro-dispo"
                 )}
               </button>
             </div>
@@ -8063,6 +8066,7 @@ function OrderFormModal({
   onPreviewImage,
   products = [],
   onReproDispo,
+  approvalRequired = false,
 }: {
   order: any;
   mode?: "duplicate" | "exchange" | "reprogram" | "edit";
@@ -8072,6 +8076,7 @@ function OrderFormModal({
   onPreviewImage: (url: string | null) => void;
   products?: any[];
   onReproDispo?: () => void;
+  approvalRequired?: boolean;
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -8147,6 +8152,10 @@ function OrderFormModal({
           : "",
 
       deliveryDate: getDefaultDeliveryDate(),
+      reason: "",
+      paymentMethod: mode === "reprogram" ? order.paymentMethod || "" : undefined,
+      depositSenderPhone: mode === "reprogram" ? order.depositSenderPhone || "" : undefined,
+      depositTransactionRef: mode === "reprogram" ? order.depositTransactionRef || "" : undefined,
     };
   });
 
@@ -8439,7 +8448,7 @@ function OrderFormModal({
               fontWeight: 800,
             }}
             onClick={() => onConfirm(buildConfirmData())}
-            disabled={isPending || formData.items.length === 0}
+            disabled={isPending || formData.items.length === 0 || (mode === "reprogram" && approvalRequired && !formData.reason.trim())}
           >
             {isPending ? (
               <div className="animate-spin" />
@@ -8451,7 +8460,7 @@ function OrderFormModal({
                   : mode === "exchange"
                     ? "Créer l'échange"
                     : mode === "reprogram"
-                      ? "Créer la reprogrammation"
+                      ? approvalRequired ? "Envoyer la demande" : "Créer la reprogrammation"
                     : "Enregistrer"}
               </>
             )}
@@ -8460,6 +8469,11 @@ function OrderFormModal({
       }
     >
       <div className="order-modal-grid">
+        {mode === "reprogram" && approvalRequired && <div style={{ gridColumn: "1 / -1", padding: 16, background: "#fff7ed" }}>
+          <p>{"La commande reste inchangée jusqu'à l'approbation de l'administrateur. Après validation, une nouvelle commande reprogrammée sera créée."}</p>
+          <label htmlFor="reprogramming-reason">Motif de la reprogrammation *</label>
+          <textarea id="reprogramming-reason" className="input" maxLength={2000} value={formData.reason} onChange={event => setFormData(previous => ({ ...previous, reason: event.target.value }))} />
+        </div>}
         {/* LEFT PANEL: CLIENT INFO */}
 
         <div

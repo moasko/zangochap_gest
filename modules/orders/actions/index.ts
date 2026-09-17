@@ -1,5 +1,15 @@
 "use server";
 
+import * as reprogramming from "./reprogramming-actions";
+
+export async function getReprogrammingRequests() {
+  return reprogramming.getReprogrammingRequests();
+}
+
+export async function reviewOrderReprogramming(requestId: string, decision: "APPROVED" | "REJECTED", note?: string) {
+  return reprogramming.reviewOrderReprogramming(requestId, decision, note);
+}
+
 import * as actions from "./actions";
 
 export async function generateUniqueRef(commune?: string, typePrefix?: string) {
