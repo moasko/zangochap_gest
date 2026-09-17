@@ -8423,6 +8423,7 @@ function OrderFormModal({
           >
             Annuler
           </button>
+          {mode === "exchange" && approvalRequired && !formData.exchangeReason.trim() && <span style={{ fontSize: 12, color: "var(--orange)", maxWidth: 230 }}>Renseignez le motif pour activer l’envoi.</span>}
           {mode === "edit" &&
             onReproDispo &&
             !["DELIVERED", "CANCELLED"].includes(
@@ -8447,6 +8448,8 @@ function OrderFormModal({
               fontSize: 13,
               fontWeight: 800,
             }}
+            title={isPending ? "Envoi en cours" : formData.items.length === 0 ? "Ajoutez au moins un article" : mode === "exchange" && approvalRequired && !formData.exchangeReason.trim() ? "Renseignez le motif de l’échange pour envoyer la demande" : undefined}
+            aria-describedby={mode === "exchange" && approvalRequired && !formData.exchangeReason.trim() ? "exchange-submit-help" : undefined}
             onClick={() => onConfirm(buildConfirmData())}
             disabled={isPending || formData.items.length === 0 || (mode === "exchange" && approvalRequired && !formData.exchangeReason.trim())}
           >
@@ -8593,11 +8596,13 @@ function OrderFormModal({
                   className="field-label-sm"
                   style={{ color: "var(--orange)" }}
                 >
-                  MOTIF DE L'ÉCHANGE
+                  MOTIF DE L'ÉCHANGE{mode === "exchange" && approvalRequired ? " *" : ""}
                 </label>
 
                 <input
                   className="field-input"
+                  required={mode === "exchange" && approvalRequired}
+                  aria-describedby={mode === "exchange" && approvalRequired ? "exchange-submit-help" : undefined}
                   value={formData.exchangeReason}
                   onChange={(e) =>
                     setFormData({ ...formData, exchangeReason: e.target.value })
@@ -8610,6 +8615,7 @@ function OrderFormModal({
                   }}
                   placeholder="Pourquoi faire un échange ? (ex: Problème de taille)"
                 />
+                {mode === "exchange" && approvalRequired && <p id="exchange-submit-help" aria-live="polite" style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--orange)" }}>{formData.exchangeReason.trim() ? "Motif renseigné : vous pouvez envoyer la demande si le panier contient un article." : "Motif obligatoire : renseignez-le pour activer « Envoyer la demande »."}</p>}
               </div>
             )}
 
