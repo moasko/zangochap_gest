@@ -42,7 +42,21 @@ export async function requestOrderExchange(orderId: string, input: unknown) {
   if (session.role !== "commercial") throw new Error("Cette demande est réservée aux commerciaux.");
   z.string().min(1).max(200).parse(orderId);
   const parsed = ExchangeOrderSchema.safeParse(input);
-  if (!parsed?.success) throw new Error(parsed?.error.issues[0]?.message || "Demande invalide.");
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const fields: Record<string, string> = {
+      customerName: "Nom du client", customerPhone: "Téléphone du client", customerPhone2: "Second téléphone",
+      customerLocation: "Adresse du client", commune: "Zone de livraison", deliveryDate: "Date de livraison",
+      exchangeReason: "Motif de l’échange", deliveryFee: "Frais de livraison", total: "Total", discount: "Remise",
+      paymentMethod: "Moyen de paiement", depositSenderPhone: "Numéro du payeur", items: "Articles",
+      size: "Taille", color: "Couleur", name: "Nom", qty: "Quantité", price: "Prix", image: "Image",
+    };
+    const location = issue.path.map(part => typeof part === "number" ? `article ${part + 1}` : fields[String(part)] || String(part)).join(" · ");
+    const message = issue.code === "invalid_type" ? "information manquante ou format incorrect" : issue.message;
+    const error = new Error(`${location || "Demande d’échange"} : ${message}`);
+    error.name = "ExchangeValidationError";
+    throw error;
+  }
 
   // Slow media uploads happen before the transaction, only after checking ownership.
   const orderPayload = ExchangeOrderSchema.parse(parsed.data);

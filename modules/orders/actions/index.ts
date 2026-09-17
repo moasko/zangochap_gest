@@ -53,6 +53,18 @@ export async function duplicateOrder(orderId: string, data: Parameters<typeof ac
   return actions.duplicateOrder(orderId, data);
 }
 
+// Expected errors are data so Next.js does not redact their explanation in production.
+export async function duplicateOrderForUi(orderId: string, data: Parameters<typeof actions.duplicateOrder>[1]) {
+  try {
+    return { success: true as const, result: await actions.duplicateOrder(orderId, data) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const expected = error instanceof Error && (error.name === "ExchangeValidationError"
+      || /^(Accès refusé|Non authentifié|Une demande pour cette commande|Votre session|Date de livraison|La date de livraison|Veuillez sélectionner|Ce point relais|Une image est obligatoire|Le moyen de paiement|Le numéro ayant effectué|GIFT_APPROVAL_REQUIRED|Le compte commercial)/.test(message));
+    return { success: false as const, error: expected ? message : "Impossible de créer l’échange ou la duplication. Réessayez après actualisation ; si le problème persiste, contactez l’administrateur." };
+  }
+}
+
 export async function reprogramOrder(orderId: string, data: Parameters<typeof actions.reprogramOrder>[1]) {
   return actions.reprogramOrder(orderId, data);
 }

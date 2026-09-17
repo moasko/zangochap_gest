@@ -22,7 +22,7 @@ import WhatsAppSendModal from "./_components/WhatsAppSendModal";
 import { useToast } from "@/components/Toast";
 import {
   updateOrderStatus,
-  duplicateOrder,
+  duplicateOrderForUi,
   deleteOrder,
   createOrder,
   addOrderHistoryEntry,
@@ -808,7 +808,12 @@ export default function OrdersClient({
     (orderId: string, data: any) => {
       startTransition(async () => {
         try {
-          const result = await duplicateOrder(orderId, data);
+          const response = await duplicateOrderForUi(orderId, data);
+          if (!response.success) {
+            showToast(response.error, "error");
+            return;
+          }
+          const result = response.result;
 
           showToast("approvalRequired" in result ? "Demande d’échange envoyée à l’administrateur. La commande reste inchangée." : data.type === "Echange" ? "Commande d’échange créée ✓" : "Commande dupliquée ✓", "success");
 
