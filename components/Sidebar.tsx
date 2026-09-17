@@ -14,6 +14,7 @@ import { useRiderAlertQueue } from "@/lib/use-rider-alert-queue";
 import { openTeamChat } from "@/components/GlobalChatAccess";
 import { openStaffNotes, NOTES_DUE_COUNT_EVENT } from "@/components/GlobalNotesAccess";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
+import { getUnreadRiderAlerts } from "@/modules/chat/actions";
 
 import {
   LayoutDashboard, ShoppingBag, Package, Truck, Box, Users, BarChart3, MapPin, CalendarClock,
@@ -191,8 +192,8 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     if (!alert.body.includes("[ALERTE LIVREUR]")) return;
     if (hasSeenRiderAlert(alert.id)) return;
 
-    markRiderAlertSeen(alert.id);
     if (pathname === "/zangochap-manager/chat") return;
+    markRiderAlertSeen(alert.id);
 
     setHasNewNotifications(true);
     playRiderMessageSound();
@@ -237,6 +238,40 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     return () => source.close();
   }, [showRiderAlert]);
 
+  // Database catch-up also works when SSE is disconnected or another worker sent the alert.
+  useEffect(() => {
+    if (pathname === "/zangochap-manager/chat") return;
+    let stopped = false;
+    let running = false;
+    let cursor: { id: string; createdAt: string } | undefined;
+    const poll = async () => {
+      if (stopped || running) return;
+      running = true;
+      try {
+        const alerts = await getUnreadRiderAlerts(cursor);
+        if (stopped) return;
+        for (const alert of alerts) showRiderAlert(alert);
+        const last = alerts[alerts.length - 1];
+        if (last) cursor = { id: last.id, createdAt: last.createdAt };
+      } catch {
+        // Retry the same cursor after a network failure; SSE stays active independently.
+      } finally {
+        running = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 8_000);
+    const resume = () => { void poll(); };
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
+    };
+  }, [showRiderAlert, pathname, user.id]);
+
   // Counts tracking
   const prevCounts = useRef<SidebarCounts | null>(null);
   useEffect(() => {
@@ -250,14 +285,9 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
     const newRiderMessage = (counts.riderChatUnread || 0) > (prevCounts.current.riderChatUnread || 0);
 
     if (newPacking || newOrders || newRiderMessage) setHasNewNotifications(true);
-    if (newRiderMessage && pathname === "__polling_rider_alert_disabled__") {
-      playRiderMessageSound();
-      showToast("Nouveau message d'un livreur", "success");
-      showBrowserNotification("Message livreur ZangoChap", "Un livreur a envoyé une alerte dans le chat interne.");
-    }
 
     prevCounts.current = counts;
-  }, [counts, pathname, showToast]);
+  }, [counts]);
 
   useEffect(() => {
     setIsMobileOpen(false);

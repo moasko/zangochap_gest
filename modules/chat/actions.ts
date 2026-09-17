@@ -189,6 +189,38 @@ export async function getChatSnapshot(): Promise<ChatSnapshot> {
   };
 }
 
+export async function getUnreadRiderAlerts(after?: { id: string; createdAt: string }): Promise<RiderMessageAlertView[]> {
+  const user = await requireChatSession();
+  if (after && (!after.id || after.id.length > 200 || !Number.isFinite(Date.parse(after.createdAt)))) {
+    throw new Error("Curseur d'alerte invalide.");
+  }
+  const commercial = user.role === "COMMERCIAL"
+    ? await prisma.user.findUnique({ where: { id: user.id }, select: { isPaused: true } })
+    : null;
+  const messages = await prisma.chatMessage.findMany({
+    where: {
+      ...visibleMessageWhere(user.id, user.role),
+      senderRole: "LIVREUR",
+      senderId: { not: user.id },
+      body: { contains: "[ALERTE LIVREUR]" },
+      reads: { none: { userId: user.id } },
+      // Group alerts are relayed to the active call center, not paused commercials.
+      ...(commercial?.isPaused ? { NOT: { scope: "ROLE", targetRole: "COMMERCIAL" } } : {}),
+      ...(after ? { AND: [{ OR: [
+        { createdAt: { gt: new Date(after.createdAt) } },
+        { createdAt: new Date(after.createdAt), id: { gt: after.id } },
+      ] }] } : {}),
+    },
+    select: { id: true, body: true, senderName: true, sender: { select: { phone: true } }, createdAt: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 50,
+  });
+  return messages.map(message => ({
+    id: message.id, body: message.body, senderName: message.senderName,
+    senderPhone: message.sender?.phone || null, createdAt: message.createdAt.toISOString(),
+  }));
+}
+
 export async function getLatestUnreadRiderMessage(): Promise<RiderMessageAlertView | null> {
   const user = await requireChatSession();
 

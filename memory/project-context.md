@@ -111,7 +111,7 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
 - WhatsApp utilise la Cloud API et conserve réglages/journaux opérationnels via CMS.
 - Les médias peuvent être envoyés vers Cloudflare R2; `public/uploads` reste monté
   en volume dans Docker.
-- Chat et alertes rider utilisent notamment SSE et une file d'événements en mémoire.
+- Chat et alertes rider utilisent notamment SSE et une file d'événements en mémoire. Depuis le 2026-09-17, Sidebar récupère aussi les alertes persistées non lues via `getUnreadRiderAlerts` (8 s, focus/retour réseau, curseur date/id, dédoublonnage commun) pour couvrir les pertes SSE entre processus. Les alertes de groupe sont exclues du rattrapage des commerciaux en pause. Tests isolés disponibles dans `scripts/test-rider-alerts.mjs` ; réception en production à confirmer après déploiement.
 
 ## État technique vérifié
 

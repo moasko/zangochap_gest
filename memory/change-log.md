@@ -2,6 +2,12 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-09-17 — Secours durable des alertes rider
+
+- `modules/chat/actions.ts` : `getUnreadRiderAlerts`, droits/visibilité/non-lus, pagination date/id et exclusion des alertes de groupe pour commerciaux en pause.
+- `components/Sidebar.tsx` : rattrapage toutes les 8 s et au focus/retour réseau ; suppression du secours désactivé. `lib/client-alerts.ts` : stockage navigateur protégé ; route SSE : anti-buffering proxy.
+- Test isolé `scripts/test-rider-alerts.mjs` et TypeScript passent ; lint ciblé sans erreur (2 avertissements existants). Lint global conserve 744 erreurs/83 avertissements. Aucun déploiement ni accès base réelle ; réception production à confirmer. Cartographie/journal actualisés.
+
 ## 2026-09-17 — Validation administrateur des reprogrammations commerciales
 
 - Demandes commerciales en attente sans modifier la commande ; décision admin/developer, refus motivé, retour au demandeur et compteur dans Sidebar. Route `/zangochap-manager/orders/reprogramming` et écran métier `ReprogrammingRequestsClient`.

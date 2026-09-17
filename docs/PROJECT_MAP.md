@@ -267,6 +267,12 @@ Prisma : configuration dans `prisma.config.ts`, génération via scripts npm, SQ
 
 ## Je veux modifier…
 
+### Réception durable des alertes livreur (vérifié le 2026-09-17)
+
+`sendOrderSupportAlert` (`modules/chat/actions.ts`) enregistre un ChatMessage DIRECT au commercial attribué, ou ROLE COMMERCIAL si absent/en pause, puis émet un événement SSE local. `components/Sidebar.tsx` affiche les alertes via SSE et récupère indépendamment les messages persistés avec `getUnreadRiderAlerts`, toutes les 8 secondes et au focus/retour réseau. Le rattrapage vérifie session, visibilité, non-lus et marqueur `[ALERTE LIVREUR]` ; lots de 50, curseur date/id, exclusion des alertes ROLE COMMERCIAL pour les utilisateurs actuellement en pause. Il ne marque pas les messages comme lus : cette responsabilité reste au chat. `lib/client-alerts.ts` dédoublonne SSE/rattrapage via sessionStorage et mémoire en cas de stockage bloqué. La page chat gère ses alertes elle-même.
+
+Test isolé : `node scripts/test-rider-alerts.mjs` (actions/filtres et stockage bloqué simulés). Vérifier également la réception authentifiée après déploiement avec SSE interrompu. Le SSE seul reste non distribué ; le rattrapage vient de PostgreSQL via Prisma et fonctionne indépendamment des événements locaux.
+
 Contrôles communs après modification de code : TypeScript et lint ci-dessus. « Manuel » signifie qu'aucun test automatisé de ce parcours n'a été identifié ; utiliser un environnement de test, pas la production.
 
 | Je veux modifier… | Fichiers à consulter | Dépendances à considérer | Tests à lancer |

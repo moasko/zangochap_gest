@@ -1,5 +1,15 @@
 # Journal de reprise
 
+## 2026-09-17 — Réception des alertes livreur par les commerciaux
+
+- Vérifié : `Sidebar` dépendait du SSE pour afficher les alertes ; le secours basé sur les compteurs était désactivé par un chemin impossible. Les événements SSE du chat restent locaux au processus. Cela explique une perte possible entre instances ou après une déconnexion ; cause exacte en production non confirmée, sans accès aux logs ni test authentifié.
+- Ajout de `getUnreadRiderAlerts` dans `modules/chat/actions.ts` : session/rôle vérifiés, messages non supprimés et non lus accessibles au destinataire, marqueur ALERTE LIVREUR, lots de 50 ordonnés par date/id avec curseur. Les alertes de groupe commercial sont exclues du rattrapage pour les commerciaux actuellement en pause.
+- `components/Sidebar.tsx` récupère les alertes persistées toutes les 8 secondes et au focus/retour réseau, indépendamment des compteurs. SSE conservé et dédoublonnage commun. La page chat garde son propre affichage sans que Sidebar marque prématurément les alertes comme vues.
+- `lib/client-alerts.ts` : stockage session protégé et dédoublonnage mémoire de secours. SSE : ajout de `X-Accel-Buffering: no` pour les proxies compatibles.
+- Vérifications : `node scripts/test-rider-alerts.mjs` passe avec Prisma/session simulés (droits, filtres de visibilité/non-lus, curseur date/id, pause et stockage navigateur bloqué). TypeScript passe. Lint ciblé : aucune erreur, deux avertissements images existants de Sidebar. Lint global : 744 erreurs et 83 avertissements, dette préexistante inchangée.
+- Limites : aucune connexion base réelle, migration, modification de données ou mise en production. Les tests isolés contrôlent les actions/filtres, pas la livraison réelle ni une navigation navigateur complète. Les confirmations commerciales vers le rider restent sur leur parcours existant.
+- Prochaines actions : déployer la correction selon la procédure du projet ; tester une alerte rider → commercial attribué avec SSE connecté puis coupé, reprise réseau, plusieurs alertes, commercial en pause et ouverture du chat. Contrôler ensuite les logs/proxy si un incident persiste. L'affichage nécessite une session ouverte ; son et notification système restent soumis aux permissions navigateur.
+
 ## 2026-09-17 — Reprogrammation commerciale soumise à validation
 
 ### État actuel et travaux réalisés
