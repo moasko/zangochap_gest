@@ -12,7 +12,7 @@ export default async function ExchangeRequestsPage() {
   }
   const requests = await getExchangeRequests();
   return <>
-    <Topbar title="Demandes de échange" subtitle={user.role === "commercial" ? "Suivi de vos demandes et décisions administrateur" : "Valider ou refuser les demandes des commerciaux"} />
+    <Topbar title="Demandes d’échange" />
     <ExchangeRequestsClient initialRequests={requests} canReview={user.role !== "commercial"} />
   </>;
 }

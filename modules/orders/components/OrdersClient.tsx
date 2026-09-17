@@ -8469,16 +8469,6 @@ function OrderFormModal({
       }
     >
       <div className="order-modal-grid">
-        {mode === "exchange" && approvalRequired && <p style={{ gridColumn: "1 / -1", padding: 16, background: "#fff7ed" }}>L’échange sera créé uniquement après validation de l’administrateur. Renseignez le motif de l’échange ci-dessous.</p>}
-        {mode === "exchange" && <div style={{ gridColumn: "1 / -1", padding: 16 }}>
-          <p>Pour une expédition hors Abidjan, vérifiez les informations du paiement. Les valeurs ci-dessous sont reprises de la commande originale et peuvent être corrigées.</p>
-          <label htmlFor="exchange-payment-method">Moyen de paiement</label>
-          <input id="exchange-payment-method" className="field-input" value={formData.paymentMethod || ""} onChange={event => setFormData(current => ({ ...current, paymentMethod: event.target.value }))} />
-          <label htmlFor="exchange-payment-phone">Numéro du payeur</label>
-          <input id="exchange-payment-phone" className="field-input" type="tel" value={formData.depositSenderPhone || ""} onChange={event => setFormData(current => ({ ...current, depositSenderPhone: event.target.value }))} />
-          <label htmlFor="exchange-payment-ref">Référence du paiement</label>
-          <input id="exchange-payment-ref" className="field-input" value={formData.depositTransactionRef || ""} onChange={event => setFormData(current => ({ ...current, depositTransactionRef: event.target.value }))} />
-        </div>}
         {/* LEFT PANEL: CLIENT INFO */}
 
         <div
@@ -8520,6 +8510,7 @@ function OrderFormModal({
           </div>
 
           <div className="form-grid full" style={{ gap: 20 }}>
+            {mode === "exchange" && approvalRequired && <p style={{ margin: 0, padding: 12, background: "#fff7ed", borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>L’échange sera créé après validation de l’administrateur. Renseignez le motif ci-dessous.</p>}
             <div className="form-row">
               <label className="field-label-sm" style={{ marginBottom: 8 }}>
                 TYPE DE TRANSACTION
@@ -8727,6 +8718,22 @@ function OrderFormModal({
             </div>
 
             <div className="form-row">
+              {mode === "exchange" && (formData.commune.trim().toLowerCase() === "hors abidjan" || Boolean(formData.paymentMethod?.trim())) && <fieldset style={{ minWidth: 0, margin: "0 0 20px", padding: 12, border: "1px solid var(--line)", borderRadius: 8, display: "grid", gap: 12 }}>
+                <legend className="field-label-sm">Paiement de l’échange</legend>
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--brown-soft)" }}>Vérifiez les informations reprises de la commande originale.</p>
+                <div className="form-row">
+                  <label className="field-label-sm" htmlFor="exchange-payment-method">Moyen de paiement *</label>
+                  <input id="exchange-payment-method" className="field-input" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8 }} placeholder="Ex. Orange Money" value={formData.paymentMethod || ""} onChange={event => setFormData(current => ({ ...current, paymentMethod: event.target.value }))} />
+                </div>
+                <div className="form-row">
+                  <label className="field-label-sm" htmlFor="exchange-payment-phone">Numéro du payeur *</label>
+                  <input id="exchange-payment-phone" className="field-input" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8 }} type="tel" placeholder="Numéro utilisé pour le paiement" value={formData.depositSenderPhone || ""} onChange={event => setFormData(current => ({ ...current, depositSenderPhone: event.target.value }))} />
+                </div>
+                <div className="form-row">
+                  <label className="field-label-sm" htmlFor="exchange-payment-ref">Référence du paiement</label>
+                  <input id="exchange-payment-ref" className="field-input" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8 }} placeholder="Référence de transaction (facultative)" value={formData.depositTransactionRef || ""} onChange={event => setFormData(current => ({ ...current, depositTransactionRef: event.target.value }))} />
+                </div>
+              </fieldset>}
               <label className="field-label-sm">FRAIS DE COURSIER (CFA)</label>
 
               <input

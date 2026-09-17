@@ -175,6 +175,8 @@ La fiche `app/product/[id]/page.tsx` charge un produit PUBLISHED par ID/slug et 
 
 ### Échanges avec validation administrateur (2026-09-17)
 
+Interface : `modules/orders/components/ExchangeRequestsClient.tsx` utilise `modules/orders/components/exchanges.css` (styles dédiés, responsive), filtres avec compteurs, recherche locale et cartes avec détails repliables et zone décision. Les styles historiques `reprogramming.css` restent réservés à l’ancien écran.
+
 - Périmètre corrigé après confirmation du propriétaire : validation pour les échanges commerciaux ; reprogrammation et REPRO_DISPO directs pour les utilisateurs autorisés, avec protections de livraison clôturée/règlement conservées.
 - Route : app/zangochap-manager/orders/exchanges/page.tsx ; écran modules/orders/components/ExchangeRequestsClient.tsx ; navigation « Mes échanges / Échanges » dans components/Sidebar.tsx et compteur exchangePending dans modules/orders/actions/sidebar-counts.ts.
 - duplicateOrder (modules/orders/actions/order-actions.ts) vérifie accès/rôle et transmet Echange commercial à requestOrderExchange (modules/orders/actions/exchange-actions.ts). ExchangeOrderSchema (modules/orders/types/exchange.ts) valide date, motif exchangeReason, contenu et paiement. Demande dans CmsContent order-exchange:<uuid> et message ROLE ADMIN, sans création de commande/CRM/stock.

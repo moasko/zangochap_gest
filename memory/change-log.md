@@ -2,6 +2,20 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-09-17 — Interface des demandes d’échange
+
+- Ajustements utilisateur : cartes compactes en grille de deux colonnes, une colonne sous 1000 px ; détails repliables et boutons adaptés aux cartes.
+
+- `ExchangeRequestsClient.tsx`, `exchanges.css`, page exchanges : filtres/compteurs, recherche locale, cartes structurées, contenu proposé repliable et décision mise en évidence ; adaptation mobile et CSS dédié. Règles serveur conservées. Lint ciblé passe ; rendu navigateur réel restant à contrôler.
+
+## 2026-09-17 — Fixture de demande d’échange préparée
+
+- Script `scripts/create-test-exchange-request.mjs`, aperçu sans DB et insertion explicite/idempotente de données fictives après choix de cible. Aperçu/lint ciblé vérifiés ; pas d’insertion effectuée, confirmation de l’environnement attendue selon AGENT.md. Pas de secret ni identité du compte cible enregistrés dans la mémoire.
+
+## 2026-09-17 — Mise en page du modal d’échange
+
+- `OrdersClient.tsx` : bandeau et champs de paiement intégrés à la colonne destinataire/logistique, champs encadrés ; paiement visible pour Hors Abidjan ou moyen renseigné. Corrige le bloc pleine largeur signalé par capture. Règles serveur inchangées, contrôle visuel navigateur après correction restant à effectuer.
+
 ## 2026-09-17 — Validation déplacée des reprogrammations vers les échanges
 
 - Propriétaire : correction de vocabulaire confirmée. Demandes Echange commerciales avec décision admin/developer dans `/zangochap-manager/orders/exchanges`, CmsContent `order-exchange:` ; reprogrammation/REPRO_DISPO redevenus directs. Anciennes demandes préservées, consultables et refusables, nouvelles demandes/approbation legacy désactivées.

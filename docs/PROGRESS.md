@@ -1,5 +1,25 @@
 # Journal de reprise
 
+## 2026-09-17 — Refonte de l’écran des demandes d’échange
+
+- Ajustement demandé pendant la refonte : cartes compactées (espacements, en-tête, motif/date, détails et zone de décision), commentaire redimensionnable de 46 px initialement. Aucun contenu ou droit supprimé.
+- Présentation en grille demandée : deux colonnes au-dessus de 1000 px, une colonne sur écrans plus étroits ; état vide sur toute la largeur et actions adaptées à la largeur des cartes.
+
+- `ExchangeRequestsClient.tsx` et nouveau `exchanges.css` : compteurs/filtres de statut, recherche locale commande/commercial/client/téléphone/motif, cartes avec identité, statut, motif, date formatée Abidjan, détails articles/client/paiement et liens vers commandes. Zone décision séparée avec aide pour refus motivé, états vides/recherche et disposition mobile. CSS dédié, indépendant de l’écran historique de reprogrammation.
+- Titre de route corrigé « Demandes d’échange » ; sous-titre déplacé dans le contenu pour éviter la ligne de titre surchargée. Actions/droits serveur inchangés.
+- TypeScript et lint ciblé passent ; lint global conserve les 744 erreurs / 83 avertissements préexistants. Capture utilisateur examinée ; rendu navigateur après refonte non vérifié, aucune opération base ni déploiement.
+
+## 2026-09-17 — Préparation d’une demande d’échange fictive
+
+- `scripts/create-test-exchange-request.mjs` préparé : aperçu par défaut sans connexion base ; insertion explicite avec `--apply`, cible `--environment=test|production`, fichier `--env-file` et compte `--email`. Crée une commande originale fictive, une demande EXCHANGE PENDING, un message ADMIN et un repère CmsContent empêchant les doublons par compte. Aucun compte/commande existant modifié, aucun stock/CRM/externe sollicité par le script.
+- Aperçu exécuté et lint ciblé passent. Insertion NON exécutée : environnement/base cible à confirmer conformément à AGENT.md. Aucun état du compte destinataire vérifié en base. Le retrait ultérieur des fixtures nécessite une opération distincte autorisée ; leur approbation via l’application déclenche le parcours métier normal.
+- Contrôle TypeScript tenté : échec TS6053 sur fichiers générés `.next/types` disparus pendant la vérification (serveur Next actif possible, non confirmé), sans erreur signalée dans le nouveau script JavaScript. Lint global : dette existante de 744 erreurs / 83 avertissements ; lint du script passe.
+
+## 2026-09-17 — Présentation du formulaire d’échange
+
+- Capture utilisateur : bloc de paiement sur toute la largeur, champs peu visibles et catalogue repoussé. Dans `modules/orders/components/OrdersClient.tsx`, déplacement du bandeau et du paiement dans la colonne destinataire/logistique ; champs encadrés avec libellés et placeholders. Paiement affiché pour Hors Abidjan ou lorsqu’un moyen de paiement est renseigné, selon les contrôles existants. Aucun changement des règles serveur.
+- TypeScript : passe. Lint global : dette inchangée de 744 erreurs / 83 avertissements. Présentation navigateur réelle après correction non vérifiée ; disposition et condition contrôlées dans le JSX. Motif vide : bouton commercial désactivé conformément à la validation.
+
 ## 2026-09-17 — Correction du périmètre : validation des échanges, reprogrammation directe
 
 ### État vérifié et travaux

@@ -1,0 +1,98 @@
+.exchange-workspace { max-width: 1240px; margin: 0 auto; padding: 32px !important; color: #29231e; }
+.exchange-workspace * { box-sizing: border-box; }
+.exchange-workspace h1,.exchange-workspace h2,.exchange-workspace h3,.exchange-workspace p { margin: 0; }
+.exchange-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.exchange-eyebrow { font-size: 10px; font-weight: 750; letter-spacing: .09em; color: #8b7768; }
+.exchange-heading h1 { font-size: clamp(22px, 2.4vw, 30px); letter-spacing: -.035em; font-weight: 750; margin: 6px 0 8px; }
+.exchange-heading p { font-size: 13px; color: #88776a; line-height: 1.6; }
+.exchange-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; border: 1px solid #e8dfd7; border-radius: 9px; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; transition: background .15s, box-shadow .15s; white-space: normal; }
+.exchange-button.secondary { background: white; color: #594a3e; }
+.exchange-button.primary { color: white; background: #d4541c; border-color: #d4541c; box-shadow: 0 3px 7px #d4541c18; }
+.exchange-button.primary:hover:not(:disabled) { background: #b84414; }
+.exchange-button.danger { background: white; color: #b5453d; border-color: #ebccc8; }
+.exchange-button.danger:hover:not(:disabled) { background: #fff0ee; }
+.exchange-workspace button:disabled { opacity: .45; cursor: not-allowed; }
+.exchange-workspace button:focus-visible,.exchange-workspace a:focus-visible,.exchange-proposal summary:focus-visible { outline: 2px solid #d4541c; outline-offset: 3px; }
+.exchange-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.exchange-tabs button { display: flex; align-items: center; gap: 10px; padding: 18px; border: 1px solid #e9e1da; background: #fff; border-radius: 12px; font: inherit; font-size: 12px; color: #85766a; cursor: pointer; }
+.exchange-tabs button strong { margin-left: auto; font-size: 22px; font-weight: 750; color: #382d24; }
+.exchange-tabs button.active { background: #fff5ec; border-color: #e9b68f; color: #bc4d1e; box-shadow: 0 2px 5px #70401908; }
+.exchange-tabs button.active strong { color: #bc4d1e; }
+.exchange-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.exchange-list-toolbar h2 { font-size: 17px; font-weight: 700; }
+.exchange-list-toolbar h2 span { margin-left: 10px; font-size: 11px; font-weight: 500; color: #978577; }
+.exchange-search { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: white; border: 1px solid #e9e1da; border-radius: 9px; color: #9b8775; width: 310px; max-width: 100%; }
+.exchange-search input { border: 0; outline: 0; width: 100%; min-width: 0; background: transparent; font: inherit; font-size: 12px; color: #382d24; }
+.exchange-search:focus-within { border-color: #d4541c; box-shadow: 0 0 0 3px #d4541c12; }
+.exchange-info { display: flex; align-items: flex-start; gap: 9px; color: #8f7965; margin-bottom: 20px; font-size: 11px; line-height: 1.6; }
+.exchange-info svg { flex-shrink: 0; }
+.exchange-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
+.exchange-list > .exchange-empty { grid-column: 1 / -1; }
+.exchange-list .exchange-card { min-width: 0; }
+.exchange-list .exchange-overview { grid-template-columns: 1fr; }
+.exchange-list .exchange-actions { flex-wrap: wrap; }
+.exchange-list .exchange-actions > div { width: 100%; }
+.exchange-list .exchange-actions .exchange-button { flex: 1; padding: 9px 10px; }
+@media (max-width: 1000px) { .exchange-list { grid-template-columns: 1fr; } }
+.exchange-card { background: white; border: 1px solid #e9e1da; border-radius: 14px; overflow: hidden; box-shadow: 0 3px 14px #59392104; overflow-wrap: anywhere; }
+.exchange-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #f0eae4; }
+.exchange-reference { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.exchange-icon { width: 32px; height: 32px; display: grid; place-items: center; flex-shrink: 0; color: #bd5827; background: #fff1e6; border-radius: 8px; }
+.exchange-reference h3 { margin-top: 4px; font-size: 15px; font-weight: 750; }
+.exchange-status { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border-radius: 20px; padding: 6px 10px; font-size: 11px; font-weight: 650; }
+.exchange-status > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.exchange-status.pending { color: #b66e17; background: #fff6e6; }
+.exchange-status.approved { color: #28784f; background: #eaf6ef; }
+.exchange-status.rejected { color: #ad4a43; background: #fff0ed; }
+.exchange-card-body { padding: 12px 18px; }
+.exchange-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; color: #a08a79; font-size: 11px; margin-bottom: 12px; }
+.exchange-meta > span:first-child { display: flex; align-items: center; gap: 6px; color: #675344; }
+.exchange-meta a { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: #bd5625; font-weight: 650; text-decoration: none; }
+.exchange-overview { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-bottom: 10px; }
+.exchange-reason { background: #faf8f5; border-radius: 8px; padding: 9px 12px; }
+.exchange-reason p { font-size: 12px; line-height: 1.4; margin-top: 4px; white-space: pre-wrap; }
+.exchange-delivery { display: flex; align-items: flex-start; gap: 8px; padding: 9px 12px; border: 1px solid #eee6de; border-radius: 8px; color: #a78569; }
+.exchange-delivery > div { display: grid; gap: 6px; }
+.exchange-delivery strong { font-size: 13px; color: #382d24; }
+.exchange-delivery small { font-size: 10px; color: #988574; }
+.exchange-proposal { border: 1px solid #eee6de; border-radius: 9px; }
+.exchange-proposal summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; cursor: pointer; font-size: 12px; list-style: none; }
+.exchange-proposal summary::-webkit-details-marker { display: none; }
+.exchange-proposal summary > span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.exchange-proposal summary > span:after { content: '⌄'; color: #998776; }
+.exchange-proposal[open] summary > span:after { content: '⌃'; }
+.exchange-count { color: #998776; font-size: 10px; }
+.exchange-proposal-body { padding: 16px; border-top: 1px solid #eee6de; }
+.exchange-customer { display: grid; gap: 5px; font-size: 12px; margin-bottom: 15px; }
+.exchange-customer span { color: #93806e; font-size: 11px; }
+.exchange-items { padding: 0; margin: 0; list-style: none; }
+.exchange-items li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #f2ece6; font-size: 12px; }
+.exchange-quantity { background: #f5f0ea; border-radius: 6px; padding: 7px; font-weight: 650; }
+.exchange-items li > div { display: grid; gap: 4px; flex: 1; }
+.exchange-items small { color: #998776; }
+.exchange-totals { display: flex; flex-wrap: wrap; gap: 10px 20px; padding-top: 16px; font-size: 11px; color: #998776; }
+.exchange-totals strong { margin-left: 6px; color: #4c3e32; }
+.exchange-note { font-size: 11px; line-height: 1.6; margin-top: 14px !important; white-space: pre-wrap; }
+.exchange-created { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 12px; color: #28784f; text-decoration: none; }
+.exchange-decision { margin-top: 16px; padding: 14px; border-radius: 8px; background: #faf8f5; font-size: 11px; }
+.exchange-decision > span { display: block; color: #998776; margin: 5px 0; }
+.exchange-decision p { line-height: 1.6; white-space: pre-wrap; }
+.exchange-review { background: #fdfbf8; border-top: 1px solid #eee6de; padding: 12px 18px; }
+.exchange-review-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+.exchange-review-title svg { color: #a58468; }
+.exchange-review-title > span { color: #aa9380; font-size: 10px; margin-left: auto; }
+.exchange-review label { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 650; }
+.exchange-review label span { font-weight: 400; color: #a08a79; }
+.exchange-review textarea { width: 100%; min-height: 46px; height: 46px; padding: 9px 12px; border: 1px solid #e6dace; border-radius: 8px; background: white; font: inherit; font-size: 12px; resize: vertical; outline: none; }
+.exchange-review textarea:focus { border-color: #d4541c; box-shadow: 0 0 0 3px #d4541c12; }
+.exchange-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.exchange-actions small { color: #9b8573; font-size: 10px; }
+.exchange-actions > div { display: flex; gap: 10px; }
+.exchange-empty { padding: 48px 20px; text-align: center; border: 1px dashed #ded1c4; background: #ffffff80; border-radius: 12px; color: #ad9681; }
+.exchange-empty h3 { color: #6f5845; font-size: 15px; margin: 14px 0 8px; }
+.exchange-empty p { font-size: 12px; }
+.exchange-spin { animation: exchange-spin 1s linear infinite; }
+@keyframes exchange-spin { to { transform: rotate(360deg); } }
+@media (max-width: 900px) { .exchange-workspace { padding: 24px !important; } .exchange-tabs button { padding: 14px 12px; gap: 7px; } .exchange-tabs button strong { font-size: 19px; } .exchange-actions { flex-wrap: wrap; } .exchange-actions > div { margin-left: auto; } }
+@media (max-width: 600px) { .exchange-workspace { padding: 16px !important; } .exchange-heading { align-items: flex-start; gap: 12px; } .exchange-heading h1 { font-size: 22px; } .exchange-heading > .exchange-button { padding: 10px; font-size: 11px; } .exchange-tabs { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; } .exchange-list-toolbar { align-items: stretch; flex-direction: column; } .exchange-search { width: 100%; } .exchange-card-header,.exchange-card-body,.exchange-review { padding: 16px; } .exchange-card-header { align-items: flex-start; } .exchange-reference h3 { font-size: 12px; } .exchange-icon { width: 32px; height: 32px; } .exchange-overview { grid-template-columns: 1fr; } .exchange-meta a { margin-left: 0; } .exchange-review-title { flex-wrap: wrap; } .exchange-review-title > span { margin-left: 0; } .exchange-actions > div { width: 100%; flex-direction: column-reverse; } .exchange-button { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .exchange-spin { animation: none; } }
