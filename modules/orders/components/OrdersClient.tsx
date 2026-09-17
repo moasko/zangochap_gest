@@ -8084,6 +8084,7 @@ function OrderFormModal({
   approvalRequired?: boolean;
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const getDefaultDeliveryDate = () => {
     const now = new Date();
@@ -8455,7 +8456,16 @@ function OrderFormModal({
             }}
             title={isPending ? "Envoi en cours" : formData.items.length === 0 ? "Ajoutez au moins un article" : mode === "exchange" && approvalRequired && !formData.exchangeReason.trim() ? "Renseignez le motif de l’échange pour envoyer la demande" : undefined}
             aria-describedby={mode === "exchange" && approvalRequired && !formData.exchangeReason.trim() ? "exchange-submit-help" : undefined}
-            onClick={() => onConfirm(buildConfirmData())}
+            onClick={() => {
+              if (mode === "exchange" && !formData.customerLocation.trim()) {
+                const field = document.getElementById("exchange-customer-location");
+                field?.scrollIntoView({ behavior: "smooth", block: "center" });
+                field?.focus();
+                showToast("Renseignez l’adresse de livraison du nouvel échange.", "error");
+                return;
+              }
+              onConfirm(buildConfirmData());
+            }}
             disabled={isPending || formData.items.length === 0 || (mode === "exchange" && approvalRequired && !formData.exchangeReason.trim())}
           >
             {isPending ? (
@@ -8789,10 +8799,13 @@ function OrderFormModal({
             </div>
 
             <div className="form-row">
-              <label className="field-label-sm">ADRESSE DÉTAILLÉE</label>
+              <label className="field-label-sm" htmlFor={mode === "exchange" ? "exchange-customer-location" : undefined}>ADRESSE DÉTAILLÉE{mode === "exchange" ? " *" : ""}</label>
 
               <textarea
                 className="field-input"
+                id={mode === "exchange" ? "exchange-customer-location" : undefined}
+                required={mode === "exchange"}
+                aria-describedby={mode === "exchange" ? "exchange-address-help" : undefined}
                 value={formData.customerLocation}
                 onChange={(e) =>
                   setFormData({ ...formData, customerLocation: e.target.value })
@@ -8805,6 +8818,7 @@ function OrderFormModal({
                 }}
                 placeholder="Ex: Riviera Palmeraie, Rue I52..."
               />
+              {mode === "exchange" && <p id="exchange-address-help" style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.5, color: formData.customerLocation.trim() ? "var(--brown-soft)" : "var(--orange)" }}>L’adresse du nouvel échange est obligatoire. Si elle manque sur l’ancienne commande, renseignez-la ici ; l’original ne sera pas modifié.</p>}
             </div>
           </div>
         </div>

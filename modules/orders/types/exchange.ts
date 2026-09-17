@@ -25,7 +25,7 @@ export const ExchangeOrderSchema = z.object({
   customerName: text.min(2),
   customerPhone: text.min(8),
   customerPhone2: optionalText,
-  customerLocation: text.min(1),
+  customerLocation: text.min(1, "Renseignez l’adresse de livraison du nouvel échange."),
   commune: text.min(1),
   deliveryFee: money.default(0),
   deliveryNote: optionalText,
