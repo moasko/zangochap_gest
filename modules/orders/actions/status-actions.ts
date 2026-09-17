@@ -7,7 +7,6 @@ import { getSession } from "@/modules/auth/actions";
 import { checkOrderAccess, generateUniqueRef, isRole } from "../helpers";
 import { decrementStockForOrder, InsufficientStockError, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
 import { checkLowStockAfterOrder, triggerAutomations } from "@/modules/automations/engine";
-import { requestOrderReprogramming } from "./reprogramming-actions";
 
 type UpdateOrderStatusResult = {
   success: true;
@@ -69,13 +68,6 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   const sessionRole = String(session.role).toUpperCase();
 
   if (order.deletedAt) throw new Error("Commande supprimée.");
-  if (sessionRole === "COMMERCIAL" && normalizedStatus === "REPRO_DISPO") {
-    await requestOrderReprogramming(orderId, { deliveryDate: reproDeliveryDate, reason: note }, "REPRO_DISPO");
-    return { success: true, approvalRequired: true, order };
-  }
-  if (sessionRole === "COMMERCIAL" && normalizedStatus === "REPROGRAMMED") {
-    throw new Error("La reprogrammation nécessite une validation administrateur. Utilisez Reprogrammer.");
-  }
 
   if (sessionRole === 'LIVREUR') {
     const riderTargetStatuses = ['DELIVERED', 'RETURNED', 'REPRO_DISPO'];

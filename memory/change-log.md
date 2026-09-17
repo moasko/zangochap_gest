@@ -2,6 +2,12 @@
 
 Les entrées les plus récentes sont placées en premier.
 
+## 2026-09-17 — Validation déplacée des reprogrammations vers les échanges
+
+- Propriétaire : correction de vocabulaire confirmée. Demandes Echange commerciales avec décision admin/developer dans `/zangochap-manager/orders/exchanges`, CmsContent `order-exchange:` ; reprogrammation/REPRO_DISPO redevenus directs. Anciennes demandes préservées, consultables et refusables, nouvelles demandes/approbation legacy désactivées.
+- `exchange-actions.ts`, `types/exchange.ts`, `ExchangeRequestsClient.tsx` ; facade, navigation/compteurs et modal adaptés. Paiement d'échange hors Abidjan renseignable ; exemption de l'antidoublon limitée aux échanges staff. Validation paiements et cadeaux conservée.
+- `test-order-exchanges.mjs` couvre le workflow et les régressions directes ; six autres suites passent sur services simulés. Aucun accès base réel, migration ni déploiement. Voir le journal de reprise pour les validations finales et limites.
+
 ## 2026-09-17 — Secours durable des alertes rider
 
 - `modules/chat/actions.ts` : `getUnreadRiderAlerts`, droits/visibilité/non-lus, pagination date/id et exclusion des alertes de groupe pour commerciaux en pause.

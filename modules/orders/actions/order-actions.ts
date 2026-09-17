@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { createOrderWithContext, type OrderCreationInput } from "./order-creation-service";
-import { requestOrderReprogramming } from "./reprogramming-actions";
+import { requestOrderExchange } from "./exchange-actions";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 
 function revalidatePath(path: string) {
@@ -70,8 +70,8 @@ export async function getOrder(id: string) {
 // ============ CREATE ORDER ============
 export async function createOrder(data: OrderCreationInput) {
   const session = await getSession();
-  if (session?.role === "commercial" && (["reprogrammé", "reprogramme", "repro-dispo"].includes(String(data.type).trim().toLowerCase()) || ["REPROGRAMMED", "REPRO_DISPO"].includes(String(data.status).toUpperCase()))) {
-    throw new Error("La reprogrammation nécessite une validation administrateur. Utilisez Reprogrammer sur la commande originale.");
+  if (session?.role === "commercial" && String(data.type).trim().toLowerCase() === "echange") {
+    throw new Error("L’échange nécessite une validation administrateur. Utilisez Créer un échange sur la commande originale.");
   }
   return createOrderWithContext(data, session);
 }
@@ -170,8 +170,8 @@ export async function updateOrderDetails(orderId: string, data: any) {
   // Type de transaction : validé contre la liste connue (le modal d'édition permet de le changer)
   const ALLOWED_ORDER_TYPES = ['Standard', 'Echange', 'Express', 'Recuperation', 'Reprogrammé'];
   if (data.type !== undefined && ALLOWED_ORDER_TYPES.includes(String(data.type))) {
-    if (session.role === "commercial" && data.type === "Reprogrammé" && order.type !== "Reprogrammé") {
-      throw new Error("La reprogrammation nécessite une validation administrateur. Utilisez Reprogrammer.");
+    if (session.role === "commercial" && data.type === "Echange" && order.type !== "Echange") {
+      throw new Error("L’échange nécessite une validation administrateur. Utilisez Créer un échange.");
     }
     sanitized.type = String(data.type);
   }
@@ -479,7 +479,9 @@ export async function duplicateOrder(orderId: string, data: any) {
   if (!session) throw new Error("Non authentifié");
 
   const original = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!original) throw new Error("Commande originale introuvable");
+  if (!original || original.deletedAt || !checkOrderAccess(original, session)) throw new Error("Accès refusé à cette commande.");
+  if (!["admin", "developer", "commercial"].includes(session.role)) throw new Error("Accès refusé.");
+  if (session.role === "commercial" && data.type === "Echange") return requestOrderExchange(orderId, data);
 
   const baseNotes = String(data.notes || "").trim();
   let finalNotes = baseNotes;
@@ -511,8 +513,7 @@ export async function reprogramOrder(orderId: string, data: any) {
   if (!original || !checkOrderAccess(original, session)) throw new Error("Accès refusé");
 
   if (original.deletedAt) throw new Error("Commande supprimée.");
-  if (session.role === "commercial") return requestOrderReprogramming(orderId, data);
-  if (!["admin", "developer"].includes(session.role)) throw new Error("Reprogrammation réservée aux commerciaux et administrateurs.");
+  if (!["admin", "developer", "commercial"].includes(session.role)) throw new Error("Reprogrammation réservée aux commerciaux et administrateurs.");
 
   const originalRef = String(original.ref || "").replace(/^REPRO/i, "");
   const reproRef = `REPRO${originalRef}`;

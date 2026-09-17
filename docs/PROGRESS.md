@@ -1,5 +1,28 @@
 # Journal de reprise
 
+## 2026-09-17 — Correction du périmètre : validation des échanges, reprogrammation directe
+
+### État vérifié et travaux
+
+- Correction demandée et confirmée par le propriétaire : la validation administrateur concerne les échanges, pas la reprogrammation. Cette entrée remplace l'état fonctionnel de la précédente implémentation de reprogrammation avec approbation.
+- `duplicateOrder` transmet les échanges commerciaux à `requestOrderExchange`. Commande/CRM/stock inchangés pendant l'attente ; motif obligatoire. `reviewOrderExchange` (admin/developer) crée une nouvelle commande CONFIRMED Echange attribuée au commercial après acceptation, ou refuse avec motif sans création. Verrous, idempotence et contrôle de version conservés ; notifications chat en transaction et effets externes après commit. Une demande à la fois par commande ; possibilité de demander à nouveau après traitement.
+- Modules `exchange-actions.ts`, `types/exchange.ts`, `ExchangeRequestsClient.tsx`, route `/zangochap-manager/orders/exchanges`, navigation « Mes échanges / Échanges » et compteur `exchangePending`. Protection contre création directe/conversion vers Echange par un commercial. Le modal d'échange fixe le type et indique la validation requise ; admin/developer créent directement.
+- `reprogramOrder` et REPRO_DISPO sont redevenus directs pour les commerciaux autorisés, sans suppression des protections métier préexistantes (livraison clôturée, règlement, droits). Anciennes demandes `order-reprogramming:` conservées et consultables à l'ancienne route ; refus motivé possible, nouvelle demande et approbation désactivées. Aucune conversion automatique en échanges.
+- Échanges hors Abidjan : champs de paiement visibles/modifiables, préremplis depuis l'original ; contrôles de paiement maintenus côté serveur et dès la demande. Antidoublon d'expédition exempté pour les échanges staff autorisés ; reste actif pour les commandes ordinaires et publiques. L'approbation d'échange ne contourne pas les quotas cadeaux.
+
+### Vérifications et limites
+
+- `node scripts/test-order-exchanges.mjs` passe sur actions/service réels avec Prisma simulé : attente, droits, refus/acceptation, attribution, dates/motif/paiement, obsolescence, rollback, demandes/approbations concurrentes simulées, références, médias, quotas cadeaux, visibilité, échange direct admin, reprogrammation directe commercial/admin et REPRO_DISPO, expédition échange autorisée / expédition ordinaire identique refusée. Ancien script `test-order-reprogramming.mjs` devient point d'entrée compatible vers cette suite.
+- Les six autres scripts de régression (alertes rider, expedition-day, rider-history, rider-tracking, rider-stream, rider-place) passent sans base/réseau réels.
+- `npx.cmd tsc --noEmit --incremental false` : passe sur la version finale. Lint ciblé des nouveaux modules, de l'action historique modifiée et des suites : passe sans erreur ni avertissement. `npm.cmd run lint` : dette historique inchangée, 744 erreurs / 83 avertissements. Aucune correction applicative hors périmètre.
+- Aucune migration, opération base réelle ni déploiement. Tests navigateur authentifiés et réception des notifications externes non effectués.
+
+### Prochaines actions
+
+1. Déployer puis vérifier commercial → demande d'échange → décision admin → retour commercial, y compris hors Abidjan et demande répétée après traitement.
+2. Vérifier les reprogrammations directes commercial/admin et les alertes rider sur environnement de test.
+3. Examiner les anciennes demandes de reprogrammation éventuelles et les refuser manuellement avec explication ; leur statut n'a pas été changé automatiquement.
+
 ## 2026-09-17 — Réception des alertes livreur par les commerciaux
 
 - Vérifié : `Sidebar` dépendait du SSE pour afficher les alertes ; le secours basé sur les compteurs était désactivé par un chemin impossible. Les événements SSE du chat restent locaux au processus. Cela explique une perte possible entre instances ou après une déconnexion ; cause exacte en production non confirmée, sans accès aux logs ni test authentifié.

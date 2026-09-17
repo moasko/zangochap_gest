@@ -176,7 +176,9 @@ export async function createOrderWithContext(data: OrderCreationInput, session: 
   if (requiresPayment && !depositSenderPhone) {
     throw new Error("Le numéro ayant effectué le paiement est obligatoire pour une commande soldée ou une expédition hors Abidjan.");
   }
-  if (isExpedition && data.type !== 'Reprogrammé') {
+  const isStaffExchange = !isWebOrder && data.type === 'Echange'
+    && !!session && ['admin', 'developer', 'commercial'].includes(session.role.toLowerCase());
+  if (isExpedition && data.type !== 'Reprogrammé' && !isStaffExchange) {
     const toSuffix = (p?: string | null) => {
       const digits = String(p || '').replace(/\D/g, '');
       return digits.length >= 8 ? digits.slice(-8) : '';

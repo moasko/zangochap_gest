@@ -1,6 +1,6 @@
 # Cartographie du projet ZangoChap Gest
 
-Dernière vérification ciblée : 2026-09-17, reprogrammation avec approbation ; cartographie générale vérifiée le 2026-09-16. **Présent dans le code** ne signifie ni déployé, ni validé en production. Voir `docs/PROGRESS.md` pour les vérifications. Le code et `prisma/schema.prisma` priment sur ce document.
+Dernière vérification ciblée : 2026-09-17, échanges avec approbation et reprogrammation directe ; cartographie générale vérifiée le 2026-09-16. **Présent dans le code** ne signifie ni déployé, ni validé en production. Voir `docs/PROGRESS.md` pour les vérifications. Le code et `prisma/schema.prisma` priment sur ce document.
 
 ## Fonctionnement et stack
 
@@ -173,29 +173,29 @@ La fiche `app/product/[id]/page.tsx` charge un produit PUBLISHED par ID/slug et 
 
 **Écart vérifié** : le service interne appelé par `createOrder` calcule les lignes mais privilégie `data.total` lorsqu'il est fourni ; prix/quantités/remise/frais proviennent encore du payload. Le recalcul intégral à partir des données faisant autorité n'est pas garanti par ce parcours. Depuis le 2026-09-17, ces calculs sont dans `modules/orders/actions/order-creation-service.ts`.
 
-### Reprogrammation avec validation administrateur (2026-09-17)
+### Échanges avec validation administrateur (2026-09-17)
 
-- Route : `app/zangochap-manager/orders/reprogramming/page.tsx` ; écran `modules/orders/components/ReprogrammingRequestsClient.tsx`. Admin/developer voient toutes les demandes, un commercial voit seulement les siennes. Navigation et badge dans `components/Sidebar.tsx`, compteur dans `modules/orders/actions/sidebar-counts.ts`.
-- `reprogramOrder` dans `modules/orders/actions/order-actions.ts` oriente le commercial vers `requestOrderReprogramming` dans `modules/orders/actions/reprogramming-actions.ts`. La demande NEW_ORDER enregistre contenu proposé, date et motif obligatoire ; aucune commande/écriture CRM/stock créée à ce stade. Après approbation, le parcours existant crée une nouvelle commande CONFIRMED de type Reprogrammé, attribuée au demandeur. L'ancienne conserve son état et reçoit une entrée d'historique d'approbation.
-- `updateOrderStatus(..., "REPRO_DISPO", ...)` ouvre aussi une demande pour un commercial ; après approbation, ce second parcours reporte la commande existante et enregistre la tentative, sans recréer ses articles ni restaurer son stock. Les livreurs conservent leur parcours terrain existant. Les administrateurs conservent la reprogrammation directe.
-- Entrées et dates validées dans `modules/orders/types/reprogramming.ts` (`ReprogramOrderSchema`, `ReproDispoSchema`, `parseReprogrammingDate`). `reviewOrderReprogramming` vérifie admin/developer, verrouille demande et commande, refuse les demandes obsolètes, puis applique commande/CRM/décision/notification en transaction. Répéter la même décision est idempotent. Refus avec motif obligatoire, retour privé au commercial ; demande répétable après refus.
-- Stockage : une ligne CmsContent par demande, clé `order-reprogramming:<uuid>`. Aucun modèle ni migration ajouté. Verrou de la commande originale pour prévenir deux demandes en attente ; comparaison de `updatedAt` et du commercial avant acceptation. Demande obsolète à refuser puis refaire. Décisions conservées dans CmsContent ; liste actuellement sans pagination ni purge.
-- Création commune déplacée dans `modules/orders/actions/order-creation-service.ts` (`createOrderWithContext`, `OrderCreationInput`), module interne sans `"use server"`. La façade publique `createOrder` ne reçoit jamais de session/transaction du client. L'approbation réutilise ce service dans sa transaction avec le commercial demandeur ; WhatsApp/automatisations après commit. `generateUniqueRef` et `upsertCustomerFromOrder` dans `modules/orders/helpers/index.ts` acceptent un client transactionnel interne.
-- Images personnalisées nouvelles : upload R2 lors de la demande, après contrôle d'appartenance et hors transaction ; elles peuvent rester inutilisées après refus. Aucun upload réel effectué ici. Transitions directes REPROGRAMMED et créations de type reprogrammation par les commerciaux bloquées côté serveur.
-- Vérification : `node scripts/test-order-reprogramming.mjs` exerce les vraies actions et la création avec Prisma simulé : droits, validation, attente sans effets, acceptation/refus, attribution, obsolescence, rollback CRM/commande, doublons, repro-dispo et régression création staff/public/admin. PostgreSQL réel et UI authentifiée non vérifiés.
+- Périmètre corrigé après confirmation du propriétaire : validation pour les échanges commerciaux ; reprogrammation et REPRO_DISPO directs pour les utilisateurs autorisés, avec protections de livraison clôturée/règlement conservées.
+- Route : app/zangochap-manager/orders/exchanges/page.tsx ; écran modules/orders/components/ExchangeRequestsClient.tsx ; navigation « Mes échanges / Échanges » dans components/Sidebar.tsx et compteur exchangePending dans modules/orders/actions/sidebar-counts.ts.
+- duplicateOrder (modules/orders/actions/order-actions.ts) vérifie accès/rôle et transmet Echange commercial à requestOrderExchange (modules/orders/actions/exchange-actions.ts). ExchangeOrderSchema (modules/orders/types/exchange.ts) valide date, motif exchangeReason, contenu et paiement. Demande dans CmsContent order-exchange:<uuid> et message ROLE ADMIN, sans création de commande/CRM/stock.
+- getExchangeRequests filtre le commercial sur ses demandes ; admin/developer voient toutes les demandes. reviewOrderExchange verrouille demande/original, vérifie version et propriétaire, puis crée une commande CONFIRMED Echange attribuée au demandeur, avec confirmation admin, historique original et retour privé. Refus motivé sans création. Même décision répétée idempotente ; une demande à la fois par commande ; nouvelle demande possible après traitement. Demande obsolète à refuser puis refaire.
+- createOrderWithContext (modules/orders/actions/order-creation-service.ts), interne sans use server, intègre commande/CRM/décision en transaction ; WhatsApp/automatisations après commit. Quotas cadeaux conservés. Références ECHANGE et collisions résolues via generateUniqueRef ; uploads R2 normalisés avant transaction après contrôle d'appartenance. Images après refus potentiellement inutilisées ; demandes sans pagination/purge.
+- Admin/developer créent directement un échange. Commercial : création directe/conversion vers Echange bloquées côté serveur. Modal fixe le type et expose les paiements préremplis depuis l'original et modifiables. Paiement hors Abidjan obligatoire, y compris dès la demande. Antidoublon d'expédition exempté uniquement pour échanges staff autorisés ; commandes ordinaires/publiques toujours contrôlées.
+- Historique conservé à app/zangochap-manager/orders/reprogramming/page.tsx pour CmsContent order-reprogramming:<uuid> : consultation/refus motivé, nouvelle demande et approbation désactivées dans reprogramming-actions.ts. Aucune conversion automatique ni suppression.
+- Test : node scripts/test-order-exchanges.mjs, actions/service réels avec Prisma simulé (droits, attente, décisions, rollback, concurrence simulée, références/médias/cadeaux, reprogrammation et REPRO_DISPO directs, expédition échange autorisée / antidoublon ordinaire maintenu). Ancien test-order-reprogramming.mjs appelle cette suite pour compatibilité. PostgreSQL réel/UI authentifiée non vérifiés.
 
 ```mermaid
 flowchart TD
-  Commercial[Commercial : date, motif, contenu] --> Request[requestOrderReprogramming]
-  Request --> Pending[CmsContent PENDING + message ADMIN]
-  Pending --> Review[Administrateur : écran Reprogrammations]
+  Commercial[Commercial : échange, motif, date, articles] --> Request[requestOrderExchange]
+  Request --> Pending[CmsContent PENDING et message ADMIN]
+  Pending --> Review[Administrateur : écran Échanges]
   Review --> Reject[Refuser avec motif]
-  Reject --> Unchanged[Commande inchangée + message commercial]
-  Review --> Approve[reviewOrderReprogramming : contrôles et transaction]
-  Approve --> New[NEW_ORDER : nouvelle commande CONFIRMED]
-  Approve --> Same[REPRO_DISPO : report de la commande existante]
-  New --> Done[APPROVED + historique + message commercial]
-  Same --> Done
+  Reject --> Unchanged[Commande inchangée et message commercial]
+  Review --> Approve[reviewOrderExchange : contrôles et transaction]
+  Approve --> New[Nouvelle commande CONFIRMED Echange]
+  New --> Done[APPROVED, historique et message commercial]
+  Admin[Admin : échange direct] --> Direct[duplicateOrder et createOrder]
+  Repro[Commercial ou admin : reprogrammation] --> Immediate[reprogramOrder ou REPRO_DISPO direct]
 ```
 
 ### Préparation, livraison, règlement et comptabilité
@@ -283,7 +283,7 @@ Contrôles communs après modification de code : TypeScript et lint ci-dessus. �
 | Packing/contrôle/collecte | `modules/logistics/packing/PackingClient.tsx`, `modules/logistics/verification/actions.ts`, `modules/logistics/collection/actions.ts`, `modules/orders/actions/status-actions.ts` | Cadeaux, dépôts, stock, séparation packing/verification | TS/lint ; `node scripts/test-expedition-day.cjs` ; manuel articles manquants |
 | Stocks/entrepôts | `modules/orders/actions/stock.ts`, `modules/logistics/warehouseActions.ts`, `lib/stock-sync.ts` | StockLevel, agrégats, mouvements, retours, transactions | TS/lint ; manuel transfert et restauration sur base test ; audit seul après revue cible |
 | Livraison/partiel/reprogrammation | `app/zangochap-rider/DeliveryClient.tsx`, `modules/orders/actions/status-actions.ts`, `modules/orders/actions/delivery-actions.ts` | Attribution, motif/date, stock, settlement, boutique | TS/lint ; test-rider-history ; manuel partiel/retour |
-| Demandes de reprogrammation | `modules/orders/actions/reprogramming-actions.ts`, `modules/orders/actions/order-creation-service.ts`, `modules/orders/types/reprogramming.ts`, `modules/orders/components/ReprogrammingRequestsClient.tsx` | CmsContent, droits commercial/admin, version de commande, CRM, chat, cadeaux et notifications après commit | TS/lint ; `node scripts/test-order-reprogramming.mjs` ; manuel commercial → admin → commercial |
+| Demandes d’échange | `modules/orders/actions/exchange-actions.ts`, `modules/orders/actions/order-creation-service.ts`, `modules/orders/types/exchange.ts`, `modules/orders/components/ExchangeRequestsClient.tsx` | CmsContent, droits/version, CRM, chat, cadeaux et notifications après commit | TS/lint ; `node scripts/test-order-exchanges.mjs` ; manuel commercial → admin → commercial |
 | GPS/carte/lieu | `app/zangochap-rider/components/RiderTracking.tsx`, `app/api/rider-tracking/route.ts`, `app/zangochap-manager/admin/rider-map/TrackingMap.tsx`, `modules/rider-tracking/validation.ts` | Tables GPS, SSE pg, proxy, Geoapify, permission navigateur | TS/lint ; test-rider-tracking, test-rider-stream, test-rider-place ; téléphone |
 | Encaissement/règlement | `modules/orders/actions/settlement-actions.ts`, `app/zangochap-rider/components/WalletView.tsx` | amountReceived, exclusion caisse boutique, verrou commandes réglées | TS/lint ; manuel ventilation, doublon, boutique |
 | Comptabilité | `modules/accounting/actions.ts`, `app/zangochap-manager/accounting/AccountingClient.tsx` | Sessions, sources, unicité livraison, audit, clôture | TS/lint ; manuel rapprochement/clôture/réouverture |

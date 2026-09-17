@@ -808,9 +808,9 @@ export default function OrdersClient({
     (orderId: string, data: any) => {
       startTransition(async () => {
         try {
-          await duplicateOrder(orderId, data);
+          const result = await duplicateOrder(orderId, data);
 
-          showToast("Commande dupliquée ✓", "success");
+          showToast("approvalRequired" in result ? "Demande d’échange envoyée à l’administrateur. La commande reste inchangée." : data.type === "Echange" ? "Commande d’échange créée ✓" : "Commande dupliquée ✓", "success");
 
           setOrderToDuplicate(null);
           setOrderToExchange(null);
@@ -6438,7 +6438,8 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           mode="exchange"
           order={orderToExchange}
           onClose={() => setOrderToExchange(null)}
-          onConfirm={(data) => handleDuplicate(orderToExchange.id, data)}
+          approvalRequired={user?.role === "commercial"}
+          onConfirm={(data) => handleDuplicate(orderToExchange.id, { ...data, type: "Echange" })}
           isPending={isPending}
           onPreviewImage={setPreviewImage}
           products={products}
@@ -6454,7 +6455,6 @@ Ne passez pas à côté de cette belle surprise ! 😍🔥`;
           isPending={isPending}
           onPreviewImage={setPreviewImage}
           products={products}
-          approvalRequired={user?.role === "commercial"}
         />
       )}
 
@@ -8153,9 +8153,9 @@ function OrderFormModal({
 
       deliveryDate: getDefaultDeliveryDate(),
       reason: "",
-      paymentMethod: mode === "reprogram" ? order.paymentMethod || "" : undefined,
-      depositSenderPhone: mode === "reprogram" ? order.depositSenderPhone || "" : undefined,
-      depositTransactionRef: mode === "reprogram" ? order.depositTransactionRef || "" : undefined,
+      paymentMethod: (mode === "reprogram" || mode === "exchange") ? order.paymentMethod || "" : undefined,
+      depositSenderPhone: (mode === "reprogram" || mode === "exchange") ? order.depositSenderPhone || "" : undefined,
+      depositTransactionRef: (mode === "reprogram" || mode === "exchange") ? order.depositTransactionRef || "" : undefined,
     };
   });
 
@@ -8448,7 +8448,7 @@ function OrderFormModal({
               fontWeight: 800,
             }}
             onClick={() => onConfirm(buildConfirmData())}
-            disabled={isPending || formData.items.length === 0 || (mode === "reprogram" && approvalRequired && !formData.reason.trim())}
+            disabled={isPending || formData.items.length === 0 || (mode === "exchange" && approvalRequired && !formData.exchangeReason.trim())}
           >
             {isPending ? (
               <div className="animate-spin" />
@@ -8458,9 +8458,9 @@ function OrderFormModal({
                 {mode === "duplicate"
                   ? "Dupliquer"
                   : mode === "exchange"
-                    ? "Créer l'échange"
+                    ? approvalRequired ? "Envoyer la demande" : "Créer l'échange"
                     : mode === "reprogram"
-                      ? approvalRequired ? "Envoyer la demande" : "Créer la reprogrammation"
+                      ? "Créer la reprogrammation"
                     : "Enregistrer"}
               </>
             )}
@@ -8469,10 +8469,15 @@ function OrderFormModal({
       }
     >
       <div className="order-modal-grid">
-        {mode === "reprogram" && approvalRequired && <div style={{ gridColumn: "1 / -1", padding: 16, background: "#fff7ed" }}>
-          <p>{"La commande reste inchangée jusqu'à l'approbation de l'administrateur. Après validation, une nouvelle commande reprogrammée sera créée."}</p>
-          <label htmlFor="reprogramming-reason">Motif de la reprogrammation *</label>
-          <textarea id="reprogramming-reason" className="input" maxLength={2000} value={formData.reason} onChange={event => setFormData(previous => ({ ...previous, reason: event.target.value }))} />
+        {mode === "exchange" && approvalRequired && <p style={{ gridColumn: "1 / -1", padding: 16, background: "#fff7ed" }}>L’échange sera créé uniquement après validation de l’administrateur. Renseignez le motif de l’échange ci-dessous.</p>}
+        {mode === "exchange" && <div style={{ gridColumn: "1 / -1", padding: 16 }}>
+          <p>Pour une expédition hors Abidjan, vérifiez les informations du paiement. Les valeurs ci-dessous sont reprises de la commande originale et peuvent être corrigées.</p>
+          <label htmlFor="exchange-payment-method">Moyen de paiement</label>
+          <input id="exchange-payment-method" className="field-input" value={formData.paymentMethod || ""} onChange={event => setFormData(current => ({ ...current, paymentMethod: event.target.value }))} />
+          <label htmlFor="exchange-payment-phone">Numéro du payeur</label>
+          <input id="exchange-payment-phone" className="field-input" type="tel" value={formData.depositSenderPhone || ""} onChange={event => setFormData(current => ({ ...current, depositSenderPhone: event.target.value }))} />
+          <label htmlFor="exchange-payment-ref">Référence du paiement</label>
+          <input id="exchange-payment-ref" className="field-input" value={formData.depositTransactionRef || ""} onChange={event => setFormData(current => ({ ...current, depositTransactionRef: event.target.value }))} />
         </div>}
         {/* LEFT PANEL: CLIENT INFO */}
 
@@ -8559,6 +8564,7 @@ function OrderFormModal({
                   return (
                     <button
                       key={t}
+                      disabled={mode === "exchange" && t !== "Echange"}
                       onClick={() => setFormData({ ...formData, type: t })}
                       style={{
                         padding: "10px 8px",

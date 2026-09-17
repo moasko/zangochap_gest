@@ -3,19 +3,19 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getReprogrammingRequests, reviewOrderReprogramming } from "@/modules/orders/actions";
+import { getExchangeRequests, reviewOrderExchange } from "@/modules/orders/actions";
 import { useToast } from "@/components/Toast";
 import { formatPrice } from "@/lib/constants";
-import type { ReprogrammingRequest } from "../types/reprogramming";
+import type { ExchangeRequest } from "../types/exchange";
 import "./reprogramming.css";
 
 const labels = { PENDING: "En attente", APPROVED: "Approuvée", REJECTED: "Refusée" };
 
-export default function ReprogrammingRequestsClient({ initialRequests, canReview }: {
-  initialRequests: ReprogrammingRequest[]; canReview: boolean;
+export default function ExchangeRequestsClient({ initialRequests, canReview }: {
+  initialRequests: ExchangeRequest[]; canReview: boolean;
 }) {
   const [requests, setRequests] = useState(initialRequests);
-  const [filter, setFilter] = useState<"ALL" | ReprogrammingRequest["status"]>("PENDING");
+  const [filter, setFilter] = useState<"ALL" | ExchangeRequest["status"]>("PENDING");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
   const { showToast } = useToast();
@@ -23,17 +23,17 @@ export default function ReprogrammingRequestsClient({ initialRequests, canReview
 
   function refresh() {
     startTransition(async () => {
-      try { setRequests(await getReprogrammingRequests()); }
+      try { setRequests(await getExchangeRequests()); }
       catch (error) { showToast(error instanceof Error ? error.message : "Erreur de chargement", "error"); }
     });
   }
 
-  function review(request: ReprogrammingRequest, decision: "APPROVED" | "REJECTED") {
+  function review(request: ExchangeRequest, decision: "APPROVED" | "REJECTED") {
     startTransition(async () => {
       try {
-        const result = await reviewOrderReprogramming(request.id, decision, notes[request.id] || "");
+        const result = await reviewOrderExchange(request.id, decision, notes[request.id] || "");
         setRequests(current => current.map(item => item.id === result.id ? result : item));
-        showToast(decision === "APPROVED" ? "Reprogrammation approuvée et effectuée" : "Demande refusée", "success");
+        showToast(decision === "APPROVED" ? "Échange approuvé et créé" : "Demande refusée", "success");
         router.refresh();
       } catch (error) { showToast(error instanceof Error ? error.message : "Impossible de traiter la demande", "error"); }
     });
@@ -48,16 +48,16 @@ export default function ReprogrammingRequestsClient({ initialRequests, canReview
       </select></label>
       <button className="btn-secondary" onClick={refresh} disabled={pending}>Actualiser</button>
     </div>
-    <p>La commande reste inchangée tant que la demande est en attente. Une demande refusée ne crée aucune commande et ne reporte aucune livraison.</p>
+    <p>La commande reste inchangée tant que la demande est en attente. Une demande refusée ne crée aucune commande.</p>
     {visible.length === 0 && <p className="reprogramming-empty">Aucune demande dans cette catégorie.</p>}
     {visible.map(request => <article key={request.id} className="reprogramming-request">
       <header><h3>Commande {request.orderRef}</h3><span className={`reprogramming-status ${request.status.toLowerCase()}`}>{labels[request.status]}</span></header>
       <p>Demandée par <strong>{request.commercialName}</strong> le {new Date(request.createdAt).toLocaleString("fr-FR", { timeZone: "Africa/Abidjan" })}</p>
       <dl>
-        <div><dt>Parcours</dt><dd>{request.kind === "NEW_ORDER" ? "Nouvelle commande reprogrammée" : "Report de la livraison existante (repro-dispo)"}</dd></div>
+        <div><dt>Parcours</dt><dd>{"Nouvelle commande d’échange"}</dd></div>
         <div><dt>Date demandée</dt><dd>{request.payload.deliveryDate}</dd></div>
         <div><dt>Date actuelle à la demande</dt><dd>{request.originalDeliveryDate ? new Date(request.originalDeliveryDate).toLocaleDateString("fr-FR", { timeZone: "Africa/Abidjan" }) : "Non renseignée"}</dd></div>
-        <div><dt>Motif du commercial</dt><dd>{request.payload.reason}</dd></div>
+        <div><dt>Motif du commercial</dt><dd>{request.payload.exchangeReason}</dd></div>
       </dl>
       {"items" in request.payload && <details>
         <summary>Voir le contenu proposé ({request.payload.items.length} article(s))</summary>
@@ -73,7 +73,7 @@ export default function ReprogrammingRequestsClient({ initialRequests, canReview
       {canReview && request.status === "PENDING" && <div className="reprogramming-review">
         <label htmlFor={`review-${request.id}`}>Commentaire administrateur (obligatoire en cas de refus)</label>
         <textarea id={`review-${request.id}`} maxLength={2000} value={notes[request.id] || ""} onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))} disabled={pending} />
-        <div><p>Ancien parcours : utilisez désormais la reprogrammation directe. Les demandes historiques peuvent être refusées.</p>
+        <div><button className="btn-orange" disabled={pending} onClick={() => review(request, "APPROVED")}>Approuver et créer l’échange</button>
           <button className="btn-secondary" disabled={pending || !notes[request.id]?.trim()} onClick={() => review(request, "REJECTED")}>Refuser</button></div>
       </div>}
     </article>)}

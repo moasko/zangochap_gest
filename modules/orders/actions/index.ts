@@ -1,5 +1,10 @@
 "use server";
 
+import * as exchanges from "./exchange-actions";
+
+export async function getExchangeRequests() { return exchanges.getExchangeRequests(); }
+export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note?: string) { return exchanges.reviewOrderExchange(requestId, decision, note); }
+
 import * as reprogramming from "./reprogramming-actions";
 
 export async function getReprogrammingRequests() {

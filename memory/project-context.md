@@ -1,6 +1,6 @@
 # Contexte durable — ZangoChap Gest
 
-Dernière vérification générale historique : 2026-08-26 ; complément ciblé reprogrammation : 2026-09-17. Cartographie récente dans `docs/PROJECT_MAP.md`, reprise dans `docs/PROGRESS.md`.
+Dernière vérification générale historique : 2026-08-26 ; complément ciblé échanges et reprogrammation directe : 2026-09-17. Cartographie récente dans `docs/PROJECT_MAP.md`, reprise dans `docs/PROGRESS.md`.
 
 ## Finalité
 
@@ -179,14 +179,12 @@ Entités centrales : `User`, `Product`, `ProductVariant`, `Warehouse`,
    strictement inscription/connexion client.
 7. Découper les composants monolithiques et ajouter des tests de parcours.
 
-## Reprogrammation avec approbation — 2026-09-17
+## Échanges avec approbation, reprogrammation directe — 2026-09-17
 
-- Un commercial demande une reprogrammation avec motif et date ; la commande reste inchangée jusqu'à décision admin/developer. `reprogramOrder` oriente vers `requestOrderReprogramming` ; le report REPRO_DISPO commercial passe également par une demande.
-- Écran `/zangochap-manager/orders/reprogramming`, navigation avec compteur, messages admin puis privés au demandeur. Demandes dans CmsContent (`order-reprogramming:<uuid>`), sans migration.
-- `modules/orders/actions/reprogramming-actions.ts` : création, liste filtrée par propriétaire, validation/refus avec verrous transactionnels et contrôle de version originale. Approbation idempotente ; demande obsolète à refuser puis refaire.
-- NEW_ORDER préserve le parcours existant : nouvelle commande CONFIRMED de type Reprogrammé, attribuée au commercial demandeur ; REPRO_DISPO reporte la commande existante et conserve son état de stock. Administrateurs et parcours livreur directs conservés.
-- Création commune extraite dans `modules/orders/actions/order-creation-service.ts` (interne, sans use server) pour intégrer commande/CRM/décision dans une seule transaction ; effets WhatsApp/automatisations après commit. Validation Zod spécifique dans `modules/orders/types/reprogramming.ts`.
-- Test `node scripts/test-order-reprogramming.mjs` avec Prisma simulé : attente sans mutation, droits, décisions, attribution, dates invalides, obsolescence, rollback, doublons et régressions création public/staff/admin. Pas de connexion DB, migration ou déploiement ; UI authentifiée réelle restant à vérifier.
+- Correction confirmée par le propriétaire : validation des échanges commerciaux ; reprogrammation et REPRO_DISPO redevenus directs avec protections métier conservées.
+- duplicateOrder → requestOrderExchange ; route /zangochap-manager/orders/exchanges, écran ExchangeRequestsClient, compteur exchangePending, CmsContent order-exchange:<uuid>, messages admin puis demandeur. Pas de commande/CRM/stock pendant l'attente. exchange-actions.ts et types/exchange.ts : droits, verrous/version, décision idempotente, création attribuée au demandeur en transaction via createOrderWithContext, effets externes après commit et quotas cadeaux conservés. Admin/developer : échange direct.
+- Paiement hors Abidjan visible/modifiable, prérempli depuis l'original, validé côté serveur dès la demande. Antidoublon d'expédition exempté pour échanges staff uniquement, maintenu pour commandes ordinaires/publiques.
+- Anciennes demandes order-reprogramming: conservées, consultables/refusables ; nouvelle demande et approbation désactivées. Pas de conversion automatique. Suite scripts/test-order-exchanges.mjs couvre workflow et régressions reprogrammation/REPRO_DISPO directs ; ancien script appelle cette suite. Base réelle, UI authentifiée et déploiement non vérifiés.
 
 ## Discipline d'intervention
 

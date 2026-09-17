@@ -49,7 +49,7 @@ type NavSection = {
 
 const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
   commercial: (counts) => [
-    { items: [{ label: 'Mes reprogrammations', href: '/zangochap-manager/orders/reprogramming', icon: <CalendarClock size={18} />, badge: counts.reprogrammingPending }] },
+    { items: [{ label: 'Mes échanges', href: '/zangochap-manager/orders/exchanges', icon: <CalendarClock size={18} />, badge: counts.exchangePending }] },
     { items: [{ label: 'Dashboard', href: '/zangochap-manager/dashboard', icon: <LayoutDashboard size={18} /> }, { label: 'Répertoire', href: '/zangochap-manager/directory', icon: <Users size={18} /> }] },
     { title: 'Commandes', items: [{ label: 'Toutes les commandes', href: '/zangochap-manager/orders', icon: <ShoppingBag size={18} />, badge: counts.orders }, { label: 'À traiter (site)', href: '/zangochap-manager/orders/to-process', icon: <AlertTriangle size={18} />, badge: counts.toProcess }, { label: 'Fiche de rappel', href: '/zangochap-manager/orders/non-packed', icon: <Package size={18} /> }, { label: 'Nouvelle commande', href: '/zangochap-manager/orders/new', icon: <ClipboardList size={18} /> }] },
     { title: 'Catalogue', items: [{ label: 'Tous les produits', href: '/zangochap-manager/products', icon: <Box size={18} /> }, { label: 'Ajouter un produit', href: '/zangochap-manager/products/new', icon: <Plus size={18} /> }] },
@@ -81,7 +81,7 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
     {
       title: 'Commandes', items: [
         { label: 'Toutes les commandes', href: '/zangochap-manager/orders', icon: <ShoppingBag size={18} />, badge: counts.orders },
-        { label: 'Reprogrammations', href: '/zangochap-manager/orders/reprogramming', icon: <CalendarClock size={18} />, badge: counts.reprogrammingPending },
+        { label: 'Échanges', href: '/zangochap-manager/orders/exchanges', icon: <CalendarClock size={18} />, badge: counts.exchangePending },
         { label: 'À traiter (site)', href: '/zangochap-manager/orders/to-process', icon: <AlertTriangle size={18} />, badge: counts.toProcess },
         { label: 'Fiche de rappel', href: '/zangochap-manager/orders/non-packed', icon: <Package size={18} /> },
         { label: 'Nouvelle commande', href: '/zangochap-manager/orders/new', icon: <ClipboardList size={18} /> },

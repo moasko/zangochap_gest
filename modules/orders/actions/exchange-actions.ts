@@ -1,0 +1,160 @@
+"use server";
+
+import { randomUUID } from "node:crypto";
+import { Role, type Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import prisma from "@/lib/prisma";
+import { ensureAuth } from "@/lib/auth";
+import { uploadImage } from "@/lib/upload";
+import { createOrderWithContext } from "./order-creation-service";
+import { generateUniqueRef } from "../helpers";
+import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
+import { triggerAutomations } from "@/modules/automations/engine";
+import {
+  EXCHANGE_PREFIX, ExchangeOrderSchema, type ExchangeRequest,
+} from "../types/exchange";
+
+function refreshRequests() {
+  for (const path of ["/zangochap-manager/orders", "/zangochap-manager/orders/exchanges", "/zangochap-manager/dashboard", "/zangochap-manager/chat", "/zangochap-manager/logistics/packing", "/zangochap-rider"]) {
+    revalidatePath(path);
+  }
+}
+
+function requestJson(request: ExchangeRequest): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(request)) as Prisma.InputJsonObject;
+}
+
+export async function getExchangeRequests(): Promise<ExchangeRequest[]> {
+  const session = await ensureAuth(["admin", "commercial"]);
+  const rows = await prisma.cmsContent.findMany({
+    where: {
+      key: { startsWith: EXCHANGE_PREFIX },
+      ...(session.role === "commercial" ? { data: { path: ["commercialId"], equals: session.id } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(row => row.data as unknown as ExchangeRequest);
+}
+
+export async function requestOrderExchange(orderId: string, input: unknown) {
+  const session = await ensureAuth(["commercial"]);
+  if (session.role !== "commercial") throw new Error("Cette demande est réservée aux commerciaux.");
+  z.string().min(1).max(200).parse(orderId);
+  const parsed = ExchangeOrderSchema.safeParse(input);
+  if (!parsed?.success) throw new Error(parsed?.error.issues[0]?.message || "Demande invalide.");
+
+  // Slow media uploads happen before the transaction, only after checking ownership.
+  const orderPayload = ExchangeOrderSchema.parse(parsed.data);
+  if (orderPayload?.items.some(item => item.image?.startsWith("data:image"))) {
+    const original = await prisma.order.findUnique({ where: { id: orderId }, select: { commercialId: true, deletedAt: true } });
+    if (!original || original.deletedAt || original.commercialId !== session.id) throw new Error("Accès refusé à cette commande.");
+    for (const item of orderPayload.items) {
+      if (item.image?.startsWith("data:image")) item.image = await uploadImage(item.image, `exchange-${randomUUID()}`);
+    }
+  }
+
+  const request = await prisma.$transaction(async tx => {
+    // Serialize requests per original order; uniqueness does not rely on the UI.
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order || order.deletedAt || order.commercialId !== session.id) throw new Error("Accès refusé à cette commande.");
+    const pending = await tx.cmsContent.findFirst({ where: {
+      key: { startsWith: EXCHANGE_PREFIX },
+      AND: [{ data: { path: ["orderId"], equals: orderId } }, { data: { path: ["status"], equals: "PENDING" } }],
+    } });
+    if (pending) throw new Error("Une demande pour cette commande attend déjà la validation administrateur.");
+
+    const saved: ExchangeRequest = {
+      id: randomUUID(), orderId, orderRef: order.ref || order.id,
+      commercialId: session.id, commercialName: session.name,
+      createdAt: new Date().toISOString(), originalUpdatedAt: order.updatedAt.toISOString(),
+      originalStatus: order.status, originalDeliveryDate: order.deliveryDate?.toISOString() || null,
+      kind: "EXCHANGE", status: "PENDING", payload: orderPayload ?? parsed.data,
+    };
+    await tx.cmsContent.create({ data: { key: `${EXCHANGE_PREFIX}${saved.id}`, data: requestJson(saved), updatedBy: session.email } });
+    await tx.chatMessage.create({ data: {
+      body: `Demande d’échange ${saved.orderRef} par ${session.name}\nDate demandée : ${parsed.data.deliveryDate}\nMotif : ${parsed.data.exchangeReason}\nÀ valider : /zangochap-manager/orders/exchanges`,
+      scope: "ROLE", targetRole: Role.ADMIN, senderId: session.id,
+      senderName: session.name, senderRole: Role.COMMERCIAL,
+    } });
+    return saved;
+  });
+  refreshRequests();
+  return { approvalRequired: true as const, request };
+}
+
+export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note = "") {
+  const reviewer = await ensureAuth(["admin"]);
+  z.string().uuid().parse(requestId);
+  z.enum(["APPROVED", "REJECTED"]).parse(decision);
+  const reviewNote = z.string().trim().max(2_000).parse(note);
+  if (decision === "REJECTED" && !reviewNote) throw new Error("Indiquez le motif du refus.");
+  const key = `${EXCHANGE_PREFIX}${requestId}`;
+
+  const result = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT key FROM "CmsContent" WHERE key = ${key} FOR UPDATE`;
+    const row = await tx.cmsContent.findUnique({ where: { key } });
+    if (!row) throw new Error("Demande introuvable.");
+    const request = row.data as unknown as ExchangeRequest;
+    if (request.status !== "PENDING") {
+      if (request.status === decision) return { request, changed: false, createdOrder: null, changedOrder: null };
+      throw new Error("Cette demande a déjà été traitée.");
+    }
+
+    let createdOrder = null;
+    const changedOrder = null;
+    if (decision === "APPROVED") {
+      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${request.orderId} FOR UPDATE`;
+      const original = await tx.order.findUnique({ where: { id: request.orderId } });
+      if (!original || original.deletedAt) throw new Error("La commande originale n'est plus disponible.");
+      if (original.updatedAt.toISOString() !== request.originalUpdatedAt || original.commercialId !== request.commercialId) {
+        throw new Error("La commande a changé depuis la demande. Refusez cette demande et demandez au commercial de la refaire.");
+      }
+      const history = Array.isArray(original.history) ? original.history as Prisma.InputJsonValue[] : [];
+      const entry = { at: new Date().toISOString(), by: reviewer.email, byName: reviewer.name,
+        action: `Échange approuvé pour ${request.commercialName} : ${request.payload.exchangeReason}` };
+      if (request.kind !== "EXCHANGE") throw new Error("Type de demande invalide.");
+      {
+        const payload = ExchangeOrderSchema.parse(request.payload);
+        const commercial = await tx.user.findUnique({ where: { id: request.commercialId } });
+        if (!commercial || commercial.role !== Role.COMMERCIAL) throw new Error("Le compte commercial n'est plus disponible.");
+        const requester = { ...reviewer, id: commercial.id, email: commercial.email, name: commercial.name, role: "commercial" };
+        // Resolve collisions before entering the creation pipeline: a PostgreSQL error aborts the outer transaction.
+        const preferredRef = `ECHANGE${String(original.ref || "").replace(/^ECHANGE/i, "")}`;
+        const ref = original.ref && !await tx.order.findUnique({ where: { ref: preferredRef }, select: { id: true } })
+          ? preferredRef : await generateUniqueRef(payload.commune, "Echange", tx);
+        const created = await createOrderWithContext({ ...payload, ref, type: "Echange", status: "CONFIRMED",
+          giftRequestReason: payload.giftRequestReason || payload.exchangeReason,
+          notes: `ECHANGE - Commande originale: ${request.orderRef}\nMOTIF ECHANGE: ${payload.exchangeReason}${payload.notes ? `\n---\n${payload.notes}` : ""}` }, requester, tx);
+        createdOrder = await tx.order.update({ where: { id: created.order.id }, data: { confirmedByName: reviewer.name }, include: { items: true } });
+        request.newOrderId = createdOrder.id;
+        request.newOrderRef = createdOrder.ref || createdOrder.id;
+        entry.action += ` — Nouvelle commande : ${request.newOrderRef}`;
+        await tx.order.update({ where: { id: original.id }, data: { history: [...history, entry] } });
+      }
+    }
+    const reviewed: ExchangeRequest = { ...request, status: decision, reviewedAt: new Date().toISOString(), reviewedByName: reviewer.name, reviewNote };
+    await tx.cmsContent.update({ where: { key }, data: { data: requestJson(reviewed), updatedBy: reviewer.email } });
+    const recipient = await tx.user.findUnique({ where: { id: request.commercialId }, select: { id: true } });
+    if (recipient) await tx.chatMessage.create({ data: {
+      body: `Échange ${request.orderRef} ${decision === "APPROVED" ? "approuvé" : "refusé"} par ${reviewer.name}.${request.newOrderRef ? ` Nouvelle commande : ${request.newOrderRef}.` : ""}${reviewNote ? `\nMotif : ${reviewNote}` : ""}`,
+      scope: "DIRECT", recipientId: request.commercialId, senderId: reviewer.id,
+      senderName: reviewer.name, senderRole: reviewer.role === "developer" ? Role.DEVELOPER : Role.ADMIN,
+    } });
+    return { request: reviewed, changed: true, createdOrder, changedOrder };
+  }, { timeout: 30_000 });
+
+  // External effects run only after commit, and never turn an accepted request into a failure.
+  if (result.changed) {
+    try {
+      if (result.createdOrder) {
+        await notifyOrderCreatedWhatsApp(result.createdOrder);
+        await triggerAutomations({ type: "order.created", order: result.createdOrder });
+      }
+
+    } catch { /* Approval is committed; notifications are best-effort. */ }
+  }
+  refreshRequests();
+  return result.request;
+}

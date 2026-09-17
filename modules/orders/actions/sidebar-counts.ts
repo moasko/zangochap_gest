@@ -9,7 +9,7 @@ export type SidebarCounts = {
   myDeliveries: number;
   chatUnread: number;
   riderChatUnread: number;
-  reprogrammingPending?: number;
+  exchangePending?: number;
 };
 
 export type SidebarCountsUser = {
@@ -66,7 +66,7 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
       }
     : undefined;
 
-  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount, chatUnreadCount, riderChatUnreadCount, reprogrammingPending] = await Promise.all([
+  const [ordersCount, packingCount, collectionCount, toProcessCount, deliveriesCount, chatUnreadCount, riderChatUnreadCount, exchangePending] = await Promise.all([
     prisma.order.count({
       where: {
         ...activeOrderWhere,
@@ -117,7 +117,7 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
       : Promise.resolve(0),
     user?.id && ["admin", "developer", "commercial"].includes(role || "")
       ? prisma.cmsContent.count({ where: {
-          key: { startsWith: "order-reprogramming:" },
+          key: { startsWith: "order-exchange:" },
           AND: [{ data: { path: ["status"], equals: "PENDING" } },
             ...(role === "commercial" ? [{ data: { path: ["commercialId"], equals: user.id } }] : [])],
         } })
@@ -132,6 +132,6 @@ export async function getSidebarCountsForUser(user?: SidebarCountsUser | null): 
     myDeliveries: deliveriesCount,
     chatUnread: chatUnreadCount,
     riderChatUnread: riderChatUnreadCount,
-    reprogrammingPending,
+    exchangePending,
   };
 }
