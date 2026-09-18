@@ -9,6 +9,7 @@ import { formatPrice } from "@/lib/constants";
 import type { ExchangeRequest } from "../types/exchange";
 import { ArrowLeftRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, Clock3, Inbox, Package, RefreshCw, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import "./exchanges.css";
+import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
 
 const labels = { PENDING: "En attente", APPROVED: "Approuvée", REJECTED: "Refusée" };
 
@@ -26,7 +27,10 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
   function refresh() {
     startTransition(async () => {
       try { setRequests(await getExchangeRequests()); }
-      catch (error) { showToast(error instanceof Error ? error.message : "Erreur de chargement", "error"); }
+      catch (error) {
+        if (reloadOnStaleServerAction(error)) return;
+        showToast(error instanceof Error ? error.message : "Erreur de chargement", "error");
+      }
     });
   }
 
@@ -42,7 +46,10 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
         setRequests(current => current.map(item => item.id === result.id ? result : item));
         showToast(decision === "APPROVED" ? "Échange approuvé et créé" : "Demande refusée", "success");
         router.refresh();
-      } catch (error) { showToast(error instanceof Error ? error.message : "Impossible de traiter la demande", "error"); }
+      } catch (error) {
+        if (reloadOnStaleServerAction(error)) return;
+        showToast(error instanceof Error ? error.message : "Impossible de traiter la demande", "error");
+      }
     });
   }
 

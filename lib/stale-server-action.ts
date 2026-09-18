@@ -10,15 +10,18 @@ export function reloadOnStaleServerAction(error: unknown) {
 
   if (!isStaleServerAction || typeof window === "undefined") return false;
 
-  const alreadyReloaded = sessionStorage.getItem(STALE_SERVER_ACTION_RELOAD_KEY) === "1";
-  if (alreadyReloaded) return false;
-
-  sessionStorage.setItem(STALE_SERVER_ACTION_RELOAD_KEY, "1");
+  try {
+    if (sessionStorage.getItem(STALE_SERVER_ACTION_RELOAD_KEY) === "1") return false;
+    sessionStorage.setItem(STALE_SERVER_ACTION_RELOAD_KEY, "1");
+  } catch {
+    // Do not reload without a persistent guard: it could create a reload loop.
+    return false;
+  }
   window.location.reload();
   return true;
 }
 
 export function clearStaleServerActionReloadFlag() {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(STALE_SERVER_ACTION_RELOAD_KEY);
+  try { sessionStorage.removeItem(STALE_SERVER_ACTION_RELOAD_KEY); } catch { /* Storage may be blocked. */ }
 }
