@@ -100,6 +100,7 @@ export const StoredExchangeRequestSchema = z.object({
 
 export function exchangeValidationMessage(error: z.ZodError) {
   const fields: Record<string, string> = {
+    payload: "Proposition", productId: "Produit", variantId: "Variante", depositTransactionRef: "Référence du paiement",
     customerName: "Nom du client", customerPhone: "Téléphone du client", customerPhone2: "Second téléphone",
     customerLocation: "Adresse du client", commune: "Zone de livraison", deliveryDate: "Date de livraison",
     exchangeReason: "Motif de l’échange", deliveryFee: "Frais de livraison", total: "Total", discount: "Remise",
@@ -109,8 +110,11 @@ export function exchangeValidationMessage(error: z.ZodError) {
   const issue = error.issues[0];
   const location = issue.path.map(part => typeof part === "number" ? `article ${part + 1}` : fields[String(part)] || "Champ").join(" · ");
   // Do not echo unknown property names or supplied values in validation errors.
-  const message = issue.code === "invalid_type" || issue.code === "unrecognized_keys"
-    ? "information manquante ou format incorrect" : issue.message;
+  const message = issue.code === "unrecognized_keys" ? "seules la date et l’adresse peuvent être corrigées"
+    : issue.code === "invalid_type" ? "information manquante ou format incorrect"
+    : issue.code === "too_small" ? `valeur trop petite ou contenu incomplet (minimum : ${issue.minimum})`
+    : issue.code === "too_big" ? `limite dépassée (maximum : ${issue.maximum})`
+    : issue.code === "custom" ? issue.message : "format invalide";
   return `${location || "Demande d’échange"} : ${message}`;
 }
 

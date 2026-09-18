@@ -3,14 +3,14 @@
 import * as exchanges from "./exchange-actions";
 import { ZodError } from "zod";
 import { exchangeValidationMessage, type ExchangeCorrection } from "../types/exchange";
-import { logExchangeFailure } from "../helpers/exchange-diagnostics";
+import { logExchangeFailure, exchangeTechnicalMessage } from "../helpers/exchange-diagnostics";
 
 export async function getExchangeRequests() { return exchanges.getExchangeRequests(); }
 export async function getExchangeRequestsForUi() {
   try { return { success: true as const, ...await exchanges.getExchangeRequests() }; }
   catch (error) {
     const reference = logExchangeFailure("load", error);
-    return { success: false as const, error: `Impossible de charger les demandes. Actualisez la page. Référence : ${reference}` };
+    return { success: false as const, error: `Impossible de charger les demandes. ${exchangeTechnicalMessage(error)} Référence : ${reference}` };
   }
 }
 export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note?: string) { return exchanges.reviewOrderExchange(requestId, decision, note); }
@@ -26,9 +26,9 @@ export async function reviewOrderExchangeForUi(requestId: string, decision: "APP
         : exchangeValidationMessage(error) };
     }
     const message = error instanceof Error ? error.message : "";
-    const expected = /^(Non authentifié|Action non autorisée|Accès refusé|Indiquez le motif du refus|Demande introuvable|Cette demande a déjà été traitée|La commande originale n'est plus disponible|La commande a changé depuis la demande|Le compte commercial n'est plus disponible|Type de demande invalide|Les données enregistrées|Le moyen de paiement|Le numéro ayant effectué|GIFT_APPROVAL_REQUIRED)/.test(message);
+    const expected = (error instanceof Error && error.name === "ExchangeValidationError") || /^(Non authentifié|Action non autorisée|Accès refusé|Indiquez le motif du refus|Demande introuvable|Cette demande a déjà été traitée|La commande originale n'est plus disponible|La commande a changé depuis la demande|Le compte commercial n'est plus disponible|Type de demande invalide|Les données enregistrées|Le moyen de paiement|Le numéro ayant effectué|GIFT_APPROVAL_REQUIRED|Veuillez sélectionner le point relais|Ce point relais n'existe plus|Une image est obligatoire|Ce code promo |Code promo introuvable|La limite d'utilisation globale de ce code promo)/.test(message);
     const reference = expected ? undefined : logExchangeFailure("review", error);
-    return { success: false as const, error: expected ? message : `Impossible de traiter la demande d’échange. Actualisez puis réessayez. Référence : ${reference}` };
+    return { success: false as const, error: expected ? message.replace(/^GIFT_APPROVAL_REQUIRED:/, "Autorisation cadeau requise : ") : `${exchangeTechnicalMessage(error)} Référence : ${reference}` };
   }
 }
 

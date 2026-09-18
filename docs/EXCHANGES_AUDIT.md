@@ -2,6 +2,8 @@
 
 ## Correctifs locaux après audit — 18 septembre 2026
 
+Complément : `reviewOrderExchange` vérifie l’existence des produits/variantes et leur correspondance dans la transaction ; les erreurs indiquent le numéro d’article. Les motifs original réattribué, compte supprimé et rôle changé sont distingués. `exchangeTechnicalMessage` traduit les codes Prisma connus sans divulguer le message brut ; les cas sans code restent explicitement inconnus. La suite simulée couvre 16 scénarios de blocage et 13 classifications techniques. Aucun incident PostgreSQL réel reproduit.
+
 Les constats ci-dessous décrivent l’état avant correction. Depuis : lecture structurée avec `StoredExchangeRequestSchema` (sans expiration des archives), isolation et comptage des JSON illisibles, façade de chargement avec erreur récupérable, erreurs de validation par champ, diagnostic UUID/étape/code Prisma sans message ni payload, correction admin de date/adresse lors de l’approbation et audit avant/après dans la demande. `ExchangeCorrectionSchema` interdit les autres champs ; le contrôle de version/propriétaire de l’original reste en place. Aucune réparation automatique des données historiques.
 
 L’écran recharge explicitement la liste après décision. WhatsApp et automatisations sont isolés ; une erreur externe ou de revalidation après commit ne transforme plus l’approbation en échec apparent. Il n’existe toujours pas de file de reprise des notifications.

@@ -17,6 +17,12 @@ import {
 } from "../types/exchange";
 import { logExchangeFailure } from "../helpers/exchange-diagnostics";
 
+function exchangeError(message: string): never {
+  const error = new Error(message);
+  error.name = "ExchangeValidationError";
+  throw error;
+}
+
 function refreshRequests() {
   for (const path of ["/zangochap-manager/orders", "/zangochap-manager/orders/exchanges", "/zangochap-manager/dashboard", "/zangochap-manager/chat", "/zangochap-manager/logistics/packing", "/zangochap-rider"]) {
     try { revalidatePath(path); } catch (error) { logExchangeFailure("revalidate-after-commit", error); }
@@ -99,9 +105,11 @@ export async function requestOrderExchange(orderId: string, input: unknown) {
 
 export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note = "", correction: ExchangeCorrection = {}) {
   const reviewer = await ensureAuth(["admin"]);
-  z.string().uuid().parse(requestId);
-  z.enum(["APPROVED", "REJECTED"]).parse(decision);
-  const reviewNote = z.string().trim().max(2_000).parse(note);
+  if (!z.string().uuid().safeParse(requestId).success) exchangeError("Identifiant de demande invalide. Actualisez la liste.");
+  if (!z.enum(["APPROVED", "REJECTED"]).safeParse(decision).success) exchangeError("Décision invalide : choisissez Approuver ou Refuser.");
+  const parsedNote = z.string().trim().max(2_000).safeParse(note);
+  if (!parsedNote.success) exchangeError("Commentaire administrateur invalide : saisissez au maximum 2 000 caractères.");
+  const reviewNote = parsedNote.data;
   if (decision === "REJECTED" && !reviewNote) throw new Error("Indiquez le motif du refus.");
   const key = `${EXCHANGE_PREFIX}${requestId}`;
   const edits = decision === "APPROVED" ? ExchangeCorrectionSchema.parse(correction) : {};
@@ -111,11 +119,12 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
     const row = await tx.cmsContent.findUnique({ where: { key } });
     if (!row) throw new Error("Demande introuvable.");
     const stored = StoredExchangeRequestSchema.safeParse(row.data);
-    if (!stored.success || stored.data.id !== requestId) throw new Error("Les données enregistrées de cette demande sont illisibles. Contactez l’administrateur.");
+    if (!stored.success) throw new Error(`Les données enregistrées de cette demande sont invalides. ${exchangeValidationMessage(stored.error)}. Faites corriger ou recréer la demande.`);
+    if (stored.data.id !== requestId) throw new Error("Les données enregistrées ne correspondent pas à cette demande. Contactez l’administrateur.");
     const request: ExchangeRequest = stored.data;
     if (request.status !== "PENDING") {
       if (request.status === decision) return { request, changed: false, createdOrder: null, changedOrder: null };
-      throw new Error("Cette demande a déjà été traitée.");
+      throw new Error(`Cette demande a déjà été traitée : ${request.status === "APPROVED" ? "approuvée" : "refusée"}. Actualisez la liste pour consulter la décision.`);
     }
 
     let createdOrder = null;
@@ -123,8 +132,9 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
     if (decision === "APPROVED") {
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${request.orderId} FOR UPDATE`;
       const original = await tx.order.findUnique({ where: { id: request.orderId } });
-      if (!original || original.deletedAt) throw new Error("La commande originale n'est plus disponible.");
-      if (original.updatedAt.toISOString() !== request.originalUpdatedAt || original.commercialId !== request.commercialId) {
+      if (!original || original.deletedAt) throw new Error("La commande originale n'est plus disponible : elle a été supprimée ou archivée. L’échange ne peut pas être créé.");
+      if (original.commercialId !== request.commercialId) exchangeError("La commande a été réattribuée à un autre commercial. Refusez cette demande et faites-la recréer par le propriétaire actuel.");
+      if (original.updatedAt.toISOString() !== request.originalUpdatedAt) {
         throw new Error("La commande a changé depuis la demande. Refusez cette demande et demandez au commercial de la refaire.");
       }
       const history = Array.isArray(original.history) ? original.history as Prisma.InputJsonValue[] : [];
@@ -143,7 +153,19 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
         }
         request.payload = payload;
         const commercial = await tx.user.findUnique({ where: { id: request.commercialId } });
-        if (!commercial || commercial.role !== Role.COMMERCIAL) throw new Error("Le compte commercial n'est plus disponible.");
+        if (!commercial) throw new Error("Le compte commercial n'est plus disponible : le demandeur a été supprimé.");
+        if (commercial.role !== Role.COMMERCIAL) throw new Error("Le compte commercial n'est plus disponible pour cet échange : le demandeur n’a plus le rôle commercial.");
+        // Identify removed catalog records before a generic foreign-key error.
+        const catalogItems = payload.items.filter(item => !item.isCustom);
+        const products = await tx.product.findMany({ where: { id: { in: catalogItems.flatMap(item => item.productId ? [item.productId] : []) } }, select: { id: true } });
+        const variants = await tx.productVariant.findMany({ where: { id: { in: catalogItems.flatMap(item => item.variantId ? [item.variantId] : []) } }, select: { id: true, productId: true } });
+        for (const [index, item] of payload.items.entries()) {
+          if (item.isCustom) continue;
+          if (item.productId && !products.some(product => product.id === item.productId)) exchangeError(`Article ${index + 1} : le produit a été supprimé. Refusez la demande et faites sélectionner un produit disponible.`);
+          const variant = variants.find(candidate => candidate.id === item.variantId);
+          if (item.variantId && !variant) exchangeError(`Article ${index + 1} : la variante a été supprimée. Refaites la demande avec une taille et une couleur disponibles.`);
+          if (variant && variant.productId !== item.productId) exchangeError(`Article ${index + 1} : la variante ne correspond pas au produit. Refaites la sélection dans une nouvelle demande.`);
+        }
         const requester = { ...reviewer, id: commercial.id, email: commercial.email, name: commercial.name, role: "commercial" };
         // Resolve collisions before entering the creation pipeline: a PostgreSQL error aborts the outer transaction.
         const preferredRef = `ECHANGE${String(original.ref || "").replace(/^ECHANGE/i, "")}`;
