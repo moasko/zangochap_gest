@@ -2,31 +2,36 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getExchangeRequests, reviewOrderExchangeForUi } from "@/modules/orders/actions";
+import { getExchangeRequestsForUi, reviewOrderExchangeForUi } from "@/modules/orders/actions";
 import { useToast } from "@/components/Toast";
 import { formatPrice } from "@/lib/constants";
-import type { ExchangeRequest } from "../types/exchange";
+import { ExchangeOrderSchema, exchangeValidationMessage, type ExchangeRequest, type ExchangeCorrection } from "../types/exchange";
 import { ArrowLeftRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, Clock3, Inbox, Package, RefreshCw, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import "./exchanges.css";
 import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
 
 const labels = { PENDING: "En attente", APPROVED: "Approuvée", REJECTED: "Refusée" };
 
-export default function ExchangeRequestsClient({ initialRequests, canReview }: {
-  initialRequests: ExchangeRequest[]; canReview: boolean;
+export default function ExchangeRequestsClient({ initialRequests, canReview, initialInvalidCount = 0, initialError }: {
+  initialRequests: ExchangeRequest[]; canReview: boolean; initialInvalidCount?: number; initialError?: string;
 }) {
   const [requests, setRequests] = useState(initialRequests);
   const [filter, setFilter] = useState<"ALL" | ExchangeRequest["status"]>("PENDING");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
+  const [invalidCount, setInvalidCount] = useState(initialInvalidCount);
+  const [loadError, setLoadError] = useState(initialError);
+  const [corrections, setCorrections] = useState<Record<string, ExchangeCorrection>>({});
   const [pending, startTransition] = useTransition();
   const { showToast } = useToast();
-  const router = useRouter();
 
   function refresh() {
     startTransition(async () => {
-      try { setRequests(await getExchangeRequests()); }
+      try {
+        const result = await getExchangeRequestsForUi();
+        if (!result.success) { setLoadError(result.error); return; }
+        setRequests(result.requests); setInvalidCount(result.invalidCount); setLoadError(undefined);
+      }
       catch (error) {
         if (reloadOnStaleServerAction(error)) return;
         showToast(error instanceof Error ? error.message : "Erreur de chargement", "error");
@@ -37,7 +42,7 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
   function review(request: ExchangeRequest, decision: "APPROVED" | "REJECTED") {
     startTransition(async () => {
       try {
-        const response = await reviewOrderExchangeForUi(request.id, decision, notes[request.id] || "");
+        const response = await reviewOrderExchangeForUi(request.id, decision, notes[request.id] || "", corrections[request.id]);
         if (!response.success) {
           showToast(response.error, "error");
           return;
@@ -45,7 +50,7 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
         const result = response.request;
         setRequests(current => current.map(item => item.id === result.id ? result : item));
         showToast(decision === "APPROVED" ? "Échange approuvé et créé" : "Demande refusée", "success");
-        router.refresh();
+        refresh();
       } catch (error) {
         if (reloadOnStaleServerAction(error)) return;
         showToast(error instanceof Error ? error.message : "Impossible de traiter la demande", "error");
@@ -72,10 +77,13 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
     <div className="exchange-tabs" aria-label="Filtrer les demandes par statut">{tabs.map(tab => <button key={tab.key} aria-pressed={filter === tab.key} onClick={() => setFilter(tab.key)} className={filter === tab.key ? "active" : ""}><tab.icon size={18} /><span>{tab.label}</span><strong>{tab.key === "ALL" ? requests.length : requests.filter(r => r.status === tab.key).length}</strong></button>)}</div>
     <div className="exchange-list-toolbar"><h2>{tabs.find(tab => tab.key === filter)?.label} <span>{visible.length} demande{visible.length > 1 ? "s" : ""}</span></h2><label className="exchange-search"><Search size={17} /><input aria-label="Rechercher une demande d’échange" placeholder="Commande, commercial, client…" value={search} onChange={event => setSearch(event.target.value)} /></label></div>
     <div className="exchange-info"><ShieldCheck size={18} /><p>L’original reste inchangé pendant l’attente. Une approbation crée une nouvelle commande d’échange ; un refus ne crée aucune commande.</p></div>
+    {loadError && <div className="exchange-info" role="alert"><p>{loadError}</p></div>}
+    {invalidCount > 0 && <div className="exchange-info" role="alert"><p>{invalidCount} demande(s) illisible(s) ne peuvent pas être affichées. Elles sont conservées ; contactez l’administrateur pour leur diagnostic.</p></div>}
     <div className="exchange-list" aria-busy={pending}>
     {visible.length === 0 && <div className="exchange-empty"><Inbox size={36} /><h3>{query ? "Aucune demande trouvée" : "Aucune demande dans cette catégorie"}</h3><p>{query ? "Essayez une autre recherche ou un autre statut." : "Les demandes correspondantes apparaîtront ici."}</p></div>}
     {visible.map(request => {
       const payload = request.payload;
+      const validation = ExchangeOrderSchema.safeParse({ ...payload, ...corrections[request.id] });
       const total = payload.total ?? payload.items.reduce((sum, item) => sum + item.qty * item.price, 0);
       return <article key={request.id} className="exchange-card">
         <header className="exchange-card-header"><div className="exchange-reference"><span className="exchange-icon"><ArrowLeftRight size={20} /></span><div><span className="exchange-eyebrow">COMMANDE ORIGINALE</span><h3>{request.orderRef}</h3></div></div><span className={`exchange-status ${request.status.toLowerCase()}`}><span />{labels[request.status]}</span></header>
@@ -90,7 +98,19 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
             {payload.paymentMethod && <p className="exchange-note"><strong>Paiement : {payload.paymentMethod}</strong><br />Payeur : {payload.depositSenderPhone || "Non renseigné"} · Référence : {payload.depositTransactionRef || "Non renseignée"}</p>}
           </div></details>
           {request.newOrderRef && <Link className="exchange-created" href={`/zangochap-manager/orders?q=${encodeURIComponent(request.newOrderRef)}`}><CheckCircle2 size={17} />Échange créé : {request.newOrderRef}<ArrowUpRight size={15} /></Link>}
-          {request.reviewedAt && <div className="exchange-decision"><strong>Décision de {request.reviewedByName}</strong><span>{date(request.reviewedAt, true)}</span>{request.reviewNote && <p>{request.reviewNote}</p>}</div>}
+          {request.reviewedAt && <div className="exchange-decision"><strong>Décision de {request.reviewedByName}</strong><span>{date(request.reviewedAt, true)}</span>{request.correction && <p>Adresse ou date corrigée par {request.correction.byName} lors de l’approbation.</p>}{request.reviewNote && <p>{request.reviewNote}</p>}</div>}
+          {canReview && request.status === "PENDING" && <div className="exchange-correction">
+            {!validation.success && <p role="alert">{exchangeValidationMessage(validation.error)}</p>}
+            <details><summary>Corriger la date ou l’adresse avant approbation</summary>
+              <p>Les corrections seront enregistrées avec votre décision. La commande originale reste inchangée.</p>
+              <label htmlFor={`date-${request.id}`}>Date de livraison</label>
+              <input id={`date-${request.id}`} type="date" value={corrections[request.id]?.deliveryDate ?? payload.deliveryDate} disabled={pending}
+                onChange={event => setCorrections(current => ({ ...current, [request.id]: { ...current[request.id], deliveryDate: event.target.value } }))} />
+              <label htmlFor={`address-${request.id}`}>Adresse de livraison</label>
+              <textarea id={`address-${request.id}`} maxLength={2000} value={corrections[request.id]?.customerLocation ?? payload.customerLocation} disabled={pending}
+                onChange={event => setCorrections(current => ({ ...current, [request.id]: { ...current[request.id], customerLocation: event.target.value } }))} />
+            </details>
+          </div>}
         </div>
         {canReview && request.status === "PENDING" && <footer className="exchange-review"><div className="exchange-review-title"><ShieldCheck size={17} /><strong>Votre décision</strong><span>Le commercial sera informé.</span></div><label htmlFor={`review-${request.id}`}>Commentaire <span>— obligatoire pour refuser</span></label><textarea id={`review-${request.id}`} placeholder="Expliquez votre décision au commercial…" maxLength={2000} value={notes[request.id] || ""} onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))} disabled={pending} /><div className="exchange-actions"><small>{!notes[request.id]?.trim() ? "Ajoutez un commentaire pour activer le refus." : "Votre commentaire accompagnera la décision."}</small><div><button className="exchange-button danger" disabled={pending || !notes[request.id]?.trim()} onClick={() => review(request, "REJECTED")}><X size={16} />Refuser</button><button className="exchange-button primary" disabled={pending} onClick={() => review(request, "APPROVED")}><Check size={16} />Approuver et créer l’échange</button></div></div></footer>}
       </article>;

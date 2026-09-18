@@ -12,12 +12,14 @@ import { generateUniqueRef } from "../helpers";
 import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
 import { triggerAutomations } from "@/modules/automations/engine";
 import {
-  EXCHANGE_PREFIX, ExchangeOrderSchema, type ExchangeRequest,
+  EXCHANGE_PREFIX, ExchangeOrderSchema, StoredExchangeRequestSchema, ExchangeCorrectionSchema,
+  exchangeValidationMessage, type ExchangeRequest, type ExchangeCorrection,
 } from "../types/exchange";
+import { logExchangeFailure } from "../helpers/exchange-diagnostics";
 
 function refreshRequests() {
   for (const path of ["/zangochap-manager/orders", "/zangochap-manager/orders/exchanges", "/zangochap-manager/dashboard", "/zangochap-manager/chat", "/zangochap-manager/logistics/packing", "/zangochap-rider"]) {
-    revalidatePath(path);
+    try { revalidatePath(path); } catch (error) { logExchangeFailure("revalidate-after-commit", error); }
   }
 }
 
@@ -25,7 +27,7 @@ function requestJson(request: ExchangeRequest): Prisma.InputJsonObject {
   return JSON.parse(JSON.stringify(request)) as Prisma.InputJsonObject;
 }
 
-export async function getExchangeRequests(): Promise<ExchangeRequest[]> {
+export async function getExchangeRequests() {
   const session = await ensureAuth(["admin", "commercial"]);
   const rows = await prisma.cmsContent.findMany({
     where: {
@@ -34,7 +36,14 @@ export async function getExchangeRequests(): Promise<ExchangeRequest[]> {
     },
     orderBy: { createdAt: "desc" },
   });
-  return rows.map(row => row.data as unknown as ExchangeRequest);
+  const requests: ExchangeRequest[] = [];
+  let invalidCount = 0;
+  for (const row of rows) {
+    const parsed = StoredExchangeRequestSchema.safeParse(row.data);
+    if (parsed.success && row.key === `${EXCHANGE_PREFIX}${parsed.data.id}`) requests.push(parsed.data);
+    else invalidCount++;
+  }
+  return { requests, invalidCount };
 }
 
 export async function requestOrderExchange(orderId: string, input: unknown) {
@@ -43,17 +52,7 @@ export async function requestOrderExchange(orderId: string, input: unknown) {
   z.string().min(1).max(200).parse(orderId);
   const parsed = ExchangeOrderSchema.safeParse(input);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const fields: Record<string, string> = {
-      customerName: "Nom du client", customerPhone: "Téléphone du client", customerPhone2: "Second téléphone",
-      customerLocation: "Adresse du client", commune: "Zone de livraison", deliveryDate: "Date de livraison",
-      exchangeReason: "Motif de l’échange", deliveryFee: "Frais de livraison", total: "Total", discount: "Remise",
-      paymentMethod: "Moyen de paiement", depositSenderPhone: "Numéro du payeur", items: "Articles",
-      size: "Taille", color: "Couleur", name: "Nom", qty: "Quantité", price: "Prix", image: "Image",
-    };
-    const location = issue.path.map(part => typeof part === "number" ? `article ${part + 1}` : fields[String(part)] || String(part)).join(" · ");
-    const message = issue.code === "invalid_type" ? "information manquante ou format incorrect" : issue.message;
-    const error = new Error(`${location || "Demande d’échange"} : ${message}`);
+    const error = new Error(exchangeValidationMessage(parsed.error));
     error.name = "ExchangeValidationError";
     throw error;
   }
@@ -98,19 +97,22 @@ export async function requestOrderExchange(orderId: string, input: unknown) {
   return { approvalRequired: true as const, request };
 }
 
-export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note = "") {
+export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note = "", correction: ExchangeCorrection = {}) {
   const reviewer = await ensureAuth(["admin"]);
   z.string().uuid().parse(requestId);
   z.enum(["APPROVED", "REJECTED"]).parse(decision);
   const reviewNote = z.string().trim().max(2_000).parse(note);
   if (decision === "REJECTED" && !reviewNote) throw new Error("Indiquez le motif du refus.");
   const key = `${EXCHANGE_PREFIX}${requestId}`;
+  const edits = decision === "APPROVED" ? ExchangeCorrectionSchema.parse(correction) : {};
 
   const result = await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT key FROM "CmsContent" WHERE key = ${key} FOR UPDATE`;
     const row = await tx.cmsContent.findUnique({ where: { key } });
     if (!row) throw new Error("Demande introuvable.");
-    const request = row.data as unknown as ExchangeRequest;
+    const stored = StoredExchangeRequestSchema.safeParse(row.data);
+    if (!stored.success || stored.data.id !== requestId) throw new Error("Les données enregistrées de cette demande sont illisibles. Contactez l’administrateur.");
+    const request: ExchangeRequest = stored.data;
     if (request.status !== "PENDING") {
       if (request.status === decision) return { request, changed: false, createdOrder: null, changedOrder: null };
       throw new Error("Cette demande a déjà été traitée.");
@@ -130,7 +132,16 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
         action: `Échange approuvé pour ${request.commercialName} : ${request.payload.exchangeReason}` };
       if (request.kind !== "EXCHANGE") throw new Error("Type de demande invalide.");
       {
-        const payload = ExchangeOrderSchema.parse(request.payload);
+        const payload = ExchangeOrderSchema.parse({ ...request.payload, ...edits });
+        if (payload.deliveryDate !== request.payload.deliveryDate || payload.customerLocation !== request.payload.customerLocation) {
+          request.correction = {
+            previousDeliveryDate: request.payload.deliveryDate, previousCustomerLocation: request.payload.customerLocation,
+            deliveryDate: payload.deliveryDate, customerLocation: payload.customerLocation,
+            at: new Date().toISOString(), byName: reviewer.name,
+          };
+          entry.action += " — Adresse/date corrigée par l’administrateur";
+        }
+        request.payload = payload;
         const commercial = await tx.user.findUnique({ where: { id: request.commercialId } });
         if (!commercial || commercial.role !== Role.COMMERCIAL) throw new Error("Le compte commercial n'est plus disponible.");
         const requester = { ...reviewer, id: commercial.id, email: commercial.email, name: commercial.name, role: "commercial" };
@@ -160,14 +171,11 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
   }, { timeout: 30_000 });
 
   // External effects run only after commit, and never turn an accepted request into a failure.
-  if (result.changed) {
-    try {
-      if (result.createdOrder) {
-        await notifyOrderCreatedWhatsApp(result.createdOrder);
-        await triggerAutomations({ type: "order.created", order: result.createdOrder });
-      }
-
-    } catch { /* Approval is committed; notifications are best-effort. */ }
+  if (result.changed && result.createdOrder) {
+    try { await notifyOrderCreatedWhatsApp(result.createdOrder); }
+    catch (error) { logExchangeFailure("whatsapp-after-commit", error); }
+    try { await triggerAutomations({ type: "order.created", order: result.createdOrder }); }
+    catch (error) { logExchangeFailure("automation-after-commit", error); }
   }
   refreshRequests();
   return result.request;

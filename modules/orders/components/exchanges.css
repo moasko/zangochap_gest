@@ -92,6 +92,12 @@
 .exchange-empty h3 { color: #6f5845; font-size: 15px; margin: 14px 0 8px; }
 .exchange-empty p { font-size: 12px; }
 .exchange-spin { animation: exchange-spin 1s linear infinite; }
+.exchange-correction { margin-top: 12px; font-size: 12px; }
+.exchange-correction > p { color: #9a3412; }
+.exchange-correction summary { cursor: pointer; font-weight: 600; }
+.exchange-correction label { display: block; margin: 10px 0 5px; }
+.exchange-correction input, .exchange-correction textarea { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #d6cabc; border-radius: 8px; background: white; color: #1c1917; font: inherit; }
+.exchange-correction textarea { min-height: 65px; resize: vertical; }
 @keyframes exchange-spin { to { transform: rotate(360deg); } }
 @media (max-width: 900px) { .exchange-workspace { padding: 24px !important; } .exchange-tabs button { padding: 14px 12px; gap: 7px; } .exchange-tabs button strong { font-size: 19px; } .exchange-actions { flex-wrap: wrap; } .exchange-actions > div { margin-left: auto; } }
 @media (max-width: 600px) { .exchange-workspace { padding: 16px !important; } .exchange-heading { align-items: flex-start; gap: 12px; } .exchange-heading h1 { font-size: 22px; } .exchange-heading > .exchange-button { padding: 10px; font-size: 11px; } .exchange-tabs { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; } .exchange-list-toolbar { align-items: stretch; flex-direction: column; } .exchange-search { width: 100%; } .exchange-card-header,.exchange-card-body,.exchange-review { padding: 16px; } .exchange-card-header { align-items: flex-start; } .exchange-reference h3 { font-size: 12px; } .exchange-icon { width: 32px; height: 32px; } .exchange-overview { grid-template-columns: 1fr; } .exchange-meta a { margin-left: 0; } .exchange-review-title { flex-wrap: wrap; } .exchange-review-title > span { margin-left: 0; } .exchange-actions > div { width: 100%; flex-direction: column-reverse; } .exchange-button { min-height: 40px; } }

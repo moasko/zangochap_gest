@@ -68,6 +68,52 @@ export const ExchangeOrderSchema = z.object({
 });
 
 export type ExchangeOrderInput = z.infer<typeof ExchangeOrderSchema>;
+// Reading an archived request must not reapply time-dependent submission rules.
+const StoredPayloadSchema = z.object({
+  ...ExchangeOrderSchema.shape,
+  deliveryDate: z.string(),
+  customerLocation: z.string().nullish().transform(value => value ?? ""),
+});
+
+export const ExchangeCorrectionSchema = z.object({
+  deliveryDate: deliveryDate.optional(),
+  customerLocation: text.min(1, "Renseignez l’adresse de livraison du nouvel échange.").optional(),
+}).strict();
+export type ExchangeCorrection = z.infer<typeof ExchangeCorrectionSchema>;
+
+const correctionAuditSchema = z.object({
+  previousDeliveryDate: z.string(), previousCustomerLocation: z.string(),
+  deliveryDate: z.string(), customerLocation: z.string(),
+  at: z.string(), byName: z.string(),
+});
+
+export const StoredExchangeRequestSchema = z.object({
+  id: z.string().uuid(), orderId: z.string().min(1), orderRef: z.string(),
+  commercialId: z.string().min(1), commercialName: z.string(),
+  createdAt: z.string(), originalUpdatedAt: z.string(), originalStatus: z.string(),
+  originalDeliveryDate: z.string().nullable(), kind: z.literal("EXCHANGE"),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]), payload: StoredPayloadSchema,
+  reviewedAt: z.string().optional(), reviewedByName: z.string().optional(),
+  reviewNote: z.string().optional(), newOrderId: z.string().optional(), newOrderRef: z.string().optional(),
+  correction: correctionAuditSchema.optional(),
+});
+
+export function exchangeValidationMessage(error: z.ZodError) {
+  const fields: Record<string, string> = {
+    customerName: "Nom du client", customerPhone: "Téléphone du client", customerPhone2: "Second téléphone",
+    customerLocation: "Adresse du client", commune: "Zone de livraison", deliveryDate: "Date de livraison",
+    exchangeReason: "Motif de l’échange", deliveryFee: "Frais de livraison", total: "Total", discount: "Remise",
+    paymentMethod: "Moyen de paiement", depositSenderPhone: "Numéro du payeur", items: "Articles",
+    size: "Taille", color: "Couleur", name: "Nom", qty: "Quantité", price: "Prix", image: "Image",
+  };
+  const issue = error.issues[0];
+  const location = issue.path.map(part => typeof part === "number" ? `article ${part + 1}` : fields[String(part)] || "Champ").join(" · ");
+  // Do not echo unknown property names or supplied values in validation errors.
+  const message = issue.code === "invalid_type" || issue.code === "unrecognized_keys"
+    ? "information manquante ou format incorrect" : issue.message;
+  return `${location || "Demande d’échange"} : ${message}`;
+}
+
 export type ExchangeRequest = {
   id: string;
   orderId: string;
@@ -86,6 +132,7 @@ export type ExchangeRequest = {
   reviewNote?: string;
   newOrderId?: string;
   newOrderRef?: string;
+  correction?: z.infer<typeof correctionAuditSchema>;
 };
 
 export const EXCHANGE_PREFIX = "order-exchange:";
