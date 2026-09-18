@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getExchangeRequests, reviewOrderExchange } from "@/modules/orders/actions";
+import { getExchangeRequests, reviewOrderExchangeForUi } from "@/modules/orders/actions";
 import { useToast } from "@/components/Toast";
 import { formatPrice } from "@/lib/constants";
 import type { ExchangeRequest } from "../types/exchange";
@@ -33,7 +33,12 @@ export default function ExchangeRequestsClient({ initialRequests, canReview }: {
   function review(request: ExchangeRequest, decision: "APPROVED" | "REJECTED") {
     startTransition(async () => {
       try {
-        const result = await reviewOrderExchange(request.id, decision, notes[request.id] || "");
+        const response = await reviewOrderExchangeForUi(request.id, decision, notes[request.id] || "");
+        if (!response.success) {
+          showToast(response.error, "error");
+          return;
+        }
+        const result = response.request;
         setRequests(current => current.map(item => item.id === result.id ? result : item));
         showToast(decision === "APPROVED" ? "Échange approuvé et créé" : "Demande refusée", "success");
         router.refresh();

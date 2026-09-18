@@ -1,9 +1,27 @@
 "use server";
 
 import * as exchanges from "./exchange-actions";
+import { ZodError } from "zod";
 
 export async function getExchangeRequests() { return exchanges.getExchangeRequests(); }
 export async function reviewOrderExchange(requestId: string, decision: "APPROVED" | "REJECTED", note?: string) { return exchanges.reviewOrderExchange(requestId, decision, note); }
+
+export async function reviewOrderExchangeForUi(requestId: string, decision: "APPROVED" | "REJECTED", note?: string) {
+  try {
+    return { success: true as const, request: await exchanges.reviewOrderExchange(requestId, decision, note) };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const dateInvalid = error.issues.some(issue => issue.path[0] === "deliveryDate");
+      return { success: false as const, error: dateInvalid
+        ? "La date de livraison demandée est passée ou invalide. Refusez cette demande et demandez au commercial de la refaire avec une nouvelle date."
+        : "Les informations de la demande sont invalides. Vérifiez le commentaire et les informations proposées avant de réessayer." };
+    }
+    const message = error instanceof Error ? error.message : "";
+    const expected = /^(Non authentifié|Action non autorisée|Accès refusé|Indiquez le motif du refus|Demande introuvable|Cette demande a déjà été traitée|La commande originale n'est plus disponible|La commande a changé depuis la demande|Le compte commercial n'est plus disponible|Type de demande invalide|Le moyen de paiement|Le numéro ayant effectué|GIFT_APPROVAL_REQUIRED)/.test(message);
+    if (!expected) console.error("[exchange-review] Unexpected failure", { name: error instanceof Error ? error.name : "UnknownError" });
+    return { success: false as const, error: expected ? message : "Impossible de traiter la demande d’échange. Actualisez puis réessayez ; si le problème persiste, contactez l’administrateur." };
+  }
+}
 
 import * as reprogramming from "./reprogramming-actions";
 
