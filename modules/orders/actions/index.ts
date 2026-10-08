@@ -142,8 +142,11 @@ export async function getDeliveryDispatchPlan(options: Parameters<typeof actions
   return actions.getDeliveryDispatchPlan(options);
 }
 
-export async function applyDeliveryDispatchPlan(input: Parameters<typeof actions.applyDeliveryDispatchPlan>[0]) {
-  return actions.applyDeliveryDispatchPlan(input);
+export async function applyDeliveryDispatchPlan(
+  input: Parameters<typeof actions.applyDeliveryDispatchPlan>[0],
+  options?: Parameters<typeof actions.applyDeliveryDispatchPlan>[1],
+) {
+  return actions.applyDeliveryDispatchPlan(input, options);
 }
 
 export async function getPendingSettlements() {

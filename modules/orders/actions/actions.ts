@@ -62,7 +62,7 @@ export async function assignOrderToDeliveryman(orderId: string, deliverymanId: s
 export async function bulkAssignOrders(orderIds: string[], deliverymanId: string) { return deliveryActions.bulkAssignOrders(orderIds, deliverymanId); }
 export async function autoAssignDeliveryOrders(orderIds: string[], date?: string) { return deliveryActions.autoAssignDeliveryOrders(orderIds, date); }
 export async function getDeliveryDispatchPlan(options: deliveryActions.DeliveryDispatchOptions) { return deliveryActions.getDeliveryDispatchPlan(options); }
-export async function applyDeliveryDispatchPlan(input: deliveryActions.DeliveryDispatchAssignmentInput[]) { return deliveryActions.applyDeliveryDispatchPlan(input); }
+export async function applyDeliveryDispatchPlan(input: deliveryActions.DeliveryDispatchAssignmentInput[], options?: deliveryActions.DeliveryDispatchApplyOptions) { return deliveryActions.applyDeliveryDispatchPlan(input, options); }
 
 // ── Settlements ──
 export async function getPendingSettlements() { return settlementActions.getPendingSettlements(); }

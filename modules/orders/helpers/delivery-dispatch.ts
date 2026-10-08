@@ -51,6 +51,8 @@ export type DispatchInput = {
   fixedCommunes?: Record<string, string[]>;
   // true : attribution d'avance a la validation call center (commandes CONFIRMED).
   atConfirmation?: boolean;
+  // true : la repartition du soir inclut les colis confirmes / en preparation.
+  includeUnpacked?: boolean;
 };
 
 export type DispatchAssignment = {
@@ -79,22 +81,40 @@ export function normalizeCommune(value: string | null | undefined) {
   return CANONICAL_COMMUNES.get(foldCommune(value)) ?? null;
 }
 
+// Colis pas encore emballes que la repartition du soir peut attribuer d'avance (option).
+export const DISPATCH_UNPACKED_STATUSES = ["CONFIRMED", "PREPARING"] as const;
+
+const NOT_READY_REASONS: Record<string, string> = {
+  UNAVAILABLE: "Indisponible (articles manquants)",
+  PARTIAL: "Emballage partiel (articles manquants)",
+  ALTERNATIVE: "Alternative proposee au client",
+  PENDING: "En attente de validation",
+  TO_PROCESS: "Commande web a traiter",
+};
+
+export type DispatchEligibilityOptions = { atConfirmation?: boolean; includeUnpacked?: boolean };
+
 /** Raison pour laquelle la commande ne peut pas etre repartie automatiquement, sinon null. */
-export function getDispatchIneligibility(order: DispatchOrder, options: { atConfirmation?: boolean } = {}): string | null {
+export function getDispatchIneligibility(order: DispatchOrder, options: DispatchEligibilityOptions = {}): string | null {
   if (order.settlementId) return "Deja rattachee a un reglement";
   // A la validation call center : commande CONFIRMED attribuee d'avance ; emballage
   // et depot expedition restent controles plus tard (le livreur ne la voit qu'emballee).
+  const unpacked = DISPATCH_UNPACKED_STATUSES.includes(order.status as typeof DISPATCH_UNPACKED_STATUSES[number]);
   const statusOk = options.atConfirmation
     ? order.status === "CONFIRMED"
-    : DISPATCH_ELIGIBLE_STATUSES.includes(order.status as typeof DISPATCH_ELIGIBLE_STATUSES[number]);
+    : DISPATCH_ELIGIBLE_STATUSES.includes(order.status as typeof DISPATCH_ELIGIBLE_STATUSES[number])
+      || (options.includeUnpacked === true && unpacked);
   if (!statusOk) {
-    return `Pas prete a livrer (statut ${order.status})`;
+    if (unpacked) return `Pas encore emballee (${order.status === "CONFIRMED" ? "confirmee" : "en preparation"})`;
+    return NOT_READY_REASONS[order.status] || `Pas prete a livrer (statut ${order.status})`;
   }
   if (order.deliverymanId && order.status !== "REPRO_DISPO") return "Deja attribuee";
   const commune = normalizeCommune(order.commune);
   if (!commune) return order.commune?.trim() ? `Commune inconnue (${order.commune.trim()})` : "Commune manquante";
   if (!order.customerPhone?.trim()) return "Telephone manquant";
-  if (!options.atConfirmation && commune === "Hors Abidjan" && order.depositVerificationStatus && order.depositVerificationStatus !== "RECEIVED") {
+  // Le depot expedition est exige a l'emballage : pour un colis pas encore emballe,
+  // il sera controle a ce moment-la.
+  if (!options.atConfirmation && !unpacked && commune === "Hors Abidjan" && order.depositVerificationStatus && order.depositVerificationStatus !== "RECEIVED") {
     return "Depot expedition non valide";
   }
   return null;
@@ -129,6 +149,10 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
   const fixed = new Map(Object.entries(input.fixedCommunes || {})
     .map(([riderId, list]) => [riderId, new Set(list.map((c) => normalizeCommune(c) || c))]));
   const isFixed = (riderId: string, commune: string) => fixed.get(riderId)?.has(commune) || false;
+  const isExpeditionOnly = (riderId: string) => {
+    const communes = fixed.get(riderId);
+    return Boolean(communes && communes.size > 0 && [...communes].every((c) => EXCLUSIVE_COMMUNES.has(c)));
+  };
 
   const riderTotals = new Map<string, number>();
   const communeTotals = new Map<string, number>();
@@ -159,7 +183,7 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
 
   const byCommune = new Map<string, DispatchOrder[]>();
   for (const order of [...input.orders].sort(compareRef)) {
-    const ineligible = getDispatchIneligibility(order, { atConfirmation: input.atConfirmation });
+    const ineligible = getDispatchIneligibility(order, { atConfirmation: input.atConfirmation, includeUnpacked: input.includeUnpacked });
     if (ineligible) {
       skipped.push({ orderId: order.id, reason: ineligible });
       continue;
@@ -210,6 +234,8 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
       let best: { rider: DispatchRider; score: number; reason: DispatchAssignment["reason"] } | null = null;
       for (const rider of present) {
         if (exclusive && affinity(rider.id, commune) === 0) continue;
+        // Livreur reserve aux expeditions (affecte uniquement a Hors Abidjan) : jamais de colis d'Abidjan.
+        if (!exclusive && isExpeditionOnly(rider.id)) continue;
         const load = loads.get(rider.id) || 0;
         if (load >= capacityOf(rider.id)) continue;
         const zone = affinity(rider.id, commune);
