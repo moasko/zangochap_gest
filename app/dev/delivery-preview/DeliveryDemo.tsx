@@ -101,7 +101,7 @@ export default function DeliveryDemo() {
       const capacities = Object.fromEntries(DEMO_RIDERS.filter((r) => r.capacity).map((r) => [r.id, r.capacity!]));
       const plan = planDeliveryDispatch({
         orders: candidates, riders, presentRiderIds, capacity, currentLoads, currentCommunes,
-        history: {}, fixedCommunes, capacities,
+        history: {}, fixedCommunes, capacities, includeUnpacked: options.includeUnpacked === true,
       });
       const byId = new Map(candidates.map((o) => [o.id, o]));
       const describe = (id: string) => {
@@ -114,6 +114,7 @@ export default function DeliveryDemo() {
       return {
         date: options.date,
         capacity,
+        includeUnpacked: options.includeUnpacked === true,
         riders: DEMO_RIDERS.map((r) => ({
           id: r.id, name: r.name, present: presentRiderIds.includes(r.id), activeRecently: r.recent > 0, recentCount: r.recent,
           zones: r.communes.map((commune) => ({ commune, pct: Math.round(100 / Math.max(1, r.communes.length)) })),

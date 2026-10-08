@@ -241,7 +241,11 @@ export type DeliveryDispatchOptions = {
   orderIds?: string[];
   presentRiderIds?: string[];
   capacity?: number;
+  // Inclure les colis confirmes / en preparation (pas encore emballes).
+  includeUnpacked?: boolean;
 };
+
+export type DeliveryDispatchApplyOptions = { includeUnpacked?: boolean };
 
 function orderAmount(order: { total: number; deliveryFee: number; discount: number }) {
   return Number(order.total || 0) + Number(order.deliveryFee || 0) - Number(order.discount || 0);
@@ -289,6 +293,7 @@ export async function getDeliveryDispatchPlan(options: DeliveryDispatchOptions) 
     history: historyByRider,
     capacities,
     fixedCommunes,
+    includeUnpacked: options.includeUnpacked === true,
   });
 
   const byId = new Map(candidates.map((order) => [order.id, order]));
@@ -311,6 +316,7 @@ export async function getDeliveryDispatchPlan(options: DeliveryDispatchOptions) 
   return {
     date: options.date,
     capacity,
+    includeUnpacked: options.includeUnpacked === true,
     riders: riders.map((rider) => {
       const zones = Object.entries(historyByRider[rider.id] || {})
         .sort((a, b) => b[1] - a[1])
@@ -338,7 +344,8 @@ export async function getDeliveryDispatchPlan(options: DeliveryDispatchOptions) 
 
 export type DeliveryDispatchAssignmentInput = { orderId: string; riderId: string; version: string };
 
-export async function applyDeliveryDispatchPlan(input: DeliveryDispatchAssignmentInput[]) {
+export async function applyDeliveryDispatchPlan(input: DeliveryDispatchAssignmentInput[], options: DeliveryDispatchApplyOptions = {}) {
+  const includeUnpacked = options?.includeUnpacked === true;
   const session = await getSession();
   assertCanManageDeliveryAssignment(session);
 
@@ -372,7 +379,7 @@ export async function applyDeliveryDispatchPlan(input: DeliveryDispatchAssignmen
         if (!current || current.deletedAt) throw new Error("Commande introuvable");
         ref = current.ref || current.id;
         if (current.updatedAt.toISOString() !== item.version) throw new Error("Modifiee depuis l'apercu");
-        const ineligible = getDispatchIneligibility(current);
+        const ineligible = getDispatchIneligibility(current, { includeUnpacked });
         if (ineligible) throw new Error(ineligible);
 
         const history = Array.isArray(current.history) ? [...current.history] : [];

@@ -64,7 +64,14 @@ const base = {
 const order = (id, extra = {}) => ({ ...base, id, ref: id, ...extra });
 
 assert.equal(getDispatchIneligibility(order("a")), null);
-assert.match(getDispatchIneligibility(order("a", { status: "CONFIRMED" })), /Pas prete/);
+assert.equal(getDispatchIneligibility(order("a", { status: "CONFIRMED" })), "Pas encore emballee (confirmee)");
+// Option du soir : colis confirmes / en preparation inclus ; manquants et non valides toujours exclus.
+assert.equal(getDispatchIneligibility(order("a", { status: "CONFIRMED" }), { includeUnpacked: true }), null);
+assert.equal(getDispatchIneligibility(order("a", { status: "PREPARING" }), { includeUnpacked: true }), null);
+assert.equal(getDispatchIneligibility(order("a", { status: "UNAVAILABLE" }), { includeUnpacked: true }), "Indisponible (articles manquants)");
+assert.equal(getDispatchIneligibility(order("a", { status: "PARTIAL" }), { includeUnpacked: true }), "Emballage partiel (articles manquants)");
+assert.equal(getDispatchIneligibility(order("a", { status: "PENDING" }), { includeUnpacked: true }), "En attente de validation");
+assert.equal(getDispatchIneligibility(order("a", { status: "CONFIRMED", commune: "Hors Abidjan", depositVerificationStatus: "PENDING" }), { includeUnpacked: true }), null, "depot controle a l emballage");
 assert.equal(getDispatchIneligibility(order("a", { deliverymanId: "r1" })), "Deja attribuee");
 assert.equal(getDispatchIneligibility(order("a", { status: "REPRO_DISPO", deliverymanId: "r1" })), null);
 assert.equal(getDispatchIneligibility(order("a", { settlementId: "s" })), "Deja rattachee a un reglement");
@@ -183,6 +190,10 @@ assert.equal(result.assignments.length, 0);
 assert.match(result.skipped[0].reason, /Aucun livreur habituel de Hors Abidjan/);
 result = plan(exped(2));
 assert.equal(count(result, "exp"), 2);
+// Livreur affecte uniquement aux expeditions : jamais de colis d'Abidjan, meme s'il est le moins charge.
+result = plan([order("pl1", { commune: "Plateau" })], { fixedCommunes: { exp: ["Hors Abidjan"] }, currentLoads: { cocody: 9, yop: 9, exp: 0 } });
+assert.notEqual(riderOf(result, "pl1"), "exp");
+assert.equal(result.assignments.length, 1);
 // Changement durable du destinataire : nouvel affecte dans le planning.
 result = plan(exped(3), { fixedCommunes: { yop: ["Hors Abidjan"] } });
 assert.equal(count(result, "yop"), 3);
@@ -291,7 +302,11 @@ store.planning = { riders: {} };
 assert.deepEqual(plain(proposal.riders).filter((r) => r.present).map((r) => r.id).sort(), ["cocody", "yop"], "ancien livreur absent par defaut");
 assert.equal(proposal.assignments.find((a) => a.id === "o1").riderId, "cocody");
 assert.equal(proposal.assignments.find((a) => a.id === "o2").riderId, "yop", "commune mal orthographiee normalisee dans l'historique");
-assert.match(proposal.skipped.find((s) => s.id === "o3").reason, /Pas prete/);
+assert.match(proposal.skipped.find((s) => s.id === "o3").reason, /Pas encore emballee/);
+// Avec l'option : la commande confirmee o3 est proposee.
+const withUnpacked = await actions.getDeliveryDispatchPlan({ date: "2026-10-06", includeUnpacked: true });
+assert.equal(withUnpacked.includeUnpacked, true);
+assert.ok(withUnpacked.assignments.some((a) => a.id === "o3"));
 assert.equal(proposal.assignments.find((a) => a.id === "o1").amount, 11500);
 
 // Les livreurs choisis a la main remplacent la presence par defaut.
@@ -316,7 +331,7 @@ const applied = await actions.applyDeliveryDispatchPlan([
 assert.equal(applied.assignedCount, 1);
 assert.deepEqual(plain(applied.skipped).map((s) => [s.orderId, s.reason]), [
   ["o2", "Modifiee depuis l'apercu"],
-  ["o3", "Pas prete a livrer (statut CONFIRMED)"],
+  ["o3", "Pas encore emballee (confirmee)"],
 ]);
 const o1 = store.orders.find((o) => o.id === "o1");
 assert.equal(o1.deliverymanId, "cocody");
@@ -325,6 +340,14 @@ assert.match(o1.history.at(-1).action, /Repartition automatique/);
 assert.equal(automationCalls, 1);
 assert.equal(maxConcurrentTx, 1, "ecritures sequentielles");
 assert.equal(store.orders.find((o) => o.id === "o2").deliverymanId, null);
+
+// Application avec l'option : la commande confirmee est attribuee, reste CONFIRMED, sans sortie de stock.
+reset();
+const unpackedApply = await actions.applyDeliveryDispatchPlan([{ orderId: "o3", riderId: "cocody", version: v }], { includeUnpacked: true });
+assert.equal(unpackedApply.assignedCount, 1);
+assert.equal(store.orders.find((o) => o.id === "o3").deliverymanId, "cocody");
+assert.equal(store.orders.find((o) => o.id === "o3").status, "CONFIRMED");
+assert.equal(stockCalls, 0);
 
 reset();
 const badRider = await actions.applyDeliveryDispatchPlan([{ orderId: "o1", riderId: "com", version: v }]);

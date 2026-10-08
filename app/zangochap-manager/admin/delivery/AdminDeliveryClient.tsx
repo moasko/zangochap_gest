@@ -76,7 +76,8 @@ const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL",
 const DELIVERY_SHEET_STATUSES = new Set([...DELIVERY_ASSIGNABLE_STATUSES, "REPROGRAMMED"]);
 const UNPACKED_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE"];
 // Statuts pris en charge par la repartition automatique (voir modules/orders/helpers/delivery-dispatch.ts).
-const DISPATCH_READY_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
+// Colis confirmes / en preparation inclus : la fenetre les propose par defaut (case decochable).
+const DISPATCH_READY_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO", "CONFIRMED", "PREPARING"]);
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
   return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
@@ -756,7 +757,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             className="dlv-btn primary"
             onClick={handleAutoAssign}
             disabled={isPending || autoAssignableOrders.length === 0}
-            title="Repartir les commandes emballees de la date selon les zones habituelles, la presence et la charge"
+            title="Repartir les colis de la date (emballes et, par defaut, non emballes) selon les communes affectees, la presence et la charge"
           >
             <Zap size={15} /> Repartir auto
             {autoAssignableOrders.length > 0 && <span className="dlv-btn-count">{autoAssignableOrders.length}</span>}

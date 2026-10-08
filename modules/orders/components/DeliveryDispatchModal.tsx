@@ -41,6 +41,8 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
   const [error, setError] = useState<string | null>(null);
   const [capacity, setCapacity] = useState<number | null>(null);
   const [presentIds, setPresentIds] = useState<string[] | null>(null);
+  // Colis confirmes / en preparation inclus par defaut (attribues d'avance, visibles du livreur une fois emballes).
+  const [includeUnpacked, setIncludeUnpacked] = useState(true);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   // Selection de colis a deplacer avant validation.
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -50,7 +52,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
   const [isLoading, startLoading] = useTransition();
   const [isApplying, startApplying] = useTransition();
 
-  const load = useCallback((options: { capacity?: number | null; presentIds?: string[] | null }) => {
+  const load = useCallback((options: { capacity?: number | null; presentIds?: string[] | null; includeUnpacked: boolean }) => {
     setError(null);
     startLoading(async () => {
       try {
@@ -59,9 +61,11 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
           orderIds,
           capacity: options.capacity ?? undefined,
           presentRiderIds: options.presentIds ?? undefined,
+          includeUnpacked: options.includeUnpacked,
         });
         setPlan(next);
         setCapacity(next.capacity);
+        setIncludeUnpacked(next.includeUnpacked);
         setPresentIds(next.riders.filter((rider) => rider.present).map((rider) => rider.id));
         setOverrides({});
         setPicked(new Set());
@@ -73,7 +77,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
   }, [date, orderIds, getPlan]);
 
   useEffect(() => {
-    load({});
+    load({ includeUnpacked: true });
   }, [load]);
 
   const riderById = useMemo(() => new Map((plan?.riders || []).map((rider) => [rider.id, rider])), [plan]);
@@ -108,8 +112,11 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
     return [...byReason.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [plan]);
 
+  const unpackedCount = finalAssignments.filter((item) => item.status === "CONFIRMED" || item.status === "PREPARING").length;
+
   const planIsStale = Boolean(plan) && (
     capacity !== plan!.capacity
+    || includeUnpacked !== plan!.includeUnpacked
     || JSON.stringify([...(presentIds || [])].sort()) !== JSON.stringify(plan!.riders.filter((r) => r.present).map((r) => r.id).sort())
   );
 
@@ -126,6 +133,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
       try {
         const applied = await applyPlan(
           finalAssignments.map((item) => ({ orderId: item.id, riderId: item.riderId, version: item.version })),
+          { includeUnpacked: plan.includeUnpacked },
         );
         setResult(applied);
         onApplied(applied.assignedCount);
@@ -203,7 +211,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
               <div><span className="summary-label">A attribuer</span><strong>{finalAssignments.length}</strong></div>
               <div><span className="summary-label">Livreurs presents</span><strong>{presentRiders.length}</strong></div>
               <div><span className="summary-label">Non reparties</span><strong>{plan.skipped.length}</strong></div>
-              <div><span className="summary-label">Sans adresse</span><strong>{finalAssignments.filter((item) => item.missingAddress).length}</strong></div>
+              <div><span className="summary-label">Dont non emballes</span><strong>{unpackedCount}</strong></div>
             </div>
 
             <section className="dispatch-settings">
@@ -223,9 +231,17 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
                     onChange={(event) => setCapacity(Number(event.target.value) || null)}
                   />
                 </label>
+                <label className="dispatch-unpacked" title="Colis confirmes ou en preparation : attribues d'avance, le livreur les voit une fois emballes">
+                  <input
+                    type="checkbox"
+                    checked={includeUnpacked}
+                    onChange={(event) => setIncludeUnpacked(event.target.checked)}
+                  />
+                  Inclure les colis non emballes
+                </label>
                 <button
                   className={planIsStale ? "btn-orange" : "btn-secondary"}
-                  onClick={() => load({ capacity, presentIds })}
+                  onClick={() => load({ capacity, presentIds, includeUnpacked })}
                   disabled={busy || !presentIds?.length}
                 >
                   <RefreshCw size={14} /> Recalculer
@@ -320,6 +336,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
                             {order.commune} · {order.customerName} · {REASON_LABELS[order.reason] || order.reason}
                             {order.previousRiderName && order.previousRiderName !== rider!.name ? ` · avant : ${order.previousRiderName}` : ""}
                             {order.missingAddress ? " · sans adresse" : ""}
+                            {order.status === "CONFIRMED" || order.status === "PREPARING" ? " · pas encore emballe" : ""}
                           </span>
                           <select
                             className="field-input dispatch-move"
