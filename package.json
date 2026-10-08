@@ -8,6 +8,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "index:code": "node scripts/gen-code-index.mjs",
     "stock:audit": "npx tsx scripts/repair-stock.ts",
     "stock:fix-negatives": "npx tsx scripts/repair-stock.ts --fix-negatives",
     "stock:merge-defaults": "npx tsx scripts/repair-stock.ts --merge-default-warehouses",

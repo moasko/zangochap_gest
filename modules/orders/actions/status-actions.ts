@@ -7,6 +7,7 @@ import { getSession } from "@/modules/auth/actions";
 import { checkOrderAccess, generateUniqueRef, isRole } from "../helpers";
 import { decrementStockForOrder, InsufficientStockError, restoreStockForOrder, restoreStockForOrderItem } from "./stock";
 import { checkLowStockAfterOrder, triggerAutomations } from "@/modules/automations/engine";
+import { autoAssignAtConfirmation } from "./auto-assign-on-confirm";
 
 type UpdateOrderStatusResult = {
   success: true;
@@ -289,6 +290,12 @@ export async function updateOrderStatus(orderId: string, newStatus: string, note
   }
   if (updatedOrder && normalizedStatus === 'PACKED') {
     await checkLowStockAfterOrder(updatedOrder);
+  }
+  // Validation call center (passage en CONFIRMED) : attribution immediate du
+  // livreur si l'interrupteur du planning est actif (best-effort).
+  if (updatedOrder && normalizedStatus === 'CONFIRMED' && order.status !== 'CONFIRMED') {
+    const assignment = await autoAssignAtConfirmation(updatedOrder.id, session);
+    if (assignment.assigned) Object.assign(updatedOrder, { deliverymanId: assignment.riderId, deliverymanName: assignment.riderName });
   }
 
   revalidatePath("/zangochap-manager/orders");

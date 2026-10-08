@@ -1,5 +1,64 @@
 # Journal de reprise
 
+## 2026-10-06 — Démo locale fictive et enregistrement d’écran
+
+- `/dev/delivery-preview` (dev + `DELIVERY_PREVIEW=1`) : `DeliveryDemo.tsx` / `PlanningDemo.tsx` simulent les actions en mémoire ; la répartition utilise le vrai `planDeliveryDispatch`. `?view=planning`, `?clean=1` (sans bandeau). Pour cela, `AdminDeliveryClient` (`demoActions`), `DeliveryDispatchModal` (`actions`) et `PlanningClient` (`actions`) acceptent des actions injectables ; par défaut les Server Actions (aucun changement en production).
+- Vidéo : `videos/repartition-livreurs-expliquee/` (exclu de git via `.git/info/exclude`) ; `record/record-demo.mjs` pilote Chrome headless (CDP) sur un `next dev -p 3200`, curseur/titres injectés, encodage FFmpeg (installé via winget) → `renders/demo-ecran.mp4` (1920×1080, ~86 s). Storyboard animé HyperFrames en pause au stade esquisses (`storyboard.html`).
+- Correctif : grille des compteurs de la fenêtre de répartition (4 colonnes). TypeScript, lint ciblé OK.
+
+
+## 2026-10-06 — Attribution du livreur dès la validation call center
+
+- `modules/orders/actions/auto-assign-on-confirm.ts` (interne, pas une Server Action) : `autoAssignAtConfirmation(orderId, actor)` après enregistrement, best-effort (jamais d’exception vers la vente), verrou `pg_advisory_xact_lock` par date de livraison, verrou optimiste à l’écriture, statut inchangé (CONFIRMED), aucun mouvement de stock, historique « Attribution automatique à la validation ».
+- Branché sur les 4 chemins de confirmation : création staff (`order-creation-service.ts`), prise d’une commande web (`takeToProcessOrder`), passage en CONFIRMED (`updateOrderStatus`), échange approuvé (`reviewOrderExchange`).
+- Interrupteur `settings.autoAssignOnConfirm` dans `CmsContent` `delivery-dispatch:planning`, **désactivé par défaut**, piloté depuis la page Planning (`setAutoAssignOnConfirm`, admin).
+- `modules/orders/actions/dispatch-context.ts` : chargement commun (livreurs, présence, charge du jour, historique, planning) utilisé par la répartition du soir et par l’attribution à la validation. Moteur : option `atConfirmation` (accepte CONFIRMED, contrôle du dépôt expédition reporté à l’emballage).
+- Vérifié : tests isolés (interrupteur, partage égal au fil des validations, statut/stock inchangés, déjà attribuée, sans date, expédition, conflit, panne), suite complète des tests isolés, TypeScript, lint (aucune nouvelle erreur ; dette `order-actions.ts` 21 → 21). Non vérifié : validation réelle authentifiée.
+- Conséquences / suites : fiche imprimée inclut déjà volontairement les commandes attribuées non emballées (à revoir) ; colis pré-attribués restent PACKED après emballage (pas ON_DELIVERY) ; changement de commune/date ou absence saisie après attribution ne réattribue pas automatiquement.
+
+
+## 2026-10-06 — Partage égal par commune, Hors Abidjan réservé, déplacement groupé
+
+- Règle métier confirmée par le propriétaire : pour **chaque commune**, les livreurs affectés dans le planning se partagent les colis à parts égales (15 → 5/5/5, 16 → 6/5/5), comptés dans la commune pour la date, même si un livreur a des colis ailleurs ; plafond et absences respectés. Hors Abidjan : RAZACK par défaut (zone apprise), changeable via le planning ou en déplaçant des colis ; jamais attribué à un livreur non affecté/non habituel — si l’affecté est absent, colis laissés « sans livreur » avec raison.
+- `delivery-dispatch.ts` : partage égal (`fixed`), `EXCLUSIVE_COMMUNES` = Hors Abidjan. Planning : libellé « Communes affectées » (champ stocké `fixedCommunes` inchangé).
+- `bulkAssignOrders` réécrit : séquentiel, verrou optimiste, plus de tout-ou-rien ; retourne `{ assignedCount, skipped }` ; historique « Colis déplacé de X vers Y ». Vue « Par livreur » : cases à cocher, « Tous/Aucun » par colonne, barre de déplacement collante. Fenêtre de répartition : sélection multiple + « Déplacer vers… » avant validation.
+- Vérifié : tests isolés étendus (parts égales, déjà attribués dans la commune, absent, plafond, Hors Abidjan affecté/absent/sans affectation/changement de destinataire), TypeScript, lint ciblé, sélection visuelle via `/dev/delivery-preview`. Non vérifié : déplacement réel authentifié.
+
+
+## 2026-10-05 — Planning des livreurs
+
+- Nouveau module `modules/delivery-planning/` : types/validation Zod et disponibilité (`types/index.ts`), lecture serveur interne (`helpers/load.ts`), actions admin/developer `getDeliveryPlanningOverview`, `saveRiderPlanning`, `resetRiderPlanning` (`actions/index.ts`, écriture sous verrou `FOR UPDATE`), écran `components/PlanningClient.tsx`.
+- Stockage sans migration : `CmsContent` clé `delivery-dispatch:planning` (`{ version, riders: { [userId]: { inDispatch, workDays, absences, fixedCommunes, capacity } } }`). Lecture tolérante : une entrée invalide est ignorée.
+- Page `/zangochap-manager/admin/delivery/planning` (menu Pilotage « Planning livreurs » + bouton « Planning » de l’écran Livraisons). Par livreur : inclus/exclu de la répartition, jours de travail, absences datées, zones fixes, plafond propre ; « Revenir en automatique » supprime l’entrée.
+- Répartition : présence par défaut = planning s’il existe, sinon activité 7 jours ; zones fixes prioritaires (raison `fixed`) ; plafond individuel. La fenêtre de répartition affiche le motif (absent, repos, hors répartition) et un lien vers le planning.
+- Vérifié : tests isolés étendus (disponibilité, validation, JSON corrompu, zone fixe, plafond individuel, présence issue du planning), TypeScript, lint ciblé ; rendu desktop/mobile via `/dev/delivery-preview?view=planning` ; enregistrement sans session refusé, aucune écriture en dev. Non vérifié : enregistrement authentifié réel.
+
+
+## 2026-10-05 — Répartition automatique des livraisons et écran Livraisons allégé
+
+- Mesures en lecture seule sur la dev (copie prod) : 49 comptes LIVREUR dont ~15 actifs/jour ; 180–260 colis/jour ; médiane 13 colis/livreur/jour (p90 16, max 26) ; zones de fait très marquées (Hors Abidjan 100 % un livreur, Boutique 100 % un livreur) ; attribution groupée manuelle le soir (19–21 h) ; ancien bouton « Répartir auto » jamais utilisé ; ~35 % des colis sans adresse mais livrés quand même ; aucune règle d’automatisation enregistrée (le passage ON_DELIVERY n’envoie rien aujourd’hui).
+- Moteur pur `modules/orders/helpers/delivery-dispatch.ts` : communes normalisées, zones apprises sur 30 jours, présents par défaut = actifs sur 7 jours, plafond 18 (réglable), part équitable, repro-dispo gardée par son livreur s’il est présent. Éligible : PACKED, ON_DELIVERY sans livreur, REPRO_DISPO ; écartés avec raison : règlement, non emballée, commune inconnue/absente, téléphone manquant, dépôt expédition non validé, plafond.
+- Actions `getDeliveryDispatchPlan` / `applyDeliveryDispatchPlan` (admin/developer) : aperçu calculé serveur = résultat appliqué ; écriture séquentielle avec verrou optimiste (`updatedAt`, statut, livreur) ; bilan par commande ; `autoAssignDeliveryOrders` conservée et basée sur le même moteur. Fenêtre `modules/orders/components/DeliveryDispatchModal.tsx` (présents, plafond, déplacement manuel, écartées).
+- Rejeu sur 6 journées réelles (29/09–05/10) : 100 % placés, charge max 18, livreur dans une zone habituelle ~93 % (réel ~90 %).
+- Écran `/zangochap-manager/admin/delivery` allégé : en-tête date/actions, indicateurs cliquables (remplacent cartes + puces de statut), vues libellées Liste / Par livreur / Fiches / Archives (vue grille fusionnée), charge du jour limitée aux livreurs ayant des colis, colonnes « Par livreur » limitées aux livreurs concernés, listes de livreurs « Équipe active » / « Sans activité récente ». `page.tsx` fournit l’activité 14 jours de chaque livreur.
+- Vérifié : `node scripts/test-delivery-dispatch.mjs`, TypeScript, lint ciblé ; rendu desktop/mobile via l’aperçu local fictif `/dev/delivery-preview` (dev + `DELIVERY_PREVIEW=1`). Non vérifié : écran authentifié réel et application d’une répartition sur la dev (connexion nécessaire), production.
+
+
+## 2026-10-05 — Base de développement alimentée depuis la production
+
+- Sur demande explicite du propriétaire : copie complète prod → base dev (même serveur, port 5434, base `dev`). Prod seulement lue (pg_dump 18.4, transaction en lecture seule). Dev sauvegardée avant écrasement (dump local hors dépôt), schéma `public` recréé puis restauré. Vérifié : 37 tables, nombres de lignes identiques (24 093 commandes, 16 759 clients, 135 utilisateurs). Données personnelles copiées telles quelles, choix du propriétaire.
+- Constat : les tables `RiderPersonnelProfile`/`RiderPersonnelDocument` existent déjà en production (2 fiches) ; la mention « migration non appliquée » de la cartographie est périmée.
+- Branchement : `.env.development.local` (ignoré par git) pointe `next dev` sur la dev et vide les variables `WHATSAPP_*` pour qu’aucune automatisation copiée n’envoie de message réel. `.env` reste la prod : `npm run build/start` et **toute commande Prisma CLI** (`prisma.config.ts` charge `dotenv/config`, donc `.env`) ciblent encore la PROD.
+- Suite : étape A de fiabilisation de la répartition automatique des livraisons, testée sur la dev.
+
+
+## 2026-10-04 — Index de navigation du code
+
+- Ajout de `scripts/gen-code-index.mjs` (`npm run index:code`) qui génère `docs/CODE_INDEX.md` : 357 fichiers de code, symboles exportés avec ligne, directives server/client, plan interne des fichiers ≥ 1 500 lignes. Lecture seule du dépôt, écrit uniquement ce fichier.
+- Pointeurs ajoutés dans `AGENTS.md` (section « Navigation économe en tokens ») et `docs/PROJECT_MAP.md`. Aucun changement applicatif ; lint du script valide.
+- Suite : régénérer l’index après tout ajout/déplacement de fichiers ou d’exports.
+
+
 ## 2026-09-22 — Consultation par défaut et actions en haut
 
 - `RiderPersonnelForm` ouvre la vue détaillée en premier, y compris en aperçu. Boutons de mode et action principale déplacés sous l’en-tête, avant la synthèse ; enregistrement toujours associé au formulaire. Barre persistante en haut sur grand écran et statique sur mobile.

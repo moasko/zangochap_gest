@@ -84,6 +84,7 @@ function load(path, extra = {}) {
     if (name === "@/lib/upload") return { uploadImage: async () => { uploads++; return "https://media.example.test/request.webp"; } };
     if (name === "@/modules/whatsapp/send") return { notifyOrderCreatedWhatsApp: async () => { externalCalls++; if (failWhatsApp) throw new Error("Private error detail"); } };
     if (name === "@/modules/automations/engine") return { triggerAutomations: async () => { externalCalls++; } };
+    if (name === "./auto-assign-on-confirm") return { autoAssignAtConfirmation: async () => ({ assigned: false, reason: "test" }) };
     return require(name);
   } };
   vm.runInNewContext(compiled, scope, { filename: path }); return scope.exports;

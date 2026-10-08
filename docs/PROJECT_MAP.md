@@ -1,6 +1,12 @@
 # Cartographie du projet ZangoChap Gest
 
-Personnel de toute l’équipe (2026-09-22) : `modules/personnel/` contient schéma, formulaire, actions et normalisation des justificatifs privés. Entrée depuis l’équipe vers `app/zangochap-manager/admin/settings/team/[userId]/page.tsx`. Deux tables Prisma dédiées (fiche et documents binaires), accès admin/développeur, aucune URL R2 publique. Migration SQL préparée mais non appliquée ; voir `docs/RIDER_PERSONNEL.md` pour activation, limites et tests.
+Index symbole → `fichier:ligne` généré : `docs/CODE_INDEX.md` (`npm run index:code`). Le chercher par Grep au lieu de parcourir l’arborescence.
+
+Répartition automatique des livraisons (2026-10-05) : moteur pur `modules/orders/helpers/delivery-dispatch.ts` (zones apprises 30 j, présence 7 j, plafond, part équitable) ; `getDeliveryDispatchPlan` / `applyDeliveryDispatchPlan` dans `modules/orders/actions/delivery-actions.ts` (aperçu serveur = résultat, écriture séquentielle avec verrou optimiste) ; fenêtre `modules/orders/components/DeliveryDispatchModal.tsx` ouverte depuis `AdminDeliveryClient`. Aperçu visuel local fictif : `/dev/delivery-preview` (dev + `DELIVERY_PREVIEW=1`). Test : `node scripts/test-delivery-dispatch.mjs`.
+
+Planning des livreurs (2026-10-05) : `modules/delivery-planning/` (types/disponibilité, `helpers/load.ts` lecture interne, actions admin, `components/PlanningClient.tsx`), page `app/zangochap-manager/admin/delivery/planning/page.tsx`. Données dans `CmsContent` clé `delivery-dispatch:planning` ; consommées par `getDeliveryDispatchPlan` (présence, zones fixes prioritaires, plafond individuel).
+
+Personnel de toute l’équipe (2026-09-22) : `modules/personnel/` contient schéma, formulaire, actions et normalisation des justificatifs privés. Entrée depuis l’équipe vers `app/zangochap-manager/admin/settings/team/[userId]/page.tsx`. Deux tables Prisma dédiées (fiche et documents binaires), accès admin/développeur, aucune URL R2 publique. Tables présentes en production (constat du 2026-10-05) ; voir `docs/RIDER_PERSONNEL.md` pour activation, limites et tests.
 
 Rappel commercial du 2026-09-20 : `modules/orders/components/ExchangePendingReminder.tsx` est monté dans le layout manager hors zone défilante, uniquement pour le commercial. Carte flottante réductible, sans fermeture définitive ; compteur via `GET /api/order-exchange-reminder` (session obligatoire, filtre propriétaire/PENDING côté serveur, count uniquement, cache interdit). Actualisation 20 s, navigation, focus, retour en ligne/visibilité et événement `order-exchange-requested` émis par `OrdersClient` après soumission. Styles dans `exchange-reminder.css`, test isolé `scripts/test-exchange-reminder.mjs`.
 

@@ -1,5 +1,35 @@
 # Journal de mémoire IA
 
+## 2026-10-06 — Attribution à la validation call center
+
+- `auto-assign-on-confirm.ts` appelé après chaque passage en CONFIRMED (4 chemins), derrière l’interrupteur du planning (off par défaut). Règles partagées via `dispatch-context.ts`. Raison : le propriétaire veut que la commande validée par le call center soit attribuée immédiatement.
+
+
+## 2026-10-06 — Partage égal par commune
+
+- Communes affectées (planning) = partage à parts égales ; Hors Abidjan exclusif (affecté ou livreur habituel, sinon à l’admin). `bulkAssignOrders` sécurisé (séquentiel, verrou optimiste, bilan). Raison : règle de répartition demandée par le propriétaire.
+
+
+## 2026-10-05 — Planning des livreurs
+
+- `modules/delivery-planning/` + page `admin/delivery/planning` ; données dans `CmsContent` `delivery-dispatch:planning` (pas de table). Utilisé par `getDeliveryDispatchPlan` pour la présence, les zones fixes et les plafonds. Raison : programmer jours, absences et zones des livreurs pour la répartition automatique.
+
+
+## 2026-10-05 — Répartition automatique des livraisons
+
+- Moteur `modules/orders/helpers/delivery-dispatch.ts`, actions proposer/appliquer dans `delivery-actions.ts`, fenêtre `DeliveryDispatchModal.tsx`, écran Livraisons allégé. Raison : l’ancienne répartition donnait des colis aux comptes dormants et son aperçu différait du résultat. Test : `node scripts/test-delivery-dispatch.mjs`.
+
+
+## 2026-10-05 — Base dev copiée depuis la prod
+
+- Dev (port 5434, base `dev`) = copie de la prod au 2026-10-05. `next dev` l’utilise via `.env.development.local` (WhatsApp neutralisé). Prisma CLI lit `.env` = PROD. Raison : tester la répartition des livraisons sur des données réelles sans risque pour la prod.
+
+
+## 2026-10-04 — Index de navigation du code
+
+- `docs/CODE_INDEX.md` généré par `npm run index:code` (`scripts/gen-code-index.mjs`) : arbre, symboles exportés `nom:ligne`, plan des gros fichiers. Raison : réduire la lecture de fichiers lors des prochaines interventions.
+
+
 ## 2026-09-22 — Consultation par défaut et actions en haut
 
 - `RiderPersonnelForm` ouvre la vue détaillée en premier, y compris en aperçu. Boutons de mode et action principale déplacés sous l’en-tête, avant la synthèse ; enregistrement toujours associé au formulaire. Barre persistante en haut sur grand écran et statique sur mobile.

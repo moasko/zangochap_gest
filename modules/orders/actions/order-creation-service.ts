@@ -6,6 +6,7 @@ import type { getSession } from "@/modules/auth/actions";
 import { uploadImage } from "@/lib/upload";
 import { generateUniqueRef, upsertCustomerFromOrder } from "../helpers";
 import { notifyOrderCreatedWhatsApp } from "@/modules/whatsapp/send";
+import { autoAssignAtConfirmation } from "./auto-assign-on-confirm";
 import { triggerAutomations } from "@/modules/automations/engine";
 import { getExpeditionDayRange, isInExpeditionDay } from "../helpers/expedition-day";
 
@@ -544,6 +545,13 @@ export async function createOrderWithContext(data: OrderCreationInput, session: 
   // best-effort : n'echoue jamais la creation.
   if (!transaction && status === 'CONFIRMED') {
     await notifyOrderCreatedWhatsApp(order);
+  }
+
+  // Validation call center : attribution immediate d'un livreur si l'interrupteur
+  // du planning est actif (best-effort, ne bloque jamais la creation).
+  if (!transaction && status === 'CONFIRMED') {
+    const assignment = await autoAssignAtConfirmation(order.id, session);
+    if (assignment.assigned) Object.assign(order, { deliverymanId: assignment.riderId, deliverymanName: assignment.riderName });
   }
 
   // Automatisations « Commande créée » (best-effort : ne bloque jamais la création).

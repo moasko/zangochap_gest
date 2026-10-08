@@ -2,11 +2,12 @@
 
 import React, { useState, useTransition, useMemo } from "react";
 import Link from "next/link";
-import { TableCard, EmptyState, StatCard, StatusBadge } from "@/components/UI";
+import { TableCard, EmptyState, StatusBadge } from "@/components/UI";
 import Modal from "@/components/Modal";
 import { formatPrice, formatDate, COMMUNES } from "@/lib/constants";
-import { Truck, User, UserPlus, Clock, Search, X, Check, Filter, MapPin, Calendar, LayoutGrid, List, Archive, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2, Route, Zap, AlertTriangle } from "lucide-react";
-import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder, autoAssignDeliveryOrders } from "@/modules/orders/actions";
+import { UserPlus, Search, X, Check, MapPin, Calendar, LayoutGrid, List, Archive, ChevronLeft, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2, Zap, AlertTriangle } from "lucide-react";
+import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder } from "@/modules/orders/actions";
+import DeliveryDispatchModal, { type DispatchActions } from "@/modules/orders/components/DeliveryDispatchModal";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
@@ -16,6 +17,8 @@ type Deliveryman = {
   id: string;
   name: string;
   phone: string | null;
+  // Colis portes sur les 14 derniers jours : distingue l'equipe active des comptes dormants.
+  recentCount?: number;
 };
 
 type DeliveryAdminItem = {
@@ -52,6 +55,12 @@ interface AdminDeliveryClientProps {
   activeOrders: DeliveryAdminOrder[];
   archivedOrders: DeliveryAdminOrder[];
   deliverymen: Deliveryman[];
+  // Apercu local fictif uniquement (/dev/delivery-preview) : remplace les Server Actions.
+  demoActions?: {
+    assign?: typeof assignOrderToDeliveryman;
+    bulkAssign?: typeof bulkAssignOrders;
+    dispatch?: Partial<DispatchActions>;
+  };
 }
 
 const REPRO_DISPO_REASONS = [
@@ -66,6 +75,8 @@ const DELIVERY_ASSIGNABLE_STATUSES = new Set(["PENDING", "CONFIRMED", "PARTIAL",
 // sinon une commande attribuée mais pas encore en PACKED (ex: CONFIRMED) reste invisible.
 const DELIVERY_SHEET_STATUSES = new Set([...DELIVERY_ASSIGNABLE_STATUSES, "REPROGRAMMED"]);
 const UNPACKED_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE"];
+// Statuts pris en charge par la repartition automatique (voir modules/orders/helpers/delivery-dispatch.ts).
+const DISPATCH_READY_STATUSES = new Set(["PACKED", "ON_DELIVERY", "REPRO_DISPO"]);
 
 function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
   return DELIVERY_ASSIGNABLE_STATUSES.has(order.status) && !order.settlementId;
@@ -74,7 +85,7 @@ function canAssignDeliveryOrder(order: DeliveryAdminOrder) {
 function getOrderRisks(order: DeliveryAdminOrder) {
   const risks: string[] = [];
 
-  if (!order.deliverymanId && canAssignDeliveryOrder(order)) risks.push("Non attribuee");
+  // « Sans livreur » n'est pas une alerte : il a son indicateur et sa colonne dedies.
   if (!order.customerPhone?.trim()) risks.push("Telephone");
   if (!order.customerLocation?.trim()) risks.push("Adresse");
   if (!order.commune?.trim()) risks.push("Commune");
@@ -112,14 +123,57 @@ function getNextDeliveryDate() {
   return d;
 }
 
-export default function AdminDeliveryClient({ activeOrders, archivedOrders, deliverymen }: AdminDeliveryClientProps) {
+const STATUS_FILTERS = [
+  { key: "ALL", label: "A livrer", tone: "" },
+  { key: "UNASSIGNED", label: "Sans livreur", tone: "alert" },
+  { key: "ASSIGNED", label: "Attribuees", tone: "" },
+  { key: "ON_DELIVERY", label: "En route", tone: "" },
+  { key: "UNPACKED", label: "Non emballees", tone: "muted" },
+] as const;
+
+function matchesStatusFilter(order: DeliveryAdminOrder, filter: string) {
+  if (filter === "ALL") return true;
+  if (filter === "UNASSIGNED") return !order.deliverymanId;
+  if (filter === "ASSIGNED") return Boolean(order.deliverymanId);
+  if (filter === "UNPACKED") return UNPACKED_STATUSES.includes(order.status);
+  return order.status === filter;
+}
+
+function shiftDateInput(value: string, days: number) {
+  const base = value ? new Date(`${value}T00:00:00`) : new Date();
+  base.setDate(base.getDate() + days);
+  return dateInputValue(base);
+}
+
+/** Options livreur : equipe active d'abord, comptes sans activite recente a part. */
+function RiderOptions({ deliverymen, activeRiderIds, counts }: { deliverymen: Deliveryman[]; activeRiderIds: Set<string>; counts: Record<string, number> }) {
+  const active = deliverymen.filter((d) => activeRiderIds.has(d.id));
+  const dormant = deliverymen.filter((d) => !activeRiderIds.has(d.id));
+  const label = (d: Deliveryman) => `${d.name} (${counts[d.id] || 0})`;
+  return (
+    <>
+      <optgroup label="Equipe active">
+        {active.map((d) => <option key={d.id} value={d.id}>{label(d)}</option>)}
+      </optgroup>
+      {dormant.length > 0 && (
+        <optgroup label="Sans activite recente">
+          {dormant.map((d) => <option key={d.id} value={d.id}>{label(d)}</option>)}
+        </optgroup>
+      )}
+    </>
+  );
+}
+
+export default function AdminDeliveryClient({ activeOrders, archivedOrders, deliverymen, demoActions }: AdminDeliveryClientProps) {
+  const assignAction = demoActions?.assign ?? assignOrderToDeliveryman;
+  const bulkAssignAction = demoActions?.bulkAssign ?? bulkAssignOrders;
   const defaultDeliveryFilterValue = dateInputValue(getNextDeliveryDate());
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterDeliveryman, setFilterDeliveryman] = useState("ALL");
   const [filterCommune, setFilterCommune] = useState("ALL");
   const [filterDate, setFilterDate] = useState(defaultDeliveryFilterValue); // YYYY-MM-DD
-  const [viewMode, setViewMode] = useState<"table" | "grid" | "dispatch" | "history" | "sheet">("table");
+  const [viewMode, setViewMode] = useState<"table" | "dispatch" | "history" | "sheet">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -129,7 +183,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   const [reproDate, setReproDate] = useState(() => dateInputValue(getNextDeliveryDate()));
   const [reopenOrder, setReopenOrder] = useState<DeliveryAdminOrder | null>(null);
   const [reopenNote, setReopenNote] = useState("");
-  const [autoAssignPreviewOrders, setAutoAssignPreviewOrders] = useState<DeliveryAdminOrder[]>([]);
+  const [dispatchRequest, setDispatchRequest] = useState<{ date: string; orderIds?: string[] } | null>(null);
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -150,7 +204,7 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
     startTransition(async () => {
       try {
-        await assignOrderToDeliveryman(orderId, dId);
+        await assignAction(orderId, dId);
         showToast(isUnassigning ? 'Commande désattribuée' : 'Commande attribuée ✓', 'success');
         router.refresh();
       } catch (e: unknown) {
@@ -168,16 +222,23 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     if (!isUnassigning && !driver) return;
 
     const confirmMsg = isUnassigning
-      ? `Désattribuer les ${selectedIds.size} commandes sélectionnées ?`
-      : `Attribuer ${selectedIds.size} commandes à ${driver?.name} ?`;
+      ? `Désattribuer les ${selectedIds.size} colis sélectionnés ?`
+      : `Déplacer ${selectedIds.size} colis vers ${driver?.name} ?`;
 
     if (!confirm(confirmMsg)) return;
 
     startTransition(async () => {
       try {
-        await bulkAssignOrders(Array.from(selectedIds), dId);
-        showToast(`${selectedIds.size} commandes ${isUnassigning ? 'désattribuées' : 'attribuées ✓'}`, 'success');
-        setSelectedIds(new Set());
+        const result = await bulkAssignAction(Array.from(selectedIds), dId);
+        const done = `${result.assignedCount} colis ${isUnassigning ? 'désattribué(s)' : `déplacé(s) vers ${driver?.name}`}`;
+        if (result.skipped.length > 0) {
+          const detail = result.skipped.slice(0, 3).map((item) => `${item.ref} : ${item.reason}`).join(" · ");
+          showToast(`${done}. ${result.skipped.length} ignoré(s) — ${detail}${result.skipped.length > 3 ? " …" : ""}`, 'error');
+          setSelectedIds(new Set(result.skipped.map((item) => item.orderId)));
+        } else {
+          showToast(done, 'success');
+          setSelectedIds(new Set());
+        }
         router.refresh();
       } catch (e: unknown) {
         if (reloadOnStaleServerAction(e)) return;
@@ -186,31 +247,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     });
   };
 
-  const handleAutoAssign = (ordersToAssign: DeliveryAdminOrder[]) => {
-    if (ordersToAssign.length === 0) return;
-    if (deliverymen.length === 0) {
-      showToast("Aucun livreur disponible pour la repartition.", "error");
+  const handleAutoAssign = () => {
+    if (!filterDate) {
+      showToast("Choisissez une date de livraison avant la repartition.", "error");
       return;
     }
-
-    setAutoAssignPreviewOrders(ordersToAssign);
-  };
-
-  const confirmAutoAssign = () => {
-    if (autoAssignPreviewOrders.length === 0) return;
-
-    startTransition(async () => {
-      try {
-        const result = await autoAssignDeliveryOrders(autoAssignPreviewOrders.map((order) => order.id));
-        showToast(`${result.assignedCount} commande(s) repartie(s) automatiquement`, "success");
-        setSelectedIds(new Set());
-        setAutoAssignPreviewOrders([]);
-        router.refresh();
-      } catch (e: unknown) {
-        if (reloadOnStaleServerAction(e)) return;
-        showToast(e instanceof Error ? e.message : "Erreur", "error");
-      }
-    });
+    // Sans filtre : toutes les commandes de la date. Avec filtres : uniquement celles affichees.
+    // Le filtre de statut ne restreint pas : le serveur ne prend que les commandes pretes.
+    const isNarrowed = Boolean(searchTerm.trim()) || filterDeliveryman !== "ALL" || filterCommune !== "ALL";
+    setDispatchRequest({ date: filterDate, orderIds: isNarrowed ? scopeOrders.map((order) => order.id) : undefined });
   };
 
   const handleReproDispo = () => {
@@ -276,7 +321,8 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     else setSelectedIds(new Set(assignableIds));
   };
 
-  const filteredOrders = useMemo(() => {
+  // Perimetre = tous les filtres sauf le statut : sert aux indicateurs cliquables.
+  const scopeOrders = useMemo(() => {
     return activeOrders.filter(o => {
       const safeSearchTerm = (searchTerm || "").toLowerCase();
       const refText = String(o.ref || "").toLowerCase();
@@ -290,20 +336,34 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         driverText.includes(safeSearchTerm) ||
         communeText.includes(safeSearchTerm);
 
-      const matchesStatus = filterStatus === "ALL" ||
-        (filterStatus === "UNASSIGNED" && !o.deliverymanId) ||
-        (filterStatus === "ASSIGNED" && o.deliverymanId) ||
-        (filterStatus === "UNPACKED" && UNPACKED_STATUSES.includes(o.status)) ||
-        (o.status === filterStatus);
-
       const matchesDriver = filterDeliveryman === "ALL" || o.deliverymanId === filterDeliveryman;
       const matchesCommune = filterCommune === "ALL" || o.commune === filterCommune;
 
       const matchesDate = matchesDateInput(o.deliveryDate, filterDate);
 
-      return matchesSearch && matchesStatus && matchesDriver && matchesCommune && matchesDate;
+      return matchesSearch && matchesDriver && matchesCommune && matchesDate;
     });
-  }, [activeOrders, searchTerm, filterStatus, filterDeliveryman, filterCommune, filterDate]);
+  }, [activeOrders, searchTerm, filterDeliveryman, filterCommune, filterDate]);
+
+  const filteredOrders = useMemo(
+    () => scopeOrders.filter((o) => matchesStatusFilter(o, filterStatus)),
+    [scopeOrders, filterStatus],
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    STATUS_FILTERS.forEach(({ key }) => {
+      counts[key] = scopeOrders.filter((o) => matchesStatusFilter(o, key)).length;
+    });
+    return counts;
+  }, [scopeOrders]);
+
+  // Equipe active en premier, comptes dormants regroupes a part dans les listes.
+  const activeRiderIds = useMemo(() => {
+    const ids = new Set(deliverymen.filter((d) => (d.recentCount || 0) > 0).map((d) => d.id));
+    activeOrders.forEach((o) => { if (o.deliverymanId) ids.add(o.deliverymanId); });
+    return ids;
+  }, [deliverymen, activeOrders]);
 
   const filteredArchivedOrders = useMemo(() => {
     return archivedOrders.filter(o => {
@@ -327,14 +387,6 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     });
   }, [archivedOrders, searchTerm, filterDeliveryman, filterCommune, filterDate]);
 
-  const stats = useMemo(() => {
-    return {
-      total: filteredOrders.length,
-      unassigned: filteredOrders.filter(o => !o.deliverymanId).length,
-      onDelivery: filteredOrders.filter(o => o.status === 'ON_DELIVERY').length,
-      deliverymen: deliverymen.length
-    };
-  }, [filteredOrders, deliverymen]);
 
   // Count only the orders assigned for the selected delivery date, not the full active load.
   const riderLiveCounts = useMemo(() => {
@@ -363,8 +415,10 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   }, [filteredOrders, deliverymen]);
 
   const autoAssignableOrders = useMemo(() => {
-    return filteredOrders.filter((order) => canAssignDeliveryOrder(order) && !order.deliverymanId);
-  }, [filteredOrders]);
+    return scopeOrders.filter((order) => canAssignDeliveryOrder(order)
+      && DISPATCH_READY_STATUSES.has(order.status)
+      && (!order.deliverymanId || order.status === "REPRO_DISPO"));
+  }, [scopeOrders]);
 
   const riskOrders = useMemo(() => {
     return filteredOrders
@@ -418,52 +472,16 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     });
   }, [deliverymen, riderDayStats]);
 
-  const autoAssignPreviewGroups = useMemo(() => {
-    const groups: Record<string, { driver: Deliveryman; currentCount: number; orders: DeliveryAdminOrder[] }> = {};
-    const loads = new Map<string, number>();
-    const communeDriver = new Map<string, string>();
-    const countDate = filterDate || dateInputValue(new Date());
+  const ridersWithLoad = useMemo(
+    () => deliverymenByTodayLoad.filter((driver) => (riderDayStats[driver.id]?.count || 0) > 0),
+    [deliverymenByTodayLoad, riderDayStats],
+  );
 
-    deliverymen.forEach((driver) => {
-      const currentCount = riderDayStats[driver.id]?.count || 0;
-      groups[driver.id] = { driver, currentCount, orders: [] };
-      loads.set(driver.id, currentCount);
-    });
-
-    activeOrders.forEach((order) => {
-      if (order.deliverymanId && order.commune && matchesDateInput(order.deliveryDate, countDate)) {
-        communeDriver.set(order.commune, order.deliverymanId);
-      }
-    });
-
-    [...autoAssignPreviewOrders]
-      .sort((a, b) => String(a.commune || "").localeCompare(String(b.commune || "")) || String(a.ref || "").localeCompare(String(b.ref || "")))
-      .forEach((order) => {
-        const sortedDrivers = [...deliverymen].sort((a, b) => {
-          const loadDiff = (loads.get(a.id) || 0) - (loads.get(b.id) || 0);
-          return loadDiff || a.name.localeCompare(b.name);
-        });
-        const lightest = sortedDrivers[0];
-        const existingDriverId = order.commune ? communeDriver.get(order.commune) : null;
-        const existingDriver = existingDriverId ? deliverymen.find((driver) => driver.id === existingDriverId) : null;
-        const selectedDriver = existingDriver && (loads.get(existingDriver.id) || 0) <= (loads.get(lightest.id) || 0) + 2
-          ? existingDriver
-          : lightest;
-
-        if (!selectedDriver) return;
-
-        if (order.commune && !communeDriver.has(order.commune)) {
-          communeDriver.set(order.commune, selectedDriver.id);
-        }
-
-        groups[selectedDriver.id].orders.push(order);
-        loads.set(selectedDriver.id, (loads.get(selectedDriver.id) || 0) + 1);
-      });
-
-    return Object.values(groups)
-      .filter((group) => group.orders.length > 0)
-      .sort((a, b) => b.orders.length - a.orders.length || a.driver.name.localeCompare(b.driver.name));
-  }, [activeOrders, autoAssignPreviewOrders, deliverymen, filterDate, riderDayStats]);
+  const boardRiders = useMemo(
+    () => deliverymen.filter((driver) => (groupedByDriver[driver.id]?.length || 0) > 0 || filterDeliveryman === driver.id),
+    [deliverymen, groupedByDriver, filterDeliveryman],
+  );
+  const hiddenBoardRiders = deliverymen.length - boardRiders.length;
 
   // Group by date for the "history" view
   const groupedByDate = useMemo(() => {
@@ -702,204 +720,123 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
 
   return (
     <div className="content animate-fade-in">
-      {/* STATS */}
-      <div className="stats-grid">
-        <StatCard label="Total à livrer" value={stats.total} icon={<Truck size={20} />} accent />
-        <StatCard label="Non attribuées" value={stats.unassigned} icon={<UserPlus size={20} />} color="var(--red)" />
-        <StatCard label="En cours" value={stats.onDelivery} icon={<Clock size={20} />} color="var(--orange)" />
-        <StatCard label="Livreurs actifs" value={stats.deliverymen} icon={<User size={20} />} color="var(--blue)" />
-      </div>
-
-      <div className="rider-day-strip">
-        <div className="rider-day-strip-head">
-          <div className="overview-kicker">Colis attribues ce jour</div>
-          <div className="rider-day-date">{filterDate ? formatDate(filterDate) : formatDate(new Date().toISOString())}</div>
-        </div>
-        <div className="rider-day-list">
-          <button
-            type="button"
-            className={`rider-day-all ${filterDeliveryman === "ALL" ? "active" : ""}`}
-            onClick={() => {
-              setFilterDeliveryman("ALL");
-              setViewMode("table");
-            }}
-          >
-            Tous
+      {/* EN-TETE : date + actions */}
+      <div className="dlv-head">
+        <div className="dlv-date">
+          <button type="button" className="dlv-icon-btn" onClick={() => setFilterDate(shiftDateInput(filterDate, -1))} title="Jour precedent" aria-label="Jour precedent">
+            <ChevronLeft size={16} />
           </button>
-          {deliverymenByTodayLoad.map((driver) => {
-            const dayStats = riderDayStats[driver.id] || { count: 0, alerts: 0 };
-            const loadTone = dayStats.count === 0 ? "zero" : dayStats.count >= 10 ? "heavy" : dayStats.count >= 6 ? "medium" : "light";
-
-            return (
-              <div key={driver.id} className={`rider-day-pill ${loadTone} ${filterDeliveryman === driver.id ? "active" : ""}`}>
-                <button
-                  type="button"
-                  className="rider-day-main"
-                  onClick={() => {
-                    setFilterDeliveryman(driver.id);
-                    setViewMode("table");
-                  }}
-                  title={`Afficher les colis de ${driver.name}`}
-                >
-                  <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-                  <span>{driver.name}</span>
-                  {dayStats.alerts > 0 && <em>{dayStats.alerts} alerte(s)</em>}
-                  <strong>{dayStats.count}</strong>
-                </button>
-                <button
-                  type="button"
-                  className="rider-day-sheet"
-                  onClick={() => {
-                    setFilterDeliveryman(driver.id);
-                    setViewMode("sheet");
-                  }}
-                  disabled={dayStats.count === 0}
-                  title={`Voir la fiche de ${driver.name}`}
-                >
-                  <FileText size={13} />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="delivery-overview">
-        <div>
-          <div className="overview-kicker">Pilotage livraison</div>
-          <div className="overview-title">
-            {viewMode === "history" ? "Archives cloturees" : viewMode === "sheet" ? "Fiches du jour" : viewMode === "dispatch" ? "Dispatch du jour" : "Commandes actives"}
-          </div>
-        </div>
-        <div className="overview-actions">
-          <div className="overview-metrics">
-            <span>{activeOrders.length} actives</span>
-            <span>{archivedOrders.length} archives recentes</span>
-            <span>{todaySheets.reduce((sum, sheet) => sum + sheet.orders.length, 0)} sur les fiches</span>
-          </div>
-          <Link
-            href={accountingSessionHref}
-            className="dispatch-auto-btn"
-            style={{ background: '#101820', color: 'white', textDecoration: 'none' }}
-            title="Ouvrir la validation comptable des livraisons de cette date"
-          >
-            <FileText size={15} />
-            Compta livraisons
-          </Link>
-          <button
-            type="button"
-            className="dispatch-auto-btn"
-            onClick={() => handleAutoAssign(autoAssignableOrders)}
-            disabled={isPending || autoAssignableOrders.length === 0}
-            title="Repartir les commandes non attribuees selon la charge et les communes"
-          >
-            <Zap size={15} />
-            Repartir auto ({autoAssignableOrders.length})
+          <label className="dlv-date-field">
+            <Calendar size={15} />
+            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} aria-label="Date de livraison" />
+          </label>
+          <button type="button" className="dlv-icon-btn" onClick={() => setFilterDate(shiftDateInput(filterDate, 1))} title="Jour suivant" aria-label="Jour suivant">
+            <ChevronRight size={16} />
           </button>
-        </div>
-      </div>
-
-      {/* BULK ACTION BAR */}
-      {selectedIds.size > 0 && (
-        <div className="bulk-bar animate-slide-up">
-          <div className="bulk-info">
-            <Check size={18} />
-            <span>{selectedIds.size} commande(s) sélectionnée(s)</span>
-          </div>
-          <div className="bulk-actions">
-            <select
-              className="bulk-select"
-              onChange={(e) => handleBulkAssign(e.target.value)}
-              value=""
-            >
-              <option value="" disabled>Attribuer la sélection à...</option>
-              <option value="unassigned" style={{ color: 'var(--red)', fontWeight: 'bold' }}>❌ Désattribuer (Remettre en attente)</option>
-              <hr />
-              {deliverymen.map(d => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({riderLiveCounts[d.id] || 0} en cours)
-                </option>
-              ))}
-            </select>
-            <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}>Annuler</button>
-          </div>
-        </div>
-      )}
-
-      {/* SEARCH & FILTERS */}
-      <div className="filter-container">
-        <div className="search-container">
-          <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--brown-soft)' }} />
-          <input
-            type="text"
-            className="field-input search-input"
-            placeholder="Rechercher par réf, client, commune ou livreur..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        <div className="date-filter-group">
-          <div className="filter-item compact-date">
-            <Calendar size={16} className="filter-icon" />
-            <input
-              type="date"
-              className="field-input filter-date-input"
-              value={filterDate}
-              onChange={e => setFilterDate(e.target.value)}
-            />
-          </div>
           <button
             type="button"
-            className={`date-shortcut ${filterDate === defaultDeliveryFilterValue ? "active" : ""}`}
+            className={`dlv-chip ${filterDate === defaultDeliveryFilterValue ? "active" : ""}`}
             onClick={() => setFilterDate(defaultDeliveryFilterValue)}
           >
             Demain
           </button>
-          {filterDate && (
-            <button type="button" className="date-shortcut clear" onClick={() => setFilterDate("")}>
-              Tout
-            </button>
-          )}
+          <button type="button" className={`dlv-chip ${!filterDate ? "active" : ""}`} onClick={() => setFilterDate("")}>
+            Toutes dates
+          </button>
         </div>
-
-        <div className="filter-item">
-          <Filter size={16} className="filter-icon" />
-          <select
-            className="field-input filter-select"
-            value={filterDeliveryman}
-            onChange={e => setFilterDeliveryman(e.target.value)}
-          >
-            <option value="ALL">Tous les livreurs</option>
-            {deliverymen.map(d => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({riderLiveCounts[d.id] || 0})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="filter-item">
-          <MapPin size={16} className="filter-icon" />
-          <select
-            className="field-input filter-select"
-            value={filterCommune}
-            onChange={e => setFilterCommune(e.target.value)}
-          >
-            <option value="ALL">Toutes les communes</option>
-            {Object.keys(COMMUNES).sort().map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        {(searchTerm || filterDate || filterDeliveryman !== "ALL" || filterCommune !== "ALL") && (
+        <div className="dlv-actions">
+          <Link href="/zangochap-manager/admin/delivery/planning" className="dlv-btn ghost" title="Jours de travail, absences, communes affectées et plafonds des livreurs">
+            <CalendarClock size={15} /> Planning
+          </Link>
+          <Link href={accountingSessionHref} className="dlv-btn ghost" title="Validation comptable des livraisons de cette date">
+            <FileText size={15} /> Compta
+          </Link>
           <button
             type="button"
-            className="filter-reset"
+            className="dlv-btn primary"
+            onClick={handleAutoAssign}
+            disabled={isPending || autoAssignableOrders.length === 0}
+            title="Repartir les commandes emballees de la date selon les zones habituelles, la presence et la charge"
+          >
+            <Zap size={15} /> Repartir auto
+            {autoAssignableOrders.length > 0 && <span className="dlv-btn-count">{autoAssignableOrders.length}</span>}
+          </button>
+        </div>
+      </div>
+
+      {/* INDICATEURS = filtres de statut */}
+      <div className="dlv-kpis" role="tablist" aria-label="Filtrer par statut">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            role="tab"
+            aria-selected={filterStatus === f.key}
+            className={`dlv-kpi ${f.tone} ${filterStatus === f.key ? "active" : ""}`}
+            onClick={() => setFilterStatus(f.key)}
+            disabled={viewMode === "history"}
+          >
+            <strong>{statusCounts[f.key] || 0}</strong>
+            <span>{f.label}</span>
+          </button>
+        ))}
+        <div className="dlv-kpi static" title="Produits + livraison - remises, commandes affichees">
+          <strong>{formatPrice(dispatchSummary.cash)}</strong>
+          <span>A encaisser</span>
+        </div>
+      </div>
+
+      {/* VUES + RECHERCHE + FILTRES */}
+      <div className="dlv-bar">
+        <div className="dlv-views" role="tablist" aria-label="Affichage">
+          {([
+            { key: "table", label: "Liste", icon: <List size={15} /> },
+            { key: "dispatch", label: "Par livreur", icon: <LayoutGrid size={15} /> },
+            { key: "sheet", label: "Fiches", icon: <Printer size={15} /> },
+            { key: "history", label: "Archives", icon: <Archive size={15} /> },
+          ] as const).map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={viewMode === v.key}
+              className={`dlv-view ${viewMode === v.key ? "active" : ""}`}
+              onClick={() => setViewMode(v.key)}
+            >
+              {v.icon}<span>{v.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="dlv-search">
+          <Search size={15} />
+          <input
+            type="text"
+            placeholder="Ref, client, commune, livreur..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Rechercher"
+          />
+        </div>
+
+        <select className="dlv-select" value={filterDeliveryman} onChange={e => setFilterDeliveryman(e.target.value)} aria-label="Livreur">
+          <option value="ALL">Tous les livreurs</option>
+          <RiderOptions deliverymen={deliverymen} activeRiderIds={activeRiderIds} counts={riderLiveCounts} />
+        </select>
+
+        <select className="dlv-select" value={filterCommune} onChange={e => setFilterCommune(e.target.value)} aria-label="Commune">
+          <option value="ALL">Toutes les communes</option>
+          {Object.keys(COMMUNES).sort().map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+
+        {(searchTerm || filterDeliveryman !== "ALL" || filterCommune !== "ALL" || filterStatus !== "ALL") && (
+          <button
+            type="button"
+            className="dlv-reset"
             onClick={() => {
               setSearchTerm("");
-              setFilterDate("");
               setFilterDeliveryman("ALL");
               setFilterCommune("ALL");
               setFilterStatus("ALL");
@@ -910,65 +847,54 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         )}
       </div>
 
-      <div className="toolbar compact-toolbar">
-        <div className={`filters-bar compact-status-tabs ${viewMode === "history" ? "is-muted" : ""}`}>
-          {[
-            { key: "ALL", label: "Toutes" },
-            { key: "UNASSIGNED", label: "Non attribuées" },
-            { key: "ASSIGNED", label: "Attribuées" },
-            { key: "UNPACKED", label: "Non emballees" },
-            { key: "ON_DELIVERY", label: "En route" },
-            { key: "PENDING", label: "En attente" },
-          ].map(f => (
-            <button
-              key={f.key}
-              className={`filter-chip ${filterStatus === f.key ? 'active' : ''}`}
-              onClick={() => viewMode !== "history" && setFilterStatus(f.key)}
-              disabled={viewMode === "history"}
-            >
-              {f.label}
-            </button>
-          ))}
+      {/* CHARGE DU JOUR : seulement les livreurs qui ont des colis */}
+      {ridersWithLoad.length > 0 && viewMode !== "history" && (
+        <div className="dlv-riders">
+          <span className="dlv-riders-label">Charge du jour</span>
+          <div className="dlv-riders-list">
+            {ridersWithLoad.map((driver) => {
+              const dayStats = riderDayStats[driver.id];
+              const loadTone = dayStats.count >= 16 ? "heavy" : dayStats.count >= 10 ? "medium" : "light";
+              const isActive = filterDeliveryman === driver.id;
+              return (
+                <button
+                  key={driver.id}
+                  type="button"
+                  className={`dlv-rider ${loadTone} ${isActive ? "active" : ""}`}
+                  onClick={() => setFilterDeliveryman(isActive ? "ALL" : driver.id)}
+                  title={`${isActive ? "Retirer le filtre" : "Afficher les colis de"} ${driver.name}${dayStats.alerts ? ` - ${dayStats.alerts} alerte(s)` : ""}`}
+                >
+                  <span>{driver.name}</span>
+                  {dayStats.alerts > 0 && <AlertTriangle size={12} />}
+                  <strong>{dayStats.count}</strong>
+                </button>
+              );
+            })}
+          </div>
         </div>
+      )}
 
-        <div className="view-toggle compact-view-tabs">
-          <button
-            className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-            onClick={() => setViewMode('table')}
-            title="Vue liste"
-          >
-            <List size={18} />
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-            onClick={() => setViewMode('grid')}
-            title="Vue par livreur"
-          >
-            <LayoutGrid size={18} />
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'dispatch' ? 'active' : ''}`}
-            onClick={() => setViewMode('dispatch')}
-            title="Vue dispatch"
-          >
-            <Route size={18} />
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'history' ? 'active' : ''}`}
-            onClick={() => setViewMode('history')}
-            title="Vue Archives"
-          >
-            <Archive size={18} />
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'sheet' ? 'active' : ''}`}
-            onClick={() => setViewMode('sheet')}
-            title="Fiche de livraison"
-          >
-            <FileText size={18} />
-          </button>
+      {/* BULK ACTION BAR */}
+      {selectedIds.size > 0 && (
+        <div className="bulk-bar animate-slide-up">
+          <div className="bulk-info">
+            <Check size={18} />
+            <span>{selectedIds.size} colis sélectionné(s)</span>
+          </div>
+          <div className="bulk-actions">
+            <select
+              className="bulk-select"
+              onChange={(e) => handleBulkAssign(e.target.value)}
+              value=""
+            >
+              <option value="" disabled>Déplacer / attribuer vers...</option>
+              <option value="unassigned">Désattribuer (remettre en attente)</option>
+              <RiderOptions deliverymen={deliverymen} activeRiderIds={activeRiderIds} counts={riderLiveCounts} />
+            </select>
+            <button className="bulk-cancel" onClick={() => setSelectedIds(new Set())}>Annuler</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* TABLE VIEW */}
       {viewMode === "table" && (
@@ -1060,12 +986,8 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                               disabled={isPending || !isAssignable}
                             >
                               <option value="" disabled>Attribuer à...</option>
-                              <option value="unassigned" style={{ color: 'var(--red)' }}>❌ Désattribuer</option>
-                              {deliverymen.map(d => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name} ({riderLiveCounts[d.id] || 0})
-                                </option>
-                              ))}
+                              <option value="unassigned">Désattribuer</option>
+                              <RiderOptions deliverymen={deliverymen} activeRiderIds={activeRiderIds} counts={riderLiveCounts} />
                             </select>
                           </div>
                         </td>
@@ -1079,77 +1001,11 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
         </TableCard>
       )}
 
-      {/* GRID VIEW (BY RIDER) */}
-      {viewMode === "grid" && (
-        <div className="rider-grid">
-          {/* Unassigned column */}
-          <div className="rider-column unassigned-col">
-            <div className="rider-column-header">
-              <div className="header-info">
-                <UserPlus size={18} />
-                <h3>Non assignées</h3>
-              </div>
-              <span className="count-badge">{groupedByDriver["unassigned"].length}</span>
-            </div>
-            <div className="order-cards-list">
-              {groupedByDriver["unassigned"].map(order => (
-                <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
-              ))}
-              {groupedByDriver["unassigned"].length === 0 && <div className="empty-col">Tout est assigné ✓</div>}
-            </div>
-          </div>
-
-          {/* Riders columns */}
-          {deliverymen.map(driver => (
-            <div key={driver.id} className="rider-column">
-              <div className="rider-column-header">
-                <div className="header-info">
-                  <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-                  <div className="driver-info">
-                    <h3 className="driver-name-text">{driver.name}</h3>
-                    <span className="driver-phone-text">{driver.phone}</span>
-                  </div>
-                </div>
-                <span className="count-badge active">{riderLiveCounts[driver.id] || 0}</span>
-              </div>
-              <div className="order-cards-list">
-                {groupedByDriver[driver.id]?.map(order => (
-                  <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
-                ))}
-                {(groupedByDriver[driver.id]?.length || 0) === 0 && <div className="empty-col">Aucune livraison</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* DISPATCH VIEW */}
       {viewMode === "dispatch" && (
         <div className="dispatch-layout">
-          <div className="dispatch-summary-grid">
-            <div className="dispatch-summary-card">
-              <span className="summary-label">A preparer</span>
-              <strong>{filteredOrders.length}</strong>
-              <small>{dispatchSummary.assigned} deja attribuee(s)</small>
-            </div>
-            <div className="dispatch-summary-card alert">
-              <span className="summary-label">Sans livreur</span>
-              <strong>{autoAssignableOrders.length}</strong>
-              <small>eligible(s) a la repartition auto</small>
-            </div>
-            <div className="dispatch-summary-card">
-              <span className="summary-label">Zones</span>
-              <strong>{dispatchSummary.zones}</strong>
-              <small>commune(s) dans le filtre</small>
-            </div>
-            <div className="dispatch-summary-card">
-              <span className="summary-label">A encaisser</span>
-              <strong>{formatPrice(dispatchSummary.cash)}</strong>
-              <small>produits + livraison</small>
-            </div>
-          </div>
-
-          <div className="dispatch-main">
+          <div className={`dispatch-main ${riskOrders.length === 0 ? "no-risk" : ""}`}>
+            {riskOrders.length > 0 && (
             <section className="dispatch-panel">
               <div className="dispatch-panel-header">
                 <div>
@@ -1171,22 +1027,20 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                     </div>
                   </div>
                 ))}
-                {riskOrders.length === 0 && (
-                  <div className="empty-col">Aucun point bloquant dans le filtre actuel</div>
-                )}
               </div>
             </section>
+            )}
 
             <section className="dispatch-board">
               <div className="dispatch-board-header">
                 <div>
                   <h3>Repartition par livreur</h3>
-                  <p>Les colonnes suivent les filtres actifs et la date prevue.</p>
+                  <p>{boardRiders.length} livreur(s) avec des colis{hiddenBoardRiders > 0 ? ` · ${hiddenBoardRiders} sans colis masque(s)` : ""}</p>
                 </div>
                 <button
                   type="button"
                   className="dispatch-auto-btn"
-                  onClick={() => handleAutoAssign(autoAssignableOrders)}
+                  onClick={handleAutoAssign}
                   disabled={isPending || autoAssignableOrders.length === 0}
                 >
                   <Zap size={15} /> Repartir auto
@@ -1198,26 +1052,28 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                   <div className="dispatch-column-title">
                     <UserPlus size={16} />
                     <span>Non attribuees</span>
+                    <ColumnSelect orders={groupedByDriver["unassigned"]} selectedIds={selectedIds} onChange={setSelectedIds} />
                     <b>{groupedByDriver["unassigned"].length}</b>
                   </div>
                   <div className="order-cards-list">
                     {groupedByDriver["unassigned"].map(order => (
-                      <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
+                      <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} activeRiderIds={activeRiderIds} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} selected={selectedIds.has(order.id)} onToggle={toggleSelect} />
                     ))}
                     {groupedByDriver["unassigned"].length === 0 && <div className="empty-col">Tout est attribue</div>}
                   </div>
                 </div>
 
-                {deliverymen.map(driver => (
+                {boardRiders.map(driver => (
                   <div key={driver.id} className="dispatch-column">
                     <div className="dispatch-column-title">
                       <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
                       <span>{driver.name}</span>
+                      <ColumnSelect orders={groupedByDriver[driver.id] || []} selectedIds={selectedIds} onChange={setSelectedIds} />
                       <b>{groupedByDriver[driver.id]?.length || 0}</b>
                     </div>
                     <div className="order-cards-list">
                       {groupedByDriver[driver.id]?.map(order => (
-                        <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} />
+                        <OrderMiniCard key={order.id} order={order} deliverymen={deliverymen} activeRiderIds={activeRiderIds} onAssign={handleAssign} riderLiveCounts={riderLiveCounts} selected={selectedIds.has(order.id)} onToggle={toggleSelect} />
                       ))}
                       {(groupedByDriver[driver.id]?.length || 0) === 0 && <div className="empty-col">Aucune livraison</div>}
                     </div>
@@ -1466,64 +1322,20 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
       )}
 
       {
-        autoAssignPreviewOrders.length > 0 && (
-          <Modal
-            isOpen
-            onClose={() => setAutoAssignPreviewOrders([])}
-            title="Apercu repartition automatique"
-            footer={
-              <>
-                <button className="btn-secondary" onClick={() => setAutoAssignPreviewOrders([])} disabled={isPending}>
-                  Annuler
-                </button>
-                <button className="btn-orange" onClick={confirmAutoAssign} disabled={isPending}>
-                  <Zap size={14} /> Confirmer la repartition
-                </button>
-              </>
-            }
-          >
-            <div className="auto-preview">
-              <div className="auto-preview-head">
-                <div>
-                  <span className="summary-label">Commandes a repartir</span>
-                  <strong>{autoAssignPreviewOrders.length}</strong>
-                </div>
-                <div>
-                  <span className="summary-label">Livreurs touches</span>
-                  <strong>{autoAssignPreviewGroups.length}</strong>
-                </div>
-              </div>
-
-              <div className="auto-preview-list">
-                {autoAssignPreviewGroups.map(({ driver, currentCount, orders }) => {
-                  const communes = Array.from(new Set(orders.map((order) => order.commune).filter(Boolean)));
-                  return (
-                    <div key={driver.id} className="auto-preview-group">
-                      <div className="auto-preview-driver">
-                        <div className="driver-avatar-small">{driver.name.charAt(0)}</div>
-                        <div>
-                          <h4>{driver.name}</h4>
-                          <p>{currentCount} deja attribue(s) ce jour, {currentCount + orders.length} apres repartition</p>
-                        </div>
-                        <strong>+{orders.length}</strong>
-                      </div>
-                      <div className="auto-preview-communes">
-                        {communes.length > 0
-                          ? communes.map((commune) => <span key={commune}>{commune}</span>)
-                          : <span>Commune non definie</span>}
-                      </div>
-                      <div className="auto-preview-orders">
-                        {orders.slice(0, 5).map((order) => (
-                          <span key={order.id}>{order.ref}</span>
-                        ))}
-                        {orders.length > 5 && <span>+{orders.length - 5}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Modal>
+        dispatchRequest && (
+          <DeliveryDispatchModal
+            date={dispatchRequest.date}
+            orderIds={dispatchRequest.orderIds}
+            actions={demoActions?.dispatch}
+            onClose={() => {
+              setDispatchRequest(null);
+              router.refresh();
+            }}
+            onApplied={(assignedCount) => {
+              setSelectedIds(new Set());
+              showToast(`${assignedCount} commande(s) attribuee(s) automatiquement`, "success");
+            }}
+          />
         )
       }
 
@@ -1649,14 +1461,44 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   );
 }
 
-function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { order: DeliveryAdminOrder, deliverymen: Deliveryman[], onAssign: (oid: string, did: string) => void, riderLiveCounts: Record<string, number> }) {
+/** Coche / decoche tous les colis attribuables d'une colonne. */
+function ColumnSelect({ orders, selectedIds, onChange }: { orders: DeliveryAdminOrder[]; selectedIds: Set<string>; onChange: (ids: Set<string>) => void }) {
+  const ids = orders.filter(canAssignDeliveryOrder).map((order) => order.id);
+  if (ids.length === 0) return null;
+  const allSelected = ids.every((id) => selectedIds.has(id));
+  return (
+    <button
+      type="button"
+      className="column-select"
+      onClick={() => {
+        const next = new Set(selectedIds);
+        ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+        onChange(next);
+      }}
+      title={allSelected ? "Tout désélectionner" : "Tout sélectionner"}
+    >
+      {allSelected ? "Aucun" : "Tous"}
+    </button>
+  );
+}
+
+function OrderMiniCard({ order, deliverymen, activeRiderIds, onAssign, riderLiveCounts, selected, onToggle }: { order: DeliveryAdminOrder, deliverymen: Deliveryman[], activeRiderIds: Set<string>, onAssign: (oid: string, did: string) => void, riderLiveCounts: Record<string, number>, selected: boolean, onToggle: (id: string) => void }) {
   const isAssignable = canAssignDeliveryOrder(order);
   const risks = getOrderRisks(order);
 
   return (
-    <div className="order-mini-card">
+    <div className={`order-mini-card ${selected ? "is-selected" : ""}`}>
       <div className="card-header">
-        <span className="order-ref">{order.ref}</span>
+        <label className="mini-select">
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={!isAssignable}
+            onChange={() => onToggle(order.id)}
+            aria-label={`Sélectionner ${order.ref}`}
+          />
+          <span className="order-ref">{order.ref}</span>
+        </label>
         <StatusBadge status={order.status} size="sm" />
       </div>
       <div className="card-body">
@@ -1692,10 +1534,8 @@ function OrderMiniCard({ order, deliverymen, onAssign, riderLiveCounts }: { orde
           disabled={!isAssignable}
         >
           <option value="" disabled>Attribuer à...</option>
-          <option value="unassigned">❌ Désattribuer</option>
-          {deliverymen.map((d) => (
-            <option key={d.id} value={d.id}>{d.name} ({riderLiveCounts[d.id] || 0})</option>
-          ))}
+          <option value="unassigned">Désattribuer</option>
+          <RiderOptions deliverymen={deliverymen} activeRiderIds={activeRiderIds} counts={riderLiveCounts} />
         </select>
       </div>
 

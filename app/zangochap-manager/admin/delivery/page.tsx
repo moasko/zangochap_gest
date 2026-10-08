@@ -7,11 +7,16 @@ import AdminDeliveryClient from "./AdminDeliveryClient";
 
 export const dynamic = "force-dynamic";
 
+const RECENT_ACTIVITY_DAYS = 14;
+
 export default async function AdminDeliveryPage() {
   const user = await getSession();
   if (!user || (user.role !== 'admin' && user.role !== 'developer')) redirect("/zangochap-manager");
 
-  const [activeOrders, archivedOrders, deliverymen] = await Promise.all([
+  const recentSince = new Date();
+  recentSince.setUTCDate(recentSince.getUTCDate() - RECENT_ACTIVITY_DAYS);
+
+  const [activeOrders, archivedOrders, riders, recentActivity] = await Promise.all([
     prisma.order.findMany({
       where: {
         deletedAt: null,
@@ -36,8 +41,20 @@ export default async function AdminDeliveryPage() {
         name: true,
         phone: true,
       },
+      orderBy: { name: "asc" },
+    }),
+    prisma.order.groupBy({
+      by: ["deliverymanId"],
+      where: { deletedAt: null, deliverymanId: { not: null }, deliveryDate: { gte: recentSince } },
+      _count: { _all: true },
     }),
   ]);
+
+  // Livreurs actifs recemment en premier ; les comptes dormants restent accessibles a part.
+  const recentCounts = new Map(recentActivity.map((row) => [row.deliverymanId, row._count._all]));
+  const deliverymen = riders
+    .map((rider) => ({ ...rider, recentCount: recentCounts.get(rider.id) || 0 }))
+    .sort((a, b) => b.recentCount - a.recentCount || a.name.localeCompare(b.name));
 
   return (
     <>

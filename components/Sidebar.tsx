@@ -21,7 +21,7 @@ import {
   Upload, FileText, LogOut, ClipboardList,
   AlertTriangle, Settings, ChevronRight, ChevronLeft, History, Wallet, Warehouse,
   Image as ImageIcon, Menu, X, Bell, WifiOff, Landmark,
-  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap, StickyNote, Trash2
+  CheckCircle, Plus, Tag, MessageCircle, Undo2, Store, Zap, StickyNote, Trash2, CalendarDays
 } from "lucide-react";
 
 interface SidebarProps {
@@ -110,6 +110,7 @@ const NAV_FOR_ROLE: Record<string, (counts: SidebarCounts) => NavSection[]> = {
     {
       title: 'Pilotage', items: [
         { label: 'Gestion Livraisons', href: '/zangochap-manager/admin/delivery', icon: <Truck size={18} /> },
+        { label: 'Planning livreurs', href: '/zangochap-manager/admin/delivery/planning', icon: <CalendarDays size={18} /> },
         { label: 'Carte des livreurs', href: '/zangochap-manager/admin/rider-map', icon: <MapPin size={18} /> },
         { label: 'Dépôts expédition', href: '/zangochap-manager/admin/expeditions/deposits', icon: <AlertTriangle size={18} /> },
         { label: 'Corrections livraison', href: '/zangochap-manager/admin/delivery/corrections', icon: <Undo2 size={18} /> },
