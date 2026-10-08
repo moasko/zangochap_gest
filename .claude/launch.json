@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "zangochap-dev",
+      "runtimeExecutable": "npx.cmd",
+      "runtimeArgs": ["next", "dev", "-p", "3100"],
+      "port": 3100
+    }
+  ]
+}
