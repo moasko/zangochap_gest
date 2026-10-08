@@ -16,6 +16,7 @@ import {
   exchangeValidationMessage, type ExchangeRequest, type ExchangeCorrection,
 } from "../types/exchange";
 import { logExchangeFailure } from "../helpers/exchange-diagnostics";
+import { autoAssignAtConfirmation } from "./auto-assign-on-confirm";
 
 function exchangeError(message: string): never {
   const error = new Error(message);
@@ -198,6 +199,8 @@ export async function reviewOrderExchange(requestId: string, decision: "APPROVED
     catch (error) { logExchangeFailure("whatsapp-after-commit", error); }
     try { await triggerAutomations({ type: "order.created", order: result.createdOrder }); }
     catch (error) { logExchangeFailure("automation-after-commit", error); }
+    // Echange valide = commande CONFIRMED : meme regle d'attribution immediate (best-effort).
+    await autoAssignAtConfirmation(result.createdOrder.id, reviewer);
   }
   refreshRequests();
   return result.request;

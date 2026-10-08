@@ -1,0 +1,67 @@
+/* Fenetre de repartition automatique des livraisons (complete .auto-preview-*). */
+.dispatch { display: flex; flex-direction: column; gap: 12px; }
+.auto-preview-head.dispatch-head { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dispatch-muted { margin: 0; color: var(--brown-soft); font-size: 12px; font-weight: 700; }
+.dispatch-alert {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--red-soft); color: var(--red); font-size: 12px; font-weight: 800;
+}
+.dispatch-settings {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--cream);
+}
+.dispatch-settings-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dispatch-settings-row h4 {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0; margin-right: auto;
+  color: var(--ink); font-size: 13px; font-weight: 900;
+}
+.dispatch-capacity { display: inline-flex; align-items: center; gap: 8px; color: var(--brown); font-size: 12px; font-weight: 800; }
+.dispatch-capacity input { width: 72px; height: 36px; }
+.dispatch-riders { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+.dispatch-rider {
+  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--brown-soft);
+  cursor: pointer; text-align: left; opacity: 0.7;
+}
+.dispatch-rider span { font-size: 12px; font-weight: 900; }
+.dispatch-rider small { font-size: 10px; font-weight: 700; }
+.dispatch-rider.is-present { border-color: var(--orange); background: var(--orange-soft); color: var(--ink); opacity: 1; }
+.dispatch-rider.is-more { justify-content: center; font-size: 11px; font-weight: 900; opacity: 1; }
+.dispatch-rider:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.dispatch-hint { margin: 0; color: var(--amber); font-size: 11px; font-weight: 800; }
+.dispatch-orders { margin-top: 10px; }
+.dispatch-orders summary, .dispatch-skipped summary {
+  cursor: pointer; color: var(--orange); font-size: 11px; font-weight: 900;
+}
+.dispatch-order {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 170px; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px dashed var(--line);
+}
+.dispatch-ref { color: var(--ink); font-size: 12px; font-weight: 900; }
+.dispatch-order-meta { overflow: hidden; color: var(--brown-soft); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-move { height: 32px !important; font-size: 12px !important; }
+.dispatch-skipped { padding: 12px; border: 1px solid var(--amber-soft); border-radius: 12px; background: #FFFBF2; }
+.dispatch-skipped summary { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); }
+.dispatch-skip-group { margin-top: 10px; }
+.dispatch-skip-group strong { color: var(--brown); font-size: 12px; }
+.dispatch-result p { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--ink); font-size: 14px; }
+.dispatch-skip-list { margin: 0; padding-left: 18px; color: var(--brown); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .auto-preview-head.dispatch-head { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dispatch-order { grid-template-columns: 1fr; }
+  .dispatch-move { width: 100%; }
+}
+.dispatch-planning-link { margin-left: 8px; color: var(--orange); font-size: 11px; font-weight: 800; text-decoration: underline; }
+
+/* Deplacement de plusieurs colis avant validation */
+.dispatch-movebar {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 12px; background: #221F1D; color: white;
+}
+.dispatch-movebar strong { margin-right: auto; font-size: 13px; }
+.dispatch-movebar select { width: 200px; height: 34px; }
+.dispatch-pick-all { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 2px; color: var(--brown); font-size: 11px; font-weight: 800; cursor: pointer; }
+.dispatch-ref { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.dispatch-ref input, .dispatch-pick-all input { width: 15px; height: 15px; accent-color: var(--orange); }
+.dispatch-order.is-picked { background: var(--orange-soft); }

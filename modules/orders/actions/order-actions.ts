@@ -20,6 +20,7 @@ import { uploadImage } from "@/lib/upload";
 import { checkOrderAccess, generateUniqueRef } from "../helpers";
 import { decrementStockForOrder, restoreStockForOrder } from "./stock";
 import { recordDeveloperAudit } from "@/modules/developer/audit";
+import { autoAssignAtConfirmation } from "./auto-assign-on-confirm";
 
 // ============ POINT RELAIS ============
 // L'attribution relais vit sous forme d'une ligne marqueur dans deliveryNote,
@@ -466,6 +467,11 @@ export async function takeToProcessOrder(orderId: string, commercialId?: string)
   }
 
   if (!updatedOrder) throw new Error("Impossible de générer une référence unique pour cette commande.");
+
+  // Validation call center d'une commande web : attribution immediate du livreur
+  // si l'interrupteur du planning est actif (best-effort).
+  const assignment = await autoAssignAtConfirmation(updatedOrder.id, session);
+  if (assignment.assigned) Object.assign(updatedOrder, { deliverymanId: assignment.riderId, deliverymanName: assignment.riderName });
 
   revalidatePath("/zangochap-manager/orders");
   revalidatePath("/zangochap-manager/orders/to-process");

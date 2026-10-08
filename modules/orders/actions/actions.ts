@@ -60,7 +60,9 @@ export async function markPartialDelivery(orderId: string, deliveredQuantities: 
 // ── Delivery Assignments ──
 export async function assignOrderToDeliveryman(orderId: string, deliverymanId: string) { return deliveryActions.assignOrderToDeliveryman(orderId, deliverymanId); }
 export async function bulkAssignOrders(orderIds: string[], deliverymanId: string) { return deliveryActions.bulkAssignOrders(orderIds, deliverymanId); }
-export async function autoAssignDeliveryOrders(orderIds: string[]) { return deliveryActions.autoAssignDeliveryOrders(orderIds); }
+export async function autoAssignDeliveryOrders(orderIds: string[], date?: string) { return deliveryActions.autoAssignDeliveryOrders(orderIds, date); }
+export async function getDeliveryDispatchPlan(options: deliveryActions.DeliveryDispatchOptions) { return deliveryActions.getDeliveryDispatchPlan(options); }
+export async function applyDeliveryDispatchPlan(input: deliveryActions.DeliveryDispatchAssignmentInput[]) { return deliveryActions.applyDeliveryDispatchPlan(input); }
 
 // ── Settlements ──
 export async function getPendingSettlements() { return settlementActions.getPendingSettlements(); }

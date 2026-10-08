@@ -7,6 +7,13 @@ Lire et respecter `AGENT.md`, qui conserve les consignes existantes de sécurit�
 - Ne pas exécuter de migration, seed, réparation ou opération destructive sur les données sans l'autorisation explicite prévue dans `AGENT.md`.
 - Après une modification de code, vérifier TypeScript et lint ; documenter les échecs et limites de validation. Les commandes et leur portée sont décrites dans la cartographie.
 
+## Navigation économe en tokens
+
+1. Domaine/flux métier : `docs/PROJECT_MAP.md`, section « Je veux modifier… ».
+2. Fichier/symbole précis : chercher (Grep) dans `docs/CODE_INDEX.md` plutôt que de le lire en entier ; il donne `fichier (lignes) — symbole:ligne` et le plan interne des fichiers ≥ 1 500 lignes.
+3. Lire ensuite uniquement la plage utile (offset/limit), surtout pour `modules/orders/components/OrdersClient.tsx` (~10 000 lignes).
+4. Après ajout, déplacement ou renommage de fichiers/exports : `npm run index:code`.
+
 ## Repères durables pour les prochaines sessions
 
 - Lire `docs/PROJECT_MAP.md` et `docs/PROGRESS.md` avant d'intervenir.

@@ -134,8 +134,16 @@ export async function bulkAssignOrders(orderIds: string[], deliverymanId: string
   return actions.bulkAssignOrders(orderIds, deliverymanId);
 }
 
-export async function autoAssignDeliveryOrders(orderIds: string[]) {
-  return actions.autoAssignDeliveryOrders(orderIds);
+export async function autoAssignDeliveryOrders(orderIds: string[], date?: string) {
+  return actions.autoAssignDeliveryOrders(orderIds, date);
+}
+
+export async function getDeliveryDispatchPlan(options: Parameters<typeof actions.getDeliveryDispatchPlan>[0]) {
+  return actions.getDeliveryDispatchPlan(options);
+}
+
+export async function applyDeliveryDispatchPlan(input: Parameters<typeof actions.applyDeliveryDispatchPlan>[0]) {
+  return actions.applyDeliveryDispatchPlan(input);
 }
 
 export async function getPendingSettlements() {
