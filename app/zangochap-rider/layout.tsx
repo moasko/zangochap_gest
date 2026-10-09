@@ -1,5 +1,6 @@
 import { Metadata, Viewport } from "next";
 import GlobalChatAccess from "@/components/GlobalChatAccess";
+import AppUpdateBanner from "@/components/AppUpdateBanner";
 import { getSession } from "@/modules/auth/actions";
 import { redirect } from "next/navigation";
 import "../zangochap-manager/chat/chat.css";
@@ -34,6 +35,7 @@ export default async function RiderLayout({
     <div className="rider-root">
       {children}
       <GlobalChatAccess />
+      <AppUpdateBanner />
       <style>{`
         .rider-root {
           min-height: 100vh;

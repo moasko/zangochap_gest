@@ -15,6 +15,7 @@ import { openTeamChat } from "@/components/GlobalChatAccess";
 import { openStaffNotes, NOTES_DUE_COUNT_EVENT } from "@/components/GlobalNotesAccess";
 import type { SidebarCounts } from "@/modules/orders/actions/sidebar-counts";
 import { getUnreadRiderAlerts } from "@/modules/chat/actions";
+import { isStaleServerActionError, markAppOutdated } from "@/lib/stale-server-action";
 
 import {
   LayoutDashboard, ShoppingBag, Package, Truck, Box, Users, BarChart3, MapPin, CalendarClock,
@@ -255,8 +256,14 @@ export default function Sidebar({ user, counts: initialCounts }: SidebarProps) {
         for (const alert of alerts) showRiderAlert(alert);
         const last = alerts[alerts.length - 1];
         if (last) cursor = { id: last.id, createdAt: last.createdAt };
-      } catch {
-        // Retry the same cursor after a network failure; SSE stays active independently.
+      } catch (error) {
+        // Onglet sur une ancienne version apres un deploiement : inutile de reessayer
+        // en boucle (le serveur ne connait plus l'action) — on propose de recharger.
+        if (isStaleServerActionError(error)) {
+          stopped = true;
+          markAppOutdated();
+        }
+        // Sinon : retry the same cursor after a network failure; SSE stays active independently.
       } finally {
         running = false;
       }
