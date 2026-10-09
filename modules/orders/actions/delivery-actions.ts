@@ -8,7 +8,6 @@ import { isRole } from "../helpers";
 import { decrementStockForOrder } from "./stock";
 import { triggerAutomations } from "@/modules/automations/engine";
 import {
-  DISPATCH_DEFAULT_CAPACITY,
   DISPATCH_ELIGIBLE_STATUSES,
   getDispatchIneligibility,
   normalizeCommune,
@@ -256,7 +255,8 @@ export async function getDeliveryDispatchPlan(options: DeliveryDispatchOptions) 
   assertCanManageDeliveryAssignment(session);
 
   const { start, end } = parseDispatchDay(options.date);
-  const capacity = Math.min(60, Math.max(1, Math.floor(Number(options.capacity) || DISPATCH_DEFAULT_CAPACITY)));
+  // Plafond general facultatif : vide = aucun plafond (seuls ceux du planning s appliquent).
+  const capacity = Number(options.capacity) > 0 ? Math.min(60, Math.floor(Number(options.capacity))) : null;
   const orderIds = options.orderIds ? Array.from(new Set(options.orderIds.filter(Boolean))) : null;
 
   const [context, candidates] = await Promise.all([

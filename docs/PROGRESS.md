@@ -1,5 +1,14 @@
 # Journal de reprise
 
+## 2026-10-09 — Partage par commune sans débordement hors zone ; onglets périmés après déploiement
+
+- Règle confirmée par le propriétaire : partage **par commune**, en alternance entre les livreurs de la commune (1er, 2e, 1er…), **sans équilibrage global**. Le moteur (`modules/orders/helpers/delivery-dispatch.ts`) ne fait plus de score/part équitable : livreurs affectés (planning) sinon habituels (≥ 15 % de la commune sur 30 j, `HABITUAL_COMMUNE_SHARE`) ; plafond seulement s’il est fixé (planning ou fenêtre ; plus de 18 par défaut) ; jamais de débordement hors zone : colis laissés « sans livreur » avec raison (aucun livreur affecté, absents, au plafond). Raison `charge` supprimée.
+- Rejeu sur 6 vraies journées (dev, lecture seule) : 100 % placés ; 96–99 % chez un livreur de la zone (réel 86–98 %) ; charge max 26–30 quand une commune n’a qu’un habituel présent (ex. Abobo) — à régler par affectation d’un 2e livreur ou plafond.
+- Production 08–09/10 : « Failed to find Server Action » = onglets ouverts avant déploiement ; cause confirmée dans Next 15 : identifiants d’actions salés par une clé aléatoire par build (0 identifiant commun entre deux builds). Correctifs : `Dockerfile`/`docker-compose.yml` acceptent `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (à définir dans Dokploy, secret) ; `lib/stale-server-action.ts` recharge au plus une fois / 10 min (l’ancien verrou ne se levait jamais) et émet un événement ; `components/AppUpdateBanner.tsx` (manager + livreur) propose « Recharger » ; la Sidebar cesse de réessayer en boucle.
+- « Action non autorisée pour votre profil » : action non identifiable depuis les journaux ; `lib/auth.ts` journalise désormais `[auth] refus role= attendus= page=` (sans donnée personnelle).
+- Vérifié : 12 tests isolés (dont alternance et absence de débordement, nouveau test stale-action), TypeScript, lint ciblé.
+
+
 ## 2026-10-06 — Démo locale fictive et enregistrement d’écran
 
 - `/dev/delivery-preview` (dev + `DELIVERY_PREVIEW=1`) : `DeliveryDemo.tsx` / `PlanningDemo.tsx` simulent les actions en mémoire ; la répartition utilise le vrai `planDeliveryDispatch`. `?view=planning`, `?clean=1` (sans bandeau). Pour cela, `AdminDeliveryClient` (`demoActions`), `DeliveryDispatchModal` (`actions`) et `PlanningClient` (`actions`) acceptent des actions injectables ; par défaut les Server Actions (aucun changement en production).

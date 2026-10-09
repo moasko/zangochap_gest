@@ -29,9 +29,8 @@ interface DeliveryDispatchModalProps {
 
 const REASON_LABELS: Record<string, string> = {
   repro: "meme livreur (repro)",
-  fixed: "commune affectee",
-  zone: "zone habituelle",
-  charge: "equilibrage",
+  fixed: "commune affectee (alternance)",
+  zone: "livreur habituel de la commune (alternance)",
 };
 
 export default function DeliveryDispatchModal({ date, orderIds, onClose, onApplied, actions }: DeliveryDispatchModalProps) {
@@ -227,6 +226,7 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
                     min={1}
                     max={60}
                     className="field-input"
+                    placeholder="Aucun"
                     value={capacity ?? ""}
                     onChange={(event) => setCapacity(Number(event.target.value) || null)}
                   />

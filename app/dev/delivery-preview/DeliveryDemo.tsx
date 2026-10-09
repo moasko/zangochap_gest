@@ -7,7 +7,7 @@ import React, { useMemo, useRef, useState } from "react";
 import type { OrderStatus } from "@prisma/client";
 import AdminDeliveryClient from "@/app/zangochap-manager/admin/delivery/AdminDeliveryClient";
 import type { DispatchActions } from "@/modules/orders/components/DeliveryDispatchModal";
-import { DISPATCH_DEFAULT_CAPACITY, normalizeCommune, planDeliveryDispatch } from "@/modules/orders/helpers/delivery-dispatch";
+import { normalizeCommune, planDeliveryDispatch } from "@/modules/orders/helpers/delivery-dispatch";
 
 type DemoOrder = {
   id: string; ref: string; customerName: string; customerPhone: string; customerLocation: string;
@@ -87,7 +87,7 @@ export default function DeliveryDemo() {
   const dispatch = useMemo<DispatchActions>(() => ({
     getPlan: async (options) => {
       const orders = ordersRef.current;
-      const capacity = options.capacity || DISPATCH_DEFAULT_CAPACITY;
+      const capacity = options.capacity && options.capacity > 0 ? options.capacity : null;
       const presentRiderIds = options.presentRiderIds ?? DEMO_RIDERS.filter((r) => r.recent > 0).map((r) => r.id);
       const candidates = orders.filter((o) => o.deliveryDate?.startsWith(options.date)
         && (!options.orderIds || options.orderIds.includes(o.id)) && !o.deliverymanId);
