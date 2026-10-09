@@ -1,5 +1,10 @@
 # Journal de mémoire IA
 
+## 2026-10-09 — Partage par commune, onglets périmés
+
+- Répartition : alternance par commune entre livreurs affectés/habituels, sans équilibrage global ni débordement hors zone ; plafond facultatif. Déploiement : clé `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` stable recommandée (Dokploy) ; bandeau de rechargement ; journal des refus de rôle. Raison : demande du propriétaire + erreurs de prod du 08–09/10.
+
+
 ## 2026-10-06 — Attribution à la validation call center
 
 - `auto-assign-on-confirm.ts` appelé après chaque passage en CONFIRMED (4 chemins), derrière l’interrupteur du planning (off par défaut). Règles partagées via `dispatch-context.ts`. Raison : le propriétaire veut que la commande validée par le call center soit attribuée immédiatement.

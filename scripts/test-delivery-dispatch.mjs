@@ -91,116 +91,120 @@ const riders = [
 ];
 const history = {
   cocody: { Cocody: 76, Bingerville: 20 },
-  yop: { Yopougon: 70, Songon: 20 },
+  yop: { Yopougon: 70, Songon: 20, Cocody: 4 }, // 4/80 = 5 % de Cocody : pas habituel
   exp: { "Hors Abidjan": 100 },
 };
 const plan = (orders, extra = {}) => planDeliveryDispatch({
-  orders, riders, presentRiderIds: ["cocody", "yop", "exp"], capacity: 18,
+  orders, riders, presentRiderIds: ["cocody", "yop", "exp"],
   currentLoads: {}, currentCommunes: {}, history, ...extra,
 });
 const riderOf = (result, id) => result.assignments.find((a) => a.orderId === id)?.riderId;
+const count = (r, id) => r.assignments.filter((a) => a.riderId === id).length;
+const seq = (r) => r.assignments.map((a) => a.riderId);
 
-// Zones habituelles respectees, absent jamais choisi.
+// Sans planning : chaque commune va a ses livreurs habituels (>= 15 % de la commune sur 30 j).
 let result = plan([order("c1"), order("y1", { commune: "yopougon" }), order("e1", { commune: "Hors Abidjan" }), order("b1", { commune: "Bingerville" })]);
 assert.equal(riderOf(result, "c1"), "cocody");
 assert.equal(riderOf(result, "y1"), "yop");
 assert.equal(riderOf(result, "e1"), "exp");
 assert.equal(riderOf(result, "b1"), "cocody");
-assert.ok(result.assignments.every((a) => a.riderId !== "old"));
 assert.ok(result.assignments.every((a) => a.reason === "zone"));
 
-// Plafond : le surplus part chez les autres, puis est signale quand tout est plein.
+// Pas d'equilibrage force : 30 colis Cocody restent TOUS chez le livreur de Cocody,
+// meme si les autres n'ont rien (yop ne fait que 5 % de Cocody : hors zone).
 const many = Array.from({ length: 30 }, (_, i) => order(`c${String(i).padStart(2, "0")}`));
-result = plan(many, { capacity: 10 });
-const count = (r, id) => r.assignments.filter((a) => a.riderId === id).length;
-assert.equal(count(result, "cocody"), 10);
-assert.equal(count(result, "yop") + count(result, "exp"), 20);
+result = plan(many);
+assert.equal(count(result, "cocody"), 30);
 assert.equal(result.skipped.length, 0);
-result = plan(many, { capacity: 5 });
-assert.equal(result.assignments.length, 15);
-assert.equal(result.skipped.length, 15);
-assert.ok(result.skipped.every((s) => s.reason === "Plafond atteint pour tous les livreurs presents"));
+// Un livreur deja tres charge ne cede rien hors zone.
+result = plan([order("c1"), order("c2")], { currentLoads: { cocody: 25 } });
+assert.equal(count(result, "cocody"), 2);
 
-// La charge deja attribuee pour la date compte dans le plafond.
-result = plan([order("c1"), order("c2")], { capacity: 18, currentLoads: { cocody: 17, yop: 17, exp: 17 } });
+// Plafond facultatif : sans plafond, aucun ; avec plafond, le surplus reste sans livreur (jamais hors zone).
+result = plan(many, { capacity: 10 });
+assert.equal(count(result, "cocody"), 10);
+assert.equal(count(result, "yop") + count(result, "exp"), 0);
+assert.equal(result.skipped.length, 20);
+assert.ok(result.skipped.every((s) => s.reason === "Livreur(s) de Cocody au plafond"));
+result = plan([order("c1"), order("c2")], { capacity: 18, currentLoads: { cocody: 17 } });
 assert.equal(count(result, "cocody"), 1);
 assert.equal(result.loads.cocody.before, 17);
 assert.equal(result.loads.cocody.after, 18);
 
-// Repro-dispo : meme livreur s'il est present, sinon redistribuee.
+// Commune sans livreur affecte ni habituel : reste sans livreur, raison explicite.
+result = plan([order("p1", { commune: "Plateau" })], { currentLoads: { cocody: 5, yop: 1, exp: 3 } });
+assert.equal(result.assignments.length, 0);
+assert.equal(result.skipped[0].reason, "Aucun livreur affecte a Plateau (a configurer dans le Planning)");
+// Livreurs habituels tous absents.
+result = plan([order("c1")], { presentRiderIds: ["yop", "exp"] });
+assert.equal(result.skipped[0].reason, "Livreur(s) de Cocody absent(s)");
+
+// Repro-dispo : meme livreur s'il est present, sinon le livreur de la commune.
 result = plan([order("r1", { status: "REPRO_DISPO", deliverymanId: "yop", commune: "Cocody" })]);
 assert.deepEqual(plain(result.assignments[0]), { orderId: "r1", riderId: "yop", reason: "repro" });
 result = plan([order("r2", { status: "REPRO_DISPO", deliverymanId: "old", commune: "Cocody" })]);
 assert.equal(riderOf(result, "r2"), "cocody");
 
-// Equilibrage : un livreur deja tres charge cede le surplus aux autres presents.
-result = plan([order("c1"), order("c2")], { currentLoads: { cocody: 15 } });
-assert.equal(count(result, "cocody"), 0);
-
-// Commune sans historique : equilibrage par la charge (reason "charge").
-result = plan([order("p1", { commune: "Plateau" })], { currentLoads: { cocody: 5, yop: 1, exp: 3 } });
-assert.equal(riderOf(result, "p1"), "yop");
-assert.equal(result.assignments[0].reason, "charge");
-
-// Aucun present : tout est signale, rien n'est attribue.
-result = plan([order("c1")], { presentRiderIds: [] });
-assert.equal(result.assignments.length, 0);
-assert.equal(result.skipped[0].reason, "Aucun livreur present");
-
-// Zone fixe du planning : prioritaire sur l'historique.
+// Planning prioritaire sur l'historique : la commune affectee va a ses affectes uniquement.
 result = plan([order("x1", { commune: "Cocody" })], { fixedCommunes: { yop: ["Cocody"] } });
 assert.deepEqual(plain(result.assignments[0]), { orderId: "x1", riderId: "yop", reason: "fixed" });
-// Plafond individuel : remplace le plafond general pour ce livreur.
-result = plan(many, { capacity: 20, capacities: { cocody: 3 } });
-assert.equal(count(result, "cocody"), 3);
 
-// Commune affectee a plusieurs livreurs : parts egales (15 -> 5/5/5, 16 -> 6/5/5), quelle que soit la commune.
+// Alternance par commune : 2 livreurs sur Koumassi -> 1er, 2e, 1er, 2e...
 const koumassi = (n) => Array.from({ length: n }, (_, i) => order(`k${String(i).padStart(2, "0")}`, { commune: "Koumassi" }));
+const duo = { cocody: ["Koumassi"], yop: ["Koumassi"] };
+result = plan(koumassi(5), { fixedCommunes: duo });
+assert.deepEqual(plain(seq(result)), ["cocody", "yop", "cocody", "yop", "cocody"]);
+assert.ok(result.assignments.every((a) => a.reason === "fixed"));
+assert.equal(count(result, "exp"), 0, "un livreur non affecte a Koumassi ne recoit rien");
+// 15 colis / 3 affectes -> 5/5/5 ; 16 -> 6/5/5.
 const trio = { cocody: ["Koumassi"], yop: ["Koumassi"], exp: ["Koumassi"] };
 result = plan(koumassi(15), { fixedCommunes: trio });
 assert.deepEqual([count(result, "cocody"), count(result, "yop"), count(result, "exp")], [5, 5, 5]);
-assert.ok(result.assignments.every((a) => a.reason === "fixed"));
 result = plan(koumassi(16), { fixedCommunes: trio });
 assert.deepEqual([count(result, "cocody"), count(result, "yop"), count(result, "exp")].sort(), [5, 5, 6]);
-// Parts egales DANS la commune, meme si un livreur a deja des colis ailleurs (option a).
+// L'alternance ne regarde que la commune : des colis ailleurs ne changent pas le partage de Koumassi.
 result = plan(koumassi(15), { fixedCommunes: trio, currentLoads: { cocody: 8 }, currentCommunes: { cocody: Array(8).fill("Marcory") } });
 assert.deepEqual([count(result, "cocody"), count(result, "yop"), count(result, "exp")], [5, 5, 5]);
-// Ce qui est deja attribue dans la commune ce jour-la compte dans le partage.
+// Ce qui est deja attribue dans la commune ce jour-la compte dans l'alternance.
 result = plan(koumassi(12), { fixedCommunes: trio, currentLoads: { cocody: 3 }, currentCommunes: { cocody: ["Koumassi", "Koumassi", "Koumassi"] } });
 assert.deepEqual([3 + count(result, "cocody"), count(result, "yop"), count(result, "exp")], [5, 5, 5]);
-// Un affecte absent : les presents se partagent ; plafond respecte.
+// Un affecte absent : les presents alternent ; plafond individuel respecte, sans debordement hors zone.
 result = plan(koumassi(10), { fixedCommunes: { ...trio, old: ["Koumassi"] } });
 assert.equal(count(result, "old"), 0);
 assert.equal(count(result, "cocody") + count(result, "yop") + count(result, "exp"), 10);
-result = plan(koumassi(15), { fixedCommunes: trio, capacities: { cocody: 2 } });
-assert.equal(count(result, "cocody"), 2);
-assert.deepEqual([count(result, "yop"), count(result, "exp")].sort(), [6, 7]);
+result = plan(koumassi(15), { fixedCommunes: duo, capacities: { cocody: 2, yop: 3 } });
+assert.deepEqual([count(result, "cocody"), count(result, "yop"), count(result, "exp")], [2, 3, 0]);
+assert.equal(result.skipped.length, 10);
+assert.ok(result.skipped.every((s) => s.reason === "Livreur(s) de Koumassi au plafond"));
 
-// Hors Abidjan : jamais envoye au hasard a un livreur d'Abidjan.
+// Hors Abidjan : jamais envoye a un livreur d'Abidjan.
 const exped = (n) => Array.from({ length: n }, (_, i) => order(`e${i}`, { commune: "Hors Abidjan", depositVerificationStatus: "RECEIVED" }));
 result = plan(exped(4), { fixedCommunes: { exp: ["Hors Abidjan"] } });
 assert.equal(count(result, "exp"), 4);
-// Affecte absent : non reparti, raison explicite, l'admin choisit.
 result = plan(exped(2), { fixedCommunes: { exp: ["Hors Abidjan"] }, presentRiderIds: ["cocody", "yop"] });
 assert.equal(result.assignments.length, 0);
-assert.match(result.skipped[0].reason, /affecte\(s\) a Hors Abidjan absent/);
-// Sans affectation : seulement un livreur habituel des expeditions, sinon non reparti.
+assert.equal(result.skipped[0].reason, "Livreur(s) de Hors Abidjan absent(s)");
 result = plan(exped(2), { presentRiderIds: ["cocody", "yop"] });
 assert.equal(result.assignments.length, 0);
-assert.match(result.skipped[0].reason, /Aucun livreur habituel de Hors Abidjan/);
 result = plan(exped(2));
 assert.equal(count(result, "exp"), 2);
-// Livreur affecte uniquement aux expeditions : jamais de colis d'Abidjan, meme s'il est le moins charge.
-result = plan([order("pl1", { commune: "Plateau" })], { fixedCommunes: { exp: ["Hors Abidjan"] }, currentLoads: { cocody: 9, yop: 9, exp: 0 } });
-assert.notEqual(riderOf(result, "pl1"), "exp");
-assert.equal(result.assignments.length, 1);
 // Changement durable du destinataire : nouvel affecte dans le planning.
 result = plan(exped(3), { fixedCommunes: { yop: ["Hors Abidjan"] } });
 assert.equal(count(result, "yop"), 3);
+// Livreur reserve aux expeditions : jamais de colis d'Abidjan, meme habituel ailleurs.
+result = planDeliveryDispatch({
+  orders: [order("c9")], riders, presentRiderIds: ["exp"], currentLoads: {}, currentCommunes: {},
+  history: { exp: { Cocody: 50, "Hors Abidjan": 100 } }, fixedCommunes: { exp: ["Hors Abidjan"] },
+});
+assert.equal(result.assignments.length, 0);
+
+// Aucun present : rien n'est attribue.
+result = plan([order("c1")], { presentRiderIds: [] });
+assert.equal(result.assignments.length, 0);
 
 // Determinisme : meme entree => meme plan, quel que soit l'ordre d'arrivee.
-const shuffled = [...many].reverse();
-assert.deepEqual(plain(plan(many, { capacity: 12 })), plain(plan(shuffled, { capacity: 12 })));
+const shuffled = [...koumassi(9)].reverse();
+assert.deepEqual(plain(plan(koumassi(9), { fixedCommunes: trio })), plain(plan(shuffled, { fixedCommunes: trio })));
 
 // ---------- Actions serveur (Prisma simule) ----------
 let session;

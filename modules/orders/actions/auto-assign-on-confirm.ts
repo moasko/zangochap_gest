@@ -4,7 +4,7 @@
 // Active uniquement si l'interrupteur du planning est allume.
 import prisma from "@/lib/prisma";
 import { loadDeliveryPlanning } from "@/modules/delivery-planning/helpers/load";
-import { DISPATCH_DEFAULT_CAPACITY, planDeliveryDispatch } from "../helpers/delivery-dispatch";
+import { planDeliveryDispatch } from "../helpers/delivery-dispatch";
 import { loadDispatchContext } from "./dispatch-context";
 
 type Actor = { email?: string | null; name?: string | null } | null | undefined;
@@ -42,7 +42,7 @@ export async function autoAssignAtConfirmation(orderId: string, actor?: Actor): 
         orders: [order],
         riders: context.riders,
         presentRiderIds: context.defaultPresent,
-        capacity: DISPATCH_DEFAULT_CAPACITY,
+        capacity: null,
         currentLoads: context.currentLoads,
         currentCommunes: context.currentCommunes,
         history: context.historyByRider,
