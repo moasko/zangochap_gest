@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-369 fichiers de code, 78132 lignes.
+373 fichiers de code, 79104 lignes.
 
 
 ## ./
@@ -123,7 +123,9 @@
 
 ## app/dev/delivery-preview/
 
-- `page.tsx` (93) — dynamic:9, DeliveryPreview:42
+- `DeliveryDemo.tsx` (190) [client] — DEMO_RIDERS:21, DeliveryDemo:68
+- `PlanningDemo.tsx` (48) [client] — PlanningDemo:15
+- `page.tsx` (27) — dynamic:10, DeliveryPreview:12
 
 ## app/dev/personnel-preview/
 
@@ -159,7 +161,7 @@
 
 - `LoginClient.tsx` (86) [client] — LoginPage:10
 - `error.tsx` (57) [client] — ManagerError:7
-- `layout.tsx` (62) — metadata:12, ManagerLayout:25
+- `layout.tsx` (64) — metadata:13, ManagerLayout:26
 - `page.tsx` (20) — dynamic:5, LoginPage:7
 
 ## app/zangochap-manager/accounting/
@@ -198,8 +200,8 @@
 
 ## app/zangochap-manager/admin/delivery/
 
-- `AdminDeliveryClient.tsx` (1536) [client] — AdminDeliveryClient:161
-  - plan interne : **canAssignDeliveryOrder**:75, **getOrderRisks**:79, **matchesDateInput**:95, **getOrderTimestamp**:99, **dateInputValue**:103, **getNextDeliveryDate**:111, **matchesStatusFilter**:128, **shiftDateInput**:136, **RiderOptions**:143, label:146, handleAssign:185, handleBulkAssign:209, handleAutoAssign:242, handleReproDispo:253, handleReopenDelivery:278, toggleSelect:300, toggleAll:310, handleExportWord:557, handlePrintSheet:686, cleanup:702, «BULK ACTION BAR»:869, «TABLE VIEW»:891, «DISPATCH VIEW»:996, «DELIVERY SHEET VIEW»:1177, **ColumnSelect**:1456, **OrderMiniCard**:1476
+- `AdminDeliveryClient.tsx` (1594) [client] — AdminDeliveryClient:170
+  - plan interne : **canAssignDeliveryOrder**:84, **getOrderRisks**:88, **matchesDateInput**:104, **getOrderTimestamp**:108, **dateInputValue**:112, **getNextDeliveryDate**:120, **matchesStatusFilter**:137, **shiftDateInput**:145, **RiderOptions**:152, label:155, handleAssign:198, handleBulkAssign:222, handleAutoAssign:255, handleAudit:266, handleReproDispo:274, handleReopenDelivery:299, toggleSelect:321, toggleAll:331, handleExportWord:578, handlePrintSheet:707, cleanup:723, «BULK ACTION BAR»:899, «TABLE VIEW»:921, «DISPATCH VIEW»:1026, «DELIVERY SHEET VIEW»:1212, **ColumnSelect**:1514, **OrderMiniCard**:1534
 - `page.tsx` (70) — dynamic:8, AdminDeliveryPage:12
 
 ## app/zangochap-manager/admin/delivery-sheet/
@@ -453,7 +455,7 @@
 
 - `DeliveryClient.tsx` (589) [client] — DeliveryClient:81
 - `history-actions.ts` (66) [server] — getRiderHistory:10
-- `layout.tsx` (63) — metadata:8, viewport:14, RiderLayout:21
+- `layout.tsx` (65) — metadata:9, viewport:15, RiderLayout:22
 - `page.tsx` (174) — dynamic:9, DeliveryPage:11
 - `types.ts` (80) — RiderOrderItem:3, RiderOrder:17, RiderStats:61, RiderRevenueDay:70
 - `utils.ts` (40) — calculateOrderDueTotal:3, calculateOrderCollectionTotal:13, calculatePartialSummary:24
@@ -476,6 +478,7 @@
 ## components/
 
 - `AmountInput.tsx` (44) [client] — AmountInput:23
+- `AppUpdateBanner.tsx` (45) [client] — AppUpdateBanner:10
 - `GlobalChatAccess.tsx` (174) [client] — OPEN_CHAT_EVENT:16, openTeamChat:18, GlobalChatAccess:39
 - `GlobalDepositAlert.tsx` (73) [client] — GlobalDepositAlert:11
 - `GlobalNotesAccess.tsx` (697) [client] — OPEN_NOTES_EVENT:34, NOTES_DUE_COUNT_EVENT:36, openStaffNotes:38, GlobalNotesAccess:84
@@ -486,7 +489,7 @@
 - `ReasonModal.tsx` (94) [client] — ReasonModal:9
 - `ReceiptModal.tsx` (118) [client] — ReceiptModal:15
 - `RiderMessageAlertOverlay.tsx` (191) [client] — RiderMessageAlert:7, RiderMessageAlertOverlay:29
-- `Sidebar.tsx` (535) [client] — Sidebar:150
+- `Sidebar.tsx` (542) [client] — Sidebar:151
 - `Toast.tsx` (59) [client] — useToast:21, ToastProvider:25
 - `Topbar.tsx` (99) [client] — Topbar:15
 - `UI.tsx` (133) — TableCard:6, StatusBadge:27, StatCard:39, EmptyState:66, SectionLabel:74, DetailCard:78, ItemLine:85, InfoBanner:109, LocationBadge:117
@@ -516,7 +519,7 @@
 ## lib/
 
 - `CartContext.tsx` (76) [client] — CartItem:5, CartProvider:26, useCart:71
-- `auth.ts` (22) — ensureAuth:9
+- `auth.ts` (31) — ensureAuth:9
 - `client-alerts.ts` (109) [client] — playRiderMessageSound:3, playReminderAlarmSound:36, showBrowserNotification:73, hasSeenRiderAlert:90, markRiderAlertSeen:100
 - `constants.ts` (148) — COMMUNES:2, DELIVERY_FEES:24, ROLE_LABELS:44, STATUS_LABELS:56, STATUS_CSS:75, CATEGORIES:93, formatPrice:102, accountingActionLabel:124, formatDate:128, formatDay:137, getInitials:145
 - `hooks.ts` (33) — useResponsiveMode:3, useIsMobile:30
@@ -527,7 +530,7 @@
 - `rider-alert-events.ts` (43) — RiderAlertEvent:18, subscribeToRiderAlerts:24, emitRiderAlert:31, canReceiveRiderAlert:35
 - `seo.ts` (269) — SITE_NAME:4, SITE_URL:5, SITE_DESCRIPTION:6, SITE_TAGLINE:8, SITE_LOCALE:9, SITE_CURRENCY:10, SITE_COUNTRY:11, SITE_PHONE:12, SITE_EMAIL:13, DEFAULT_OG_IMAGE:15, getAbsoluteUrl:17, getProductUrl:23, buildProductSeoDescription:27, parseSeoKeywords:42, isGoogleAnalyticsId:50, isFacebookPixelId:54, getOrganizationSchema:61, getWebSiteSchema:90, getBreadcrumbSchema:110, getProductSchema:126, getProductListSchema:245
 - `staff-route-guard.ts` (77) — guardStaffRoutes:51, staffRouteGuardConfig:74
-- `stale-server-action.ts` (28) [client] — reloadOnStaleServerAction:5, clearStaleServerActionReloadFlag:24
+- `stale-server-action.ts` (44) [client] — APP_OUTDATED_EVENT:7, isStaleServerActionError:10, markAppOutdated:16, reloadOnStaleServerAction:21, clearStaleServerActionReloadFlag:40
 - `stock-sync.ts` (74) — syncProductStock:8, syncVariantStock:54
 - `types.ts` (68) — ProductImage:1, SubCategory:7, Category:13, ProductVariant:23, Product:32, Commune:48, StockMovement:54
 - `upload.ts` (100) — uploadImage:23, getUploadDir:68, deleteImageFromR2:76
@@ -580,7 +583,7 @@
 
 ## modules/delivery-planning/components/
 
-- `PlanningClient.tsx` (332) [client] — PlanningClient:33
+- `PlanningClient.tsx` (342) [client] — PlanningActions:34, PlanningClient:40
 
 ## modules/delivery-planning/helpers/
 
@@ -668,13 +671,13 @@
 
 ## modules/orders/actions/
 
-- `actions.ts` (84) [server] — generateUniqueRef:35, getOrCreateDefaultWarehouse:38, getOrder:43, createOrder:44, createPublicOrder:45, deleteOrder:46, updateOrderDetails:47, addOrderHistoryEntry:48, duplicateOrder:49, reprogramOrder:50, takeToProcessOrder:51, reassignOrderLead:52, updateRoundRobinActiveCommercials:53, updateOrderStatus:56, reopenDeliveryOrder:57, markPartialDelivery:58, assignOrderToDeliveryman:61, bulkAssignOrders:62, autoAssignDeliveryOrders:63, getDeliveryDispatchPlan:64, applyDeliveryDispatchPlan:65, getPendingSettlements:68, getSettlementHistory:69, createSettlement:70, getSettlementStats:71, getRiderSettlementStats:72, getDeliverySettlementDashboard:73, toggleCommercialContacted:74, getSidebarCounts:77, getDashboardStats:78, getPerformanceStats:79, getUserPerformanceDetails:80, getStockHistory:83
+- `actions.ts` (86) [server] — generateUniqueRef:35, getOrCreateDefaultWarehouse:38, getOrder:43, createOrder:44, createPublicOrder:45, deleteOrder:46, updateOrderDetails:47, addOrderHistoryEntry:48, duplicateOrder:49, reprogramOrder:50, takeToProcessOrder:51, reassignOrderLead:52, updateRoundRobinActiveCommercials:53, updateOrderStatus:56, reopenDeliveryOrder:57, markPartialDelivery:58, assignOrderToDeliveryman:61, bulkAssignOrders:62, autoAssignDeliveryOrders:63, getDeliveryDispatchPlan:64, applyDeliveryDispatchPlan:65, getDeliveryDispatchAudit:66, applyDeliveryDispatchCorrections:67, getPendingSettlements:70, getSettlementHistory:71, createSettlement:72, getSettlementStats:73, getRiderSettlementStats:74, getDeliverySettlementDashboard:75, toggleCommercialContacted:76, getSidebarCounts:79, getDashboardStats:80, getPerformanceStats:81, getUserPerformanceDetails:82, getStockHistory:85
 - `analytics-actions.ts` (692) [server] — getSidebarCounts:14, getDashboardStats:23, getPerformanceStats:335, getUserPerformanceDetails:525
 - `auto-assign-on-confirm.ts` (77) — AutoAssignResult:12, autoAssignAtConfirmation:16
-- `delivery-actions.ts` (438) [server] — assignOrderToDeliveryman:87, bulkAssignOrders:148, DeliveryDispatchOptions:239, getDeliveryDispatchPlan:250, DeliveryDispatchAssignmentInput:339, applyDeliveryDispatchPlan:341, autoAssignDeliveryOrders:427
+- `delivery-actions.ts` (609) [server] — assignOrderToDeliveryman:87, bulkAssignOrders:148, DeliveryDispatchOptions:239, DeliveryDispatchApplyOptions:248, getDeliveryDispatchPlan:254, DeliveryDispatchAssignmentInput:346, applyDeliveryDispatchPlan:348, DeliveryDispatchAuditOptions:439, getDeliveryDispatchAudit:441, DeliveryDispatchCorrectionInput:504, applyDeliveryDispatchCorrections:512, autoAssignDeliveryOrders:598
 - `dispatch-context.ts` (105) — DISPATCH_HISTORY_DAYS:12, DISPATCH_PRESENCE_DAYS:13, DISPATCH_LOAD_STATUSES:15, parseDispatchDay:17, DispatchContext:26, loadDispatchContext:39
 - `exchange-actions.ts` (208) [server] — getExchangeRequests:37, requestOrderExchange:56, reviewOrderExchange:107
-- `index.ts` (201) [server] — getExchangeRequests:8, getExchangeRequestsForUi:9, reviewOrderExchange:16, reviewOrderExchangeForUi:18, getReprogrammingRequests:37, reviewOrderReprogramming:41, generateUniqueRef:47, getOrCreateDefaultWarehouse:51, getOrder:55, createOrder:59, createPublicOrder:63, deleteOrder:67, updateOrderDetails:71, addOrderHistoryEntry:75, duplicateOrder:79, duplicateOrderForUi:84, reprogramOrder:95, takeToProcessOrder:99, reassignOrderLead:103, updateRoundRobinActiveCommercials:107, updateOrderStatus:111, reopenDeliveryOrder:115, markPartialDelivery:119, assignOrderToDeliveryman:129, bulkAssignOrders:133, autoAssignDeliveryOrders:137, getDeliveryDispatchPlan:141, applyDeliveryDispatchPlan:145, getPendingSettlements:149, getSettlementHistory:153, createSettlement:157, getSettlementStats:166, getRiderSettlementStats:170, getDeliverySettlementDashboard:174, toggleCommercialContacted:178, getSidebarCounts:182, getDashboardStats:186, getPerformanceStats:190, getUserPerformanceDetails:194, getStockHistory:198
+- `index.ts` (212) [server] — getExchangeRequests:8, getExchangeRequestsForUi:9, reviewOrderExchange:16, reviewOrderExchangeForUi:18, getReprogrammingRequests:37, reviewOrderReprogramming:41, generateUniqueRef:47, getOrCreateDefaultWarehouse:51, getOrder:55, createOrder:59, createPublicOrder:63, deleteOrder:67, updateOrderDetails:71, addOrderHistoryEntry:75, duplicateOrder:79, duplicateOrderForUi:84, reprogramOrder:95, takeToProcessOrder:99, reassignOrderLead:103, updateRoundRobinActiveCommercials:107, updateOrderStatus:111, reopenDeliveryOrder:115, markPartialDelivery:119, assignOrderToDeliveryman:129, bulkAssignOrders:133, autoAssignDeliveryOrders:137, getDeliveryDispatchPlan:141, applyDeliveryDispatchPlan:145, getDeliveryDispatchAudit:152, applyDeliveryDispatchCorrections:156, getPendingSettlements:160, getSettlementHistory:164, createSettlement:168, getSettlementStats:177, getRiderSettlementStats:181, getDeliverySettlementDashboard:185, toggleCommercialContacted:189, getSidebarCounts:193, getDashboardStats:197, getPerformanceStats:201, getUserPerformanceDetails:205, getStockHistory:209
 - `order-actions.ts` (636) [server] — getOrder:59, createOrder:72, createPublicOrder:84, deleteOrder:96, updateOrderDetails:156, addOrderHistoryEntry:388, takeToProcessOrder:400, duplicateOrder:483, reprogramOrder:514, reassignOrderLead:555, updateRoundRobinActiveCommercials:593
 - `order-creation-service.ts` (659) — OrderCreationInput:22, createOrderWithContext:70
 - `queries.ts` (401) — NonPackedOrdersPeriod:26, ORDERS_PAGE_SIZE:28, buildOrdersWhere:39, getOrdersListData:88, getOrdersStaffData:107, getToProcessOrders:125, getNonPackedOrdersData:231, getNewOrderPageData:308, getRoundRobinState:337, getNextRoundRobinCommercial:357
@@ -687,7 +690,8 @@
 
 ## modules/orders/components/
 
-- `DeliveryDispatchModal.tsx` (352) [client] — DeliveryDispatchModal:30
+- `DeliveryDispatchAuditModal.tsx` (219) [client] — DispatchAuditActions:16, DeliveryDispatchAuditModal:38
+- `DeliveryDispatchModal.tsx` (383) [client] — DispatchActions:16, DeliveryDispatchModal:38
 - `ExchangePendingReminder.tsx` (69) [client] — ExchangePendingReminder:9
 - `ExchangeRequestsClient.tsx` (120) [client] — ExchangeRequestsClient:15
 - `NewOrderClient.tsx` (1335) [client] — NewOrderClient:34
@@ -706,7 +710,7 @@
 
 ## modules/orders/helpers/
 
-- `delivery-dispatch.ts` (250) — DISPATCH_DEFAULT_CAPACITY:6, DISPATCH_ELIGIBLE_STATUSES:8, DispatchOrder:24, DispatchRider:36, DispatchInput:38, DispatchAssignment:56, DispatchSkip:62, DispatchPlan:64, normalizeCommune:77, getDispatchIneligibility:83, planDeliveryDispatch:107
+- `delivery-dispatch.ts` (384) — DISPATCH_ELIGIBLE_STATUSES:7, HABITUAL_COMMUNE_SHARE:14, DispatchOrder:18, DispatchRider:30, DispatchInput:32, DispatchAssignment:53, DispatchSkip:59, DispatchPlan:61, normalizeCommune:74, DISPATCH_UNPACKED_STATUSES:80, DispatchEligibilityOptions:90, getDispatchIneligibility:93, createTeamResolver:128, planDeliveryDispatch:160, DispatchAuditOrder:251, DispatchAuditInput:258, DispatchProblem:269, DispatchCorrection:271, auditDeliveryDispatch:280
 - `exchange-diagnostics.ts` (26) — exchangeTechnicalMessage:3, logExchangeFailure:18
 - `expedition-day.ts` (16) — getExpeditionDayRange:2, isInExpeditionDay:13
 - `index.ts` (131) — isRole:6, checkOrderAccess:13, generateUniqueRef:33, upsertCustomerFromOrder:81, getOrCreateDefaultWarehouse:109
@@ -775,7 +779,7 @@
 - `import-wix.ts` (167)
 - `repair-stock.ts` (222)
 - `rider-demo.mjs` (91)
-- `test-delivery-dispatch.mjs` (437)
+- `test-delivery-dispatch.mjs` (500)
 - `test-exchange-reminder.mjs` (47)
 - `test-expedition-day.cjs` (27)
 - `test-order-exchanges.mjs` (445)
@@ -786,4 +790,4 @@
 - `test-rider-place.mjs` (35)
 - `test-rider-stream.mjs` (46)
 - `test-rider-tracking.mjs` (145)
-- `test-stale-server-action.mjs` (30)
+- `test-stale-server-action.mjs` (50)

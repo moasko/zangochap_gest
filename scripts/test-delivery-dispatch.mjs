@@ -48,7 +48,7 @@ assert.deepEqual(Object.keys(parseDeliveryPlanning({ riders: { ok: week, bad: { 
 assert.deepEqual(plain(parseDeliveryPlanning(null)), { riders: {}, settings: { autoAssignOnConfirm: false } });
 assert.equal(parseDeliveryPlanning({ settings: { autoAssignOnConfirm: "oui" } }).settings.autoAssignOnConfirm, false, "seul true active");
 assert.equal(parseDeliveryPlanning({ settings: { autoAssignOnConfirm: true } }).settings.autoAssignOnConfirm, true);
-const { planDeliveryDispatch, normalizeCommune, getDispatchIneligibility } = engine;
+const { planDeliveryDispatch, normalizeCommune, getDispatchIneligibility, auditDeliveryDispatch } = engine;
 
 // ---------- Moteur ----------
 assert.equal(normalizeCommune("yopougon"), "Yopougon");
@@ -201,6 +201,42 @@ assert.equal(result.assignments.length, 0);
 // Aucun present : rien n'est attribue.
 result = plan([order("c1")], { presentRiderIds: [] });
 assert.equal(result.assignments.length, 0);
+
+// ---------- Controle / correction d'une repartition deja appliquee ----------
+const audit = (orders, extra = {}) => auditDeliveryDispatch({
+  orders: orders.map(([id, commune, deliverymanId]) => ({ id, ref: id, commune, deliverymanId })),
+  riders, presentRiderIds: ["cocody", "yop", "exp"], history, ...extra,
+});
+const fix = (list) => plain(list).map((c) => [c.orderId, c.fromRiderId, c.toRiderId, c.problem]);
+// Repartition conforme : rien a corriger.
+assert.deepEqual(plain(audit([["a1", "Cocody", "cocody"], ["a2", "Yopougon", "yop"], ["a3", "Hors Abidjan", "exp"]])), []);
+// Hors zone : colis de Cocody chez le livreur de Yopougon -> rendu au livreur de Cocody.
+assert.deepEqual(fix(audit([["a1", "Cocody", "yop"]])), [["a1", "yop", "cocody", "hors_zone"]]);
+// Expedition chez un livreur d'Abidjan -> livreur des expeditions.
+assert.deepEqual(fix(audit([["a1", "Hors Abidjan", "cocody"]])), [["a1", "cocody", "exp", "hors_zone"]]);
+// Livreur absent (planning) : ses colis vont aux livreurs presents de la zone.
+assert.deepEqual(fix(audit([["a1", "Cocody", "cocody"]], { presentRiderIds: ["yop", "exp"], fixedCommunes: { cocody: ["Cocody"], yop: ["Cocody"] } })),
+  [["a1", "cocody", "yop", "absent"]]);
+// Absent sans remplacant dans la zone : signale, pas de cible (jamais hors zone).
+let corrections = audit([["a1", "Cocody", "cocody"]], { presentRiderIds: ["yop", "exp"] });
+assert.deepEqual(fix(corrections), [["a1", "cocody", null, "absent"]]);
+assert.match(corrections[0].detail, /aucun livreur de Cocody disponible/);
+// Commune sans livreur connu : on ne juge pas.
+assert.deepEqual(plain(audit([["a1", "Plateau", "yop"], ["a2", "Ville inconnue", "yop"]])), []);
+// Alternance desequilibree : 5 Koumassi chez l'un, 0 chez l'autre -> 2 deplaces (3/2).
+const kou = (n, rider) => Array.from({ length: n }, (_, i) => [`k${i}`, "Koumassi", rider]);
+corrections = audit(kou(5, "cocody"), { fixedCommunes: duo });
+assert.equal(corrections.length, 2);
+assert.ok(corrections.every((c) => c.problem === "alternance" && c.fromRiderId === "cocody" && c.toRiderId === "yop"));
+// Ecart de 1 tolere (nombre impair).
+assert.deepEqual(plain(audit([...kou(2, "cocody"), ["y1", "Koumassi", "yop"]], { fixedCommunes: duo })), []);
+// Plafond depasse : surplus vers un autre livreur de la zone ayant de la place.
+corrections = audit(kou(4, "cocody"), { fixedCommunes: duo, capacities: { cocody: 2 } });
+assert.deepEqual(plain(corrections.map((c) => c.problem).sort()), ["plafond", "plafond"]);
+assert.ok(corrections.every((c) => c.toRiderId === "yop"));
+// Hors zone corrige + alternance respectee avec les colis deja la.
+corrections = audit([["x1", "Koumassi", "exp"], ["x2", "Koumassi", "exp"], ["k1", "Koumassi", "cocody"]], { fixedCommunes: duo });
+assert.deepEqual(fix(corrections), [["x1", "exp", "yop", "hors_zone"], ["x2", "exp", "cocody", "hors_zone"]]);
 
 // Determinisme : meme entree => meme plan, quel que soit l'ordre d'arrivee.
 const shuffled = [...koumassi(9)].reverse();
@@ -459,5 +495,5 @@ auto = await autoAssign.autoAssignAtConfirmation("down", actor);
 database.order.groupBy = brokenGroupBy;
 assert.deepEqual(plain(auto), { assigned: false, reason: "Erreur" });
 
-console.log("OK: moteur (zones, plafond, charge, repro, absents, determinisme) et actions (droits, presence, version, concurrence, sequentiel, compatibilite).");
+console.log("OK: moteur (zones, plafond, charge, repro, absents, determinisme, controle/correction) et actions (droits, presence, version, concurrence, sequentiel, compatibilite).");
 console.log("OK: attribution a la validation (interrupteur, partage egal, statut inchange, sans stock, cas ignores, expedition, conflit, panne).");

@@ -9,11 +9,12 @@ import { decrementStockForOrder } from "./stock";
 import { triggerAutomations } from "@/modules/automations/engine";
 import {
   DISPATCH_ELIGIBLE_STATUSES,
+  auditDeliveryDispatch,
   getDispatchIneligibility,
   normalizeCommune,
   planDeliveryDispatch,
 } from "../helpers/delivery-dispatch";
-import { loadDispatchContext, parseDispatchDay } from "./dispatch-context";
+import { DISPATCH_LOAD_STATUSES, loadDispatchContext, parseDispatchDay } from "./dispatch-context";
 
 const ASSIGNABLE_DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PARTIAL", "PREPARING", "UNAVAILABLE", "ALTERNATIVE", "PACKED", "ON_DELIVERY", "REPRO_DISPO"] as const;
 const READY_FOR_DELIVERY_STATUSES = ["PACKED", "REPRO_DISPO"] as const;
@@ -428,6 +429,169 @@ export async function applyDeliveryDispatchPlan(input: DeliveryDispatchAssignmen
   }
 
   return { success: true, assignedCount: applied.length, skipped };
+}
+
+// ============ CONTROLE ET CORRECTION DE LA REPARTITION ============
+// Mauvais partage (livreur absent, hors zone, au plafond, alternance desequilibree) :
+// le controle relit les colis deja attribues de la date et propose une correction ;
+// l'admin coche ce qu'il valide, chaque colis est ensuite deplace avec garde de version.
+
+export type DeliveryDispatchAuditOptions = { date: string; presentRiderIds?: string[] };
+
+export async function getDeliveryDispatchAudit(options: DeliveryDispatchAuditOptions) {
+  const session = await getSession();
+  assertCanManageDeliveryAssignment(session);
+
+  const { start, end } = parseDispatchDay(options.date);
+  const [context, orders] = await Promise.all([
+    loadDispatchContext(prisma, options.date),
+    prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        deliveryDate: { gte: start, lt: end },
+        deliverymanId: { not: null },
+        settlementId: null,
+        status: { in: [...DISPATCH_LOAD_STATUSES] },
+      },
+      select: {
+        id: true, ref: true, status: true, commune: true, customerName: true,
+        deliverymanId: true, total: true, deliveryFee: true, discount: true, updatedAt: true,
+      },
+      orderBy: { ref: "asc" },
+    }),
+  ]);
+  const { riders, historyByRider, fixedCommunes, capacities, defaultPresent, availability } = context;
+  const riderIds = new Set(riders.map((rider) => rider.id));
+  const presentRiderIds = options.presentRiderIds
+    ? options.presentRiderIds.filter((id) => riderIds.has(id))
+    : defaultPresent;
+
+  const corrections = auditDeliveryDispatch({
+    orders: orders.map((order) => ({ id: order.id, ref: order.ref, commune: order.commune, deliverymanId: order.deliverymanId! })),
+    riders,
+    presentRiderIds,
+    history: historyByRider,
+    fixedCommunes,
+    capacities,
+  });
+
+  const byId = new Map(orders.map((order) => [order.id, order]));
+  return {
+    date: options.date,
+    checkedCount: orders.length,
+    riders: riders.map((rider) => ({
+      id: rider.id,
+      name: rider.name,
+      present: presentRiderIds.includes(rider.id),
+      presenceReason: availability.get(rider.id)!.reason,
+      fixedCommunes: fixedCommunes[rider.id] || [],
+    })),
+    corrections: corrections.map((correction) => {
+      const order = byId.get(correction.orderId)!;
+      return {
+        ...correction,
+        ref: order.ref || order.id,
+        status: order.status,
+        commune: normalizeCommune(order.commune) || order.commune || "",
+        customerName: order.customerName,
+        amount: orderAmount(order),
+        version: order.updatedAt.toISOString(),
+      };
+    }),
+  };
+}
+
+export type DeliveryDispatchCorrectionInput = {
+  orderId: string;
+  fromRiderId: string;
+  // null : retirer le livreur (colis remis « sans livreur »).
+  toRiderId: string | null;
+  version: string;
+};
+
+export async function applyDeliveryDispatchCorrections(input: DeliveryDispatchCorrectionInput[]) {
+  const session = await getSession();
+  assertCanManageDeliveryAssignment(session);
+
+  const seen = new Set<string>();
+  const items = (Array.isArray(input) ? input : []).filter((item) => {
+    if (!item?.orderId || !item.fromRiderId || !item.version || item.toRiderId === item.fromRiderId || seen.has(item.orderId)) return false;
+    seen.add(item.orderId);
+    return true;
+  });
+  if (items.length === 0) throw new Error("Aucune correction a appliquer.");
+  if (items.length > 500) throw new Error("Trop de corrections en une seule fois.");
+
+  const targetIds = Array.from(new Set(items.flatMap((item) => (item.toRiderId ? [item.toRiderId] : []))));
+  const riders = targetIds.length
+    ? await prisma.user.findMany({ where: { id: { in: targetIds }, role: "LIVREUR" }, select: { id: true, name: true } })
+    : [];
+  const riderById = new Map(riders.map((rider) => [rider.id, rider]));
+
+  const moved: DeliveryAssignmentOrderWithItems[] = [];
+  const skipped: { orderId: string; ref: string; reason: string }[] = [];
+  let correctedCount = 0;
+
+  // Sequentiel, comme la repartition : bilan exact par colis, pool menage.
+  for (const item of items) {
+    const target = item.toRiderId ? riderById.get(item.toRiderId) : null;
+    let ref = item.orderId;
+    try {
+      if (item.toRiderId && !target) throw new Error("Livreur introuvable ou n'est plus livreur");
+      const order = await prisma.$transaction(async (tx) => {
+        const current = await tx.order.findUnique({ where: { id: item.orderId }, include: { items: true } });
+        if (!current || current.deletedAt) throw new Error("Commande introuvable");
+        ref = current.ref || current.id;
+        if (current.updatedAt.toISOString() !== item.version || current.deliverymanId !== item.fromRiderId) {
+          throw new Error("Modifiee depuis le controle");
+        }
+        assertOrderCanBeAssigned(current);
+
+        const history = Array.isArray(current.history) ? [...current.history] : [];
+        history.push({
+          at: new Date().toISOString(),
+          action: target
+            ? `Correction de repartition : ${current.deliverymanName || "livreur"} -> ${target.name}`
+            : `Correction de repartition : livreur retire (${current.deliverymanName || "livreur"})`,
+          by: session!.email,
+          byName: session!.name,
+        });
+
+        const updated = await tx.order.updateMany({
+          where: {
+            id: current.id,
+            updatedAt: current.updatedAt,
+            status: current.status,
+            deliverymanId: current.deliverymanId,
+            settlementId: null,
+          },
+          data: {
+            deliverymanId: target ? target.id : null,
+            deliverymanName: target ? target.name : null,
+            ...getAssignmentStatusUpdate(current, !target),
+            history,
+          },
+        });
+        if (updated.count !== 1) throw new Error("Modifiee pendant la correction");
+        if (target) await ensureDeliveryStock(current, session!, tx);
+        return current;
+      });
+      correctedCount++;
+      if (target) moved.push(order);
+    } catch (error) {
+      skipped.push({ orderId: item.orderId, ref, reason: error instanceof Error ? error.message : "Erreur" });
+    }
+  }
+
+  if (moved.length > 0) {
+    try {
+      await emitOnDeliveryAutomations(moved);
+    } catch (error) {
+      console.error("[delivery-correction] automations:", error);
+    }
+  }
+  if (correctedCount > 0) revalidateDeliveryAssignmentPaths();
+  return { success: true, correctedCount, skipped };
 }
 
 // Compatibilite : ancienne signature, desormais basee sur le meme moteur.

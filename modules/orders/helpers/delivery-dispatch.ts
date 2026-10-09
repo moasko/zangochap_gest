@@ -119,6 +119,44 @@ function compareRef(a: DispatchOrder, b: DispatchOrder) {
   return String(a.ref || a.id).localeCompare(String(b.ref || b.id));
 }
 
+type TeamInput = Pick<DispatchInput, "riders" | "history" | "fixedCommunes">;
+
+/**
+ * Livreurs d'une commune : ceux affectes dans le planning, sinon ses livreurs habituels
+ * (>= 15 % de ses livraisons sur 30 jours). Regle unique pour la repartition et le controle.
+ */
+export function createTeamResolver(input: TeamInput) {
+  const fixed = new Map(Object.entries(input.fixedCommunes || {})
+    .map(([riderId, list]) => [riderId, new Set(list.map((c) => normalizeCommune(c) || c))]));
+  const isFixed = (riderId: string, commune: string) => fixed.get(riderId)?.has(commune) || false;
+  const isExpeditionOnly = (riderId: string) => {
+    const communes = fixed.get(riderId);
+    return Boolean(communes && communes.size > 0 && [...communes].every((c) => EXCLUSIVE_COMMUNES.has(c)));
+  };
+  const communeTotals = new Map<string, number>();
+  for (const byCommune of Object.values(input.history)) {
+    for (const [commune, count] of Object.entries(byCommune)) {
+      communeTotals.set(commune, (communeTotals.get(commune) || 0) + count);
+    }
+  }
+  const isHabitual = (riderId: string, commune: string) => {
+    const count = input.history[riderId]?.[commune] || 0;
+    const total = communeTotals.get(commune) || 0;
+    return count > 0 && total > 0 && count / total >= HABITUAL_COMMUNE_SHARE;
+  };
+  const cache = new Map<string, { team: DispatchRider[]; fromPlanning: boolean }>();
+  return (commune: string) => {
+    if (!cache.has(commune)) {
+      const exclusive = EXCLUSIVE_COMMUNES.has(commune);
+      const assigned = input.riders.filter((rider) => isFixed(rider.id, commune));
+      cache.set(commune, assigned.length > 0
+        ? { team: assigned, fromPlanning: true }
+        : { team: input.riders.filter((rider) => isHabitual(rider.id, commune) && (exclusive || !isExpeditionOnly(rider.id))), fromPlanning: false });
+    }
+    return cache.get(commune)!;
+  };
+}
+
 export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
   const generalCapacity = input.capacity && input.capacity > 0 ? Math.floor(input.capacity) : null;
   const present = input.riders
@@ -144,25 +182,7 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
   const capacityOf = (riderId: string) => input.capacities?.[riderId] || generalCapacity || Infinity;
   const hasRoom = (riderId: string) => (loads.get(riderId) || 0) < capacityOf(riderId);
 
-  const fixed = new Map(Object.entries(input.fixedCommunes || {})
-    .map(([riderId, list]) => [riderId, new Set(list.map((c) => normalizeCommune(c) || c))]));
-  const isFixed = (riderId: string, commune: string) => fixed.get(riderId)?.has(commune) || false;
-  const isExpeditionOnly = (riderId: string) => {
-    const communes = fixed.get(riderId);
-    return Boolean(communes && communes.size > 0 && [...communes].every((c) => EXCLUSIVE_COMMUNES.has(c)));
-  };
-
-  const communeTotals = new Map<string, number>();
-  for (const byCommune of Object.values(input.history)) {
-    for (const [commune, count] of Object.entries(byCommune)) {
-      communeTotals.set(commune, (communeTotals.get(commune) || 0) + count);
-    }
-  }
-  const isHabitual = (riderId: string, commune: string) => {
-    const count = input.history[riderId]?.[commune] || 0;
-    const total = communeTotals.get(commune) || 0;
-    return count > 0 && total > 0 && count / total >= HABITUAL_COMMUNE_SHARE;
-  };
+  const teamOf = createTeamResolver(input);
 
   const assignments: DispatchAssignment[] = [];
   const skipped: DispatchSkip[] = [];
@@ -196,13 +216,7 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
   }
 
   for (const commune of [...byCommune.keys()].sort((a, b) => a.localeCompare(b))) {
-    const exclusive = EXCLUSIVE_COMMUNES.has(commune);
-    // Les livreurs de la commune : affectes dans le planning, sinon habituels (historique).
-    const assigned = input.riders.filter((rider) => isFixed(rider.id, commune));
-    const fromPlanning = assigned.length > 0;
-    const team = fromPlanning
-      ? assigned
-      : input.riders.filter((rider) => isHabitual(rider.id, commune) && (exclusive || !isExpeditionOnly(rider.id)));
+    const { team, fromPlanning } = teamOf(commune);
 
     for (const order of byCommune.get(commune)!) {
       const available = team.filter((rider) => presentIds.has(rider.id) && hasRoom(rider.id));
@@ -227,4 +241,143 @@ export function planDeliveryDispatch(input: DispatchInput): DispatchPlan {
   }
 
   return { assignments, skipped, loads: loadSummary };
+}
+
+// ============ CONTROLE / CORRECTION ============
+// Relit les colis deja attribues pour une date et signale ceux qui ne respectent pas
+// la regle (livreur absent, hors de la zone, au-dessus du plafond, alternance
+// desequilibree dans la commune), avec la correction proposee. Calcul pur.
+
+export type DispatchAuditOrder = {
+  id: string;
+  ref: string | null;
+  commune: string | null;
+  deliverymanId: string;
+};
+
+export type DispatchAuditInput = {
+  // Colis attribues pour la date et encore modifiables (pas de reglement).
+  orders: DispatchAuditOrder[];
+  riders: DispatchRider[];
+  presentRiderIds: string[];
+  history: Record<string, Record<string, number>>;
+  fixedCommunes?: Record<string, string[]>;
+  capacities?: Record<string, number>;
+  capacity?: number | null;
+};
+
+export type DispatchProblem = "absent" | "hors_zone" | "plafond" | "alternance";
+
+export type DispatchCorrection = {
+  orderId: string;
+  fromRiderId: string;
+  // null : aucun livreur de la zone disponible, l'admin choisit (ou retire le livreur).
+  toRiderId: string | null;
+  problem: DispatchProblem;
+  detail: string;
+};
+
+export function auditDeliveryDispatch(input: DispatchAuditInput): DispatchCorrection[] {
+  const generalCapacity = input.capacity && input.capacity > 0 ? Math.floor(input.capacity) : null;
+  const presentIds = new Set(input.presentRiderIds);
+  const nameOf = new Map(input.riders.map((rider) => [rider.id, rider.name]));
+  const name = (riderId: string) => nameOf.get(riderId) || "Livreur inconnu";
+  const teamOf = createTeamResolver(input);
+  const capacityOf = (riderId: string) => input.capacities?.[riderId] || generalCapacity || Infinity;
+
+  type Item = { order: DispatchAuditOrder; commune: string; riderId: string };
+  const items: Item[] = [];
+  for (const order of [...input.orders].sort((a, b) => String(a.ref || a.id).localeCompare(String(b.ref || b.id)))) {
+    const commune = normalizeCommune(order.commune);
+    // Commune inconnue : impossible de juger la zone, on ne touche pas.
+    if (commune) items.push({ order, commune, riderId: order.deliverymanId });
+  }
+
+  const corrections = new Map<string, DispatchCorrection>();
+  const loads = new Map<string, number>();
+  const communeCounts = new Map<string, number>();
+  const key = (riderId: string, commune: string) => `${riderId}|${commune}`;
+  const add = (riderId: string, commune: string, delta: number) => {
+    loads.set(riderId, (loads.get(riderId) || 0) + delta);
+    communeCounts.set(key(riderId, commune), (communeCounts.get(key(riderId, commune)) || 0) + delta);
+  };
+  const countIn = (riderId: string, commune: string) => communeCounts.get(key(riderId, commune)) || 0;
+  const hasRoom = (riderId: string) => (loads.get(riderId) || 0) < capacityOf(riderId);
+  const nextInRotation = (candidates: DispatchRider[], commune: string) => [...candidates].sort((a, b) =>
+    countIn(a.id, commune) - countIn(b.id, commune)
+    || (loads.get(a.id) || 0) - (loads.get(b.id) || 0)
+    || a.name.localeCompare(b.name))[0];
+
+  // 1. Livreur absent ou hors de la zone : le colis doit changer de livreur.
+  const kept: Item[] = [];
+  const toMove: { item: Item; problem: DispatchProblem; detail: string }[] = [];
+  for (const item of items) {
+    const { team } = teamOf(item.commune);
+    if (!presentIds.has(item.riderId)) {
+      toMove.push({ item, problem: "absent", detail: `${name(item.riderId)} n'est pas present ce jour` });
+    } else if (team.length > 0 && !team.some((rider) => rider.id === item.riderId)) {
+      toMove.push({ item, problem: "hors_zone", detail: `${name(item.riderId)} ne livre pas ${item.commune}` });
+    } else {
+      kept.push(item);
+      add(item.riderId, item.commune, 1);
+    }
+  }
+
+  // 2. Au-dessus du plafond : les derniers colis du livreur sont a redistribuer.
+  const byRider = new Map<string, Item[]>();
+  kept.forEach((item) => byRider.set(item.riderId, [...(byRider.get(item.riderId) || []), item]));
+  for (const [riderId, list] of byRider) {
+    const excess = list.length - capacityOf(riderId);
+    if (excess <= 0) continue;
+    for (const item of list.slice(-excess)) {
+      add(riderId, item.commune, -1);
+      toMove.push({ item, problem: "plafond", detail: `${name(riderId)} depasse son plafond (${capacityOf(riderId)})` });
+    }
+  }
+
+  // 3. Nouveau livreur : alternance entre les livreurs presents de la commune, jamais hors zone.
+  toMove.sort((a, b) => a.item.commune.localeCompare(b.item.commune));
+  for (const { item, problem, detail } of toMove) {
+    const { team } = teamOf(item.commune);
+    const available = team.filter((rider) => rider.id !== item.riderId && presentIds.has(rider.id) && hasRoom(rider.id));
+    const target = available.length > 0 ? nextInRotation(available, item.commune) : null;
+    if (target) add(target.id, item.commune, 1);
+    corrections.set(item.order.id, {
+      orderId: item.order.id,
+      fromRiderId: item.riderId,
+      toRiderId: target?.id ?? null,
+      problem,
+      detail: target ? detail : `${detail} · aucun livreur de ${item.commune} disponible`,
+    });
+  }
+
+  // 4. Alternance : dans une commune, l'ecart entre ses livreurs presents ne depasse pas 1 colis.
+  const movable = new Map<string, Item[]>();
+  kept.filter((item) => !corrections.has(item.order.id))
+    .forEach((item) => movable.set(key(item.riderId, item.commune), [...(movable.get(key(item.riderId, item.commune)) || []), item]));
+  const communes = [...new Set(kept.map((item) => item.commune))].sort((a, b) => a.localeCompare(b));
+  for (const commune of communes) {
+    const team = teamOf(commune).team.filter((rider) => presentIds.has(rider.id));
+    if (team.length < 2) continue;
+    for (let guard = 0; guard < 500; guard++) {
+      const sorted = [...team].sort((a, b) => countIn(b.id, commune) - countIn(a.id, commune) || a.name.localeCompare(b.name));
+      const most = sorted[0];
+      const least = nextInRotation(team.filter((rider) => rider.id !== most.id && hasRoom(rider.id)), commune);
+      if (!least || countIn(most.id, commune) - countIn(least.id, commune) <= 1) break;
+      const item = movable.get(key(most.id, commune))?.pop();
+      if (!item) break;
+      corrections.set(item.order.id, {
+        orderId: item.order.id,
+        fromRiderId: most.id,
+        toRiderId: least.id,
+        problem: "alternance",
+        detail: `${commune} : ${name(most.id)} a ${countIn(most.id, commune)} colis, ${name(least.id)} ${countIn(least.id, commune)}`,
+      });
+      add(most.id, commune, -1);
+      add(least.id, commune, 1);
+    }
+  }
+
+  const refOf = new Map(items.map((item) => [item.order.id, String(item.order.ref || item.order.id)]));
+  return [...corrections.values()].sort((a, b) => (refOf.get(a.orderId) || "").localeCompare(refOf.get(b.orderId) || ""));
 }
