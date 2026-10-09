@@ -24,6 +24,8 @@ interface DeliveryDispatchModalProps {
   orderIds?: string[];
   onClose: () => void;
   onApplied: (assignedCount: number) => void;
+  // Ouvre le controle de la repartition (correction d'un mauvais partage).
+  onOpenAudit?: () => void;
   actions?: Partial<DispatchActions>;
 }
 
@@ -33,7 +35,7 @@ const REASON_LABELS: Record<string, string> = {
   zone: "livreur habituel de la commune (alternance)",
 };
 
-export default function DeliveryDispatchModal({ date, orderIds, onClose, onApplied, actions }: DeliveryDispatchModalProps) {
+export default function DeliveryDispatchModal({ date, orderIds, onClose, onApplied, onOpenAudit, actions }: DeliveryDispatchModalProps) {
   const getPlan = actions?.getPlan ?? getDeliveryDispatchPlan;
   const applyPlan = actions?.applyPlan ?? applyDeliveryDispatchPlan;
   const [plan, setPlan] = useState<DispatchPlan | null>(null);
@@ -172,7 +174,10 @@ export default function DeliveryDispatchModal({ date, orderIds, onClose, onAppli
       onClose={busy ? () => undefined : onClose}
       title={`Repartition automatique du ${date.split("-").reverse().join("/")}`}
       footer={result ? (
-        <button className="btn-orange" onClick={onClose}>Fermer</button>
+        <>
+          {onOpenAudit && <button className="btn-secondary" onClick={onOpenAudit}>Controler la repartition</button>}
+          <button className="btn-orange" onClick={onClose}>Fermer</button>
+        </>
       ) : (
         <>
           <button className="btn-secondary" onClick={onClose} disabled={busy}>Annuler</button>

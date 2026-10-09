@@ -5,9 +5,10 @@ import Link from "next/link";
 import { TableCard, EmptyState, StatusBadge } from "@/components/UI";
 import Modal from "@/components/Modal";
 import { formatPrice, formatDate, COMMUNES } from "@/lib/constants";
-import { UserPlus, Search, X, Check, MapPin, Calendar, LayoutGrid, List, Archive, ChevronLeft, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2, Zap, AlertTriangle } from "lucide-react";
+import { UserPlus, Search, X, Check, MapPin, Calendar, LayoutGrid, List, Archive, ChevronLeft, ChevronRight, FileText, Phone, Printer, CalendarClock, Download, Undo2, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
 import { assignOrderToDeliveryman, bulkAssignOrders, updateOrderStatus, reopenDeliveryOrder } from "@/modules/orders/actions";
 import DeliveryDispatchModal, { type DispatchActions } from "@/modules/orders/components/DeliveryDispatchModal";
+import DeliveryDispatchAuditModal, { type DispatchAuditActions } from "@/modules/orders/components/DeliveryDispatchAuditModal";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { reloadOnStaleServerAction } from "@/lib/stale-server-action";
@@ -60,6 +61,7 @@ interface AdminDeliveryClientProps {
     assign?: typeof assignOrderToDeliveryman;
     bulkAssign?: typeof bulkAssignOrders;
     dispatch?: Partial<DispatchActions>;
+    audit?: Partial<DispatchAuditActions>;
   };
 }
 
@@ -185,6 +187,8 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
   const [reopenOrder, setReopenOrder] = useState<DeliveryAdminOrder | null>(null);
   const [reopenNote, setReopenNote] = useState("");
   const [dispatchRequest, setDispatchRequest] = useState<{ date: string; orderIds?: string[] } | null>(null);
+  // Controle / correction d'une repartition deja appliquee (date controlee).
+  const [auditDate, setAuditDate] = useState<string | null>(null);
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -257,6 +261,14 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
     // Le filtre de statut ne restreint pas : le serveur ne prend que les commandes pretes.
     const isNarrowed = Boolean(searchTerm.trim()) || filterDeliveryman !== "ALL" || filterCommune !== "ALL";
     setDispatchRequest({ date: filterDate, orderIds: isNarrowed ? scopeOrders.map((order) => order.id) : undefined });
+  };
+
+  const handleAudit = () => {
+    if (!filterDate) {
+      showToast("Choisissez une date de livraison avant le controle.", "error");
+      return;
+    }
+    setAuditDate(filterDate);
   };
 
   const handleReproDispo = () => {
@@ -754,6 +766,15 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
           </Link>
           <button
             type="button"
+            className="dlv-btn ghost"
+            onClick={handleAudit}
+            disabled={isPending}
+            title="Verifier les colis deja attribues (livreur absent, hors zone, au plafond, alternance) et corriger"
+          >
+            <ShieldCheck size={15} /> Controler
+          </button>
+          <button
+            type="button"
             className="dlv-btn primary"
             onClick={handleAutoAssign}
             disabled={isPending || autoAssignableOrders.length === 0}
@@ -1038,14 +1059,19 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
                   <h3>Repartition par livreur</h3>
                   <p>{boardRiders.length} livreur(s) avec des colis{hiddenBoardRiders > 0 ? ` · ${hiddenBoardRiders} sans colis masque(s)` : ""}</p>
                 </div>
-                <button
-                  type="button"
-                  className="dispatch-auto-btn"
-                  onClick={handleAutoAssign}
-                  disabled={isPending || autoAssignableOrders.length === 0}
-                >
-                  <Zap size={15} /> Repartir auto
-                </button>
+                <div className="dispatch-board-actions">
+                  <button type="button" className="dispatch-auto-btn is-ghost" onClick={handleAudit} disabled={isPending}>
+                    <ShieldCheck size={15} /> Controler
+                  </button>
+                  <button
+                    type="button"
+                    className="dispatch-auto-btn"
+                    onClick={handleAutoAssign}
+                    disabled={isPending || autoAssignableOrders.length === 0}
+                  >
+                    <Zap size={15} /> Repartir auto
+                  </button>
+                </div>
               </div>
 
               <div className="dispatch-columns">
@@ -1335,6 +1361,28 @@ export default function AdminDeliveryClient({ activeOrders, archivedOrders, deli
             onApplied={(assignedCount) => {
               setSelectedIds(new Set());
               showToast(`${assignedCount} commande(s) attribuee(s) automatiquement`, "success");
+            }}
+            onOpenAudit={() => {
+              setAuditDate(dispatchRequest.date);
+              setDispatchRequest(null);
+              router.refresh();
+            }}
+          />
+        )
+      }
+
+      {
+        auditDate && (
+          <DeliveryDispatchAuditModal
+            date={auditDate}
+            actions={demoActions?.audit}
+            onClose={() => {
+              setAuditDate(null);
+              router.refresh();
+            }}
+            onApplied={(correctedCount) => {
+              setSelectedIds(new Set());
+              showToast(`${correctedCount} colis corrige(s)`, "success");
             }}
           />
         )

@@ -1,5 +1,11 @@
 # Journal de reprise
 
+## 2026-10-09 — Contrôle et correction d’un mauvais partage
+
+- Ajout d’un **contrôle de la répartition** : bouton « Contrôler » (en-tête et vue « Par livreur » de `/zangochap-manager/admin/delivery`, et après une répartition auto). Il relit les colis déjà attribués de la date (sans règlement) et signale : livreur **absent** (planning), colis **hors zone** (livreur pas dans l’équipe de la commune), **au-dessus du plafond**, **alternance déséquilibrée** (écart ≥ 2 entre livreurs présents d’une commune). Chaque cas propose un livreur de la zone (même règle que la répartition, via `createTeamResolver`) ; sans livreur disponible, aucune cible (jamais hors zone) et la ligne n’est pas cochée.
+- Moteur pur `auditDeliveryDispatch` (`modules/orders/helpers/delivery-dispatch.ts`) ; actions `getDeliveryDispatchAudit` / `applyDeliveryDispatchCorrections` (`delivery-actions.ts`) : écriture séquentielle, garde de version + livreur d’origine, historique « Correction de répartition : A -> B », possibilité de retirer le livreur. Fenêtre `modules/orders/components/DeliveryDispatchAuditModal.tsx`.
+- Vérifié : tests moteur (8 cas de contrôle) et 11 scripts de test OK, TypeScript OK, lint 0 sur les fichiers modifiés, aperçu `/dev/delivery-preview` (2 colis Cocody chez le livreur de Yopougon détectés, corrigés vers Fatou, puis « Répartition conforme »). Non testé contre une vraie base (aucune écriture effectuée).
+
 ## 2026-10-09 — Partage par commune sans débordement hors zone ; onglets périmés après déploiement
 
 - Règle confirmée par le propriétaire : partage **par commune**, en alternance entre les livreurs de la commune (1er, 2e, 1er…), **sans équilibrage global**. Le moteur (`modules/orders/helpers/delivery-dispatch.ts`) ne fait plus de score/part équitable : livreurs affectés (planning) sinon habituels (≥ 15 % de la commune sur 30 j, `HABITUAL_COMMUNE_SHARE`) ; plafond seulement s’il est fixé (planning ou fenêtre ; plus de 18 par défaut) ; jamais de débordement hors zone : colis laissés « sans livreur » avec raison (aucun livreur affecté, absents, au plafond). Raison `charge` supprimée.

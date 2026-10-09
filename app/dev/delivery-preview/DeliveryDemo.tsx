@@ -7,7 +7,8 @@ import React, { useMemo, useRef, useState } from "react";
 import type { OrderStatus } from "@prisma/client";
 import AdminDeliveryClient from "@/app/zangochap-manager/admin/delivery/AdminDeliveryClient";
 import type { DispatchActions } from "@/modules/orders/components/DeliveryDispatchModal";
-import { normalizeCommune, planDeliveryDispatch } from "@/modules/orders/helpers/delivery-dispatch";
+import type { DispatchAuditActions } from "@/modules/orders/components/DeliveryDispatchAuditModal";
+import { auditDeliveryDispatch, normalizeCommune, planDeliveryDispatch } from "@/modules/orders/helpers/delivery-dispatch";
 
 type DemoOrder = {
   id: string; ref: string; customerName: string; customerPhone: string; customerLocation: string;
@@ -58,6 +59,8 @@ function buildOrders(day: string): DemoOrder[] {
   for (let i = 0; i < 5; i++) add("Yopougon", "PACKED", i < 3 ? "ibrahim" : null);
   for (let i = 0; i < 4; i++) add("Abobo", "ON_DELIVERY", "yao");
   for (let i = 0; i < 3; i++) add("Marcory", "ON_DELIVERY", "koffi");
+  // Mauvais partage volontaire (pour le controle) : Cocody chez le livreur de Yopougon.
+  for (let i = 0; i < 2; i++) add("Cocody", "ON_DELIVERY", "ibrahim");
   for (let i = 0; i < 3; i++) add("Plateau", "CONFIRMED", null);
   return orders;
 }
@@ -134,6 +137,39 @@ export default function DeliveryDemo() {
     },
   }), []); // eslint-disable-line react-hooks/exhaustive-deps -- setRider ne lit que setOrders (stable)
 
+  const audit = useMemo<DispatchAuditActions>(() => ({
+    getAudit: async (options) => {
+      const assigned = ordersRef.current.filter((o) => o.deliverymanId && o.deliveryDate?.startsWith(options.date));
+      const presentRiderIds = options.presentRiderIds ?? DEMO_RIDERS.filter((r) => r.recent > 0).map((r) => r.id);
+      const corrections = auditDeliveryDispatch({
+        orders: assigned.map((o) => ({ id: o.id, ref: o.ref, commune: o.commune, deliverymanId: o.deliverymanId! })),
+        riders, presentRiderIds, history: {},
+        fixedCommunes: Object.fromEntries(DEMO_RIDERS.filter((r) => r.communes.length).map((r) => [r.id, r.communes])),
+        capacities: Object.fromEntries(DEMO_RIDERS.filter((r) => r.capacity).map((r) => [r.id, r.capacity!])),
+      });
+      const byId = new Map(assigned.map((o) => [o.id, o]));
+      return {
+        date: options.date,
+        checkedCount: assigned.length,
+        riders: DEMO_RIDERS.map((r) => ({
+          id: r.id, name: r.name, present: presentRiderIds.includes(r.id),
+          presenceReason: r.recent > 0 ? "Planning" : "Sans activite recente", fixedCommunes: r.communes,
+        })),
+        corrections: corrections.map((c) => {
+          const o = byId.get(c.orderId)!;
+          return {
+            ...c, ref: o.ref, status: o.status as OrderStatus, commune: normalizeCommune(o.commune) || o.commune,
+            customerName: o.customerName, amount: o.total + o.deliveryFee - o.discount, version: o.updatedAt,
+          };
+        }),
+      };
+    },
+    applyCorrections: async (input) => {
+      input.forEach((item) => setRider([item.orderId], item.toRiderId));
+      return { success: true, correctedCount: input.length, skipped: [] };
+    },
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps -- setRider ne lit que setOrders (stable)
+
   return (
     <AdminDeliveryClient
       activeOrders={orders}
@@ -146,6 +182,7 @@ export default function DeliveryDemo() {
           return { success: true, assignedCount: ids.length, skipped: [] };
         },
         dispatch,
+        audit,
       }}
     />
   );

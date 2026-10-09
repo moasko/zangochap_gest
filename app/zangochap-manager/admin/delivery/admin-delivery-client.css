@@ -81,6 +81,8 @@
 }
 .dispatch-auto-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .dispatch-auto-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.dispatch-auto-btn.is-ghost { background: white; color: var(--orange); }
+.dispatch-board-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
 .compact-toolbar { padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: white; }
@@ -419,7 +421,7 @@
 
 @media (max-width: 760px) {
   .delivery-overview, .toolbar, .sheet-toolbar, .bulk-bar, .rider-day-strip { align-items: stretch; flex-direction: column; }
-  .overview-actions, .overview-metrics, .dispatch-auto-btn { width: 100%; }
+  .overview-actions, .overview-metrics, .dispatch-auto-btn, .dispatch-board-actions { width: 100%; }
   .rider-day-strip-head { min-width: 0; }
   .rider-day-list { width: 100%; }
   .filter-item, .search-container, .filter-reset, .date-filter-group { flex: 1 1 100%; width: 100%; }

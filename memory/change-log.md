@@ -1,5 +1,9 @@
 # Journal de mémoire IA
 
+## 2026-10-09 — Correction d’un mauvais partage
+
+- Bouton « Contrôler » sur l’écran Livraisons : détecte absent / hors zone / plafond / alternance déséquilibrée sur les colis attribués et propose un livreur de la zone ; l’admin coche et applique. Raison : demande du propriétaire (« système de correction en cas de mauvais partage »).
+
 ## 2026-10-09 — Partage par commune, onglets périmés
 
 - Répartition : alternance par commune entre livreurs affectés/habituels, sans équilibrage global ni débordement hors zone ; plafond facultatif. Déploiement : clé `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` stable recommandée (Dokploy) ; bandeau de rechargement ; journal des refus de rôle. Raison : demande du propriétaire + erreurs de prod du 08–09/10.
