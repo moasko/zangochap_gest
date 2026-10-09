@@ -186,7 +186,18 @@ export default function DeliveryDispatchAuditModal({ date, onClose, onApplied, a
                       {item.ref}
                     </label>
                     <span className="dispatch-order-meta" title={item.detail}>
-                      {item.commune} · {item.customerName} · chez <strong>{riderName.get(item.fromRiderId) || "?"}</strong> · {item.detail}
+                      {item.commune} · {item.customerName} · {item.detail}
+                    </span>
+                    <span className="audit-riders" title="Livreur actuel -> nouveau livreur">
+                      <span className="audit-rider is-from">{riderName.get(item.fromRiderId) || "Livreur inconnu"}</span>
+                      <span aria-hidden="true">→</span>
+                      <span className={`audit-rider${targets[item.orderId] ? " is-to" : " is-none"}`}>
+                        {targets[item.orderId] === UNASSIGN
+                          ? "Sans livreur"
+                          : targets[item.orderId]
+                            ? riderName.get(targets[item.orderId]) || "?"
+                            : "A choisir"}
+                      </span>
                     </span>
                     <select
                       className="field-input dispatch-move"
