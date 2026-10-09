@@ -3,6 +3,7 @@ import GlobalChatAccess from "@/components/GlobalChatAccess";
 import GlobalNotesAccess from "@/components/GlobalNotesAccess";
 import WhatsNewModal from "@/components/WhatsNewModal";
 import GlobalDepositAlert from "@/components/GlobalDepositAlert";
+import AppUpdateBanner from "@/components/AppUpdateBanner";
 import ExchangePendingReminder from "@/modules/orders/components/ExchangePendingReminder";
 import "./manager-layout.css";
 import "./chat/chat.css";
@@ -55,6 +56,7 @@ export default async function ManagerLayout({
         <GlobalNotesAccess />
       )}
       <WhatsNewModal role={user.role} />
+      <AppUpdateBanner />
       {String(user.role).toUpperCase() === "COMMERCIAL" && <GlobalDepositAlert />}
     </div>
   );

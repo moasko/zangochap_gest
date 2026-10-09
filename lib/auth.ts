@@ -14,6 +14,15 @@ export async function ensureAuth(roles?: string[]) {
   }
 
   if (roles && !roles.includes(session.role.toLowerCase()) && session.role.toLowerCase() !== 'developer') {
+    // Diagnostic sans donnee personnelle : role refuse, roles attendus et page d'origine,
+    // pour identifier en production quel ecran appelle une action interdite a ce role.
+    let page = "?";
+    try {
+      const { headers } = await import("next/headers");
+      const referer = (await headers()).get("referer");
+      page = referer ? new URL(referer).pathname : "?";
+    } catch { /* hors contexte de requete */ }
+    console.warn(`[auth] refus role=${session.role.toLowerCase()} attendus=${roles.join(",")} page=${page}`);
     throw new Error("Action non autorisée pour votre profil.");
   }
 

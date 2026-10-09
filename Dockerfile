@@ -18,6 +18,12 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 
+# Cle stable des Server Actions (secret, fourni par l'hebergeur) : sans elle, Next tire
+# une cle au hasard a chaque build et TOUS les identifiants d'actions changent, ce qui
+# casse les onglets deja ouverts apres chaque deploiement. Vide = comportement precedent.
+ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=""
+ENV NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY}
+
 # Generate Prisma Client
 RUN npx prisma generate
 RUN npm run build
