@@ -115,6 +115,9 @@ export default async function VerificationPrintPage({
             <div className="flex items-center mb-0.5 font-black uppercase text-[14px] tracking-tighter font-sans">
               <div className="cb" />
               {order.ref}
+              <span className="ml-1 truncate normal-case font-bold text-[10px] tracking-normal">
+                · {order.deliverymanName || "Non attribuée"}
+              </span>
             </div>
             {order.items.map((item) => (
               <div key={item.id} className="item-row">

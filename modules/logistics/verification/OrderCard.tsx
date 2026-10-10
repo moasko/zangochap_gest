@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, MapPin, Phone } from "lucide-react";
+import { Bike, CheckCircle2, Loader2, MapPin, Phone } from "lucide-react";
 import { StatusBadge } from "@/components/UI";
 import type { OrderWithItems, PreviewItemData } from "./types";
 
@@ -45,6 +45,17 @@ export default function OrderCard({
               <MapPin size={12} className="text-orange-500" /> {order.commune}
             </div>
           )}
+          <div
+            className={`text-xs font-bold flex items-center gap-1 px-2 py-0.5 rounded border print:border-none print:bg-transparent print:p-0 ${
+              order.deliverymanName
+                ? "bg-blue-50 text-blue-800 border-blue-100"
+                : "bg-gray-50 text-gray-500 border-gray-200"
+            }`}
+            title="Livreur a qui la commande est attribuee"
+          >
+            <Bike size={12} className={order.deliverymanName ? "text-blue-500" : "text-gray-400"} />
+            {order.deliverymanName || "Non attribuée"}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 md:gap-3">

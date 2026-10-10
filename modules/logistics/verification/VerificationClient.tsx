@@ -43,6 +43,7 @@ export default function VerificationClient() {
         (order.ref || "").toLowerCase().includes(q) ||
         (order.customerName || "").toLowerCase().includes(q) ||
         (order.customerPhone || "").toLowerCase().includes(q) ||
+        (order.deliverymanName || "").toLowerCase().includes(q) ||
         order.items?.some(item => (item.name || "").toLowerCase().includes(q));
 
       const matchesStatus = orderStatusFilter === "all" || order.status === orderStatusFilter;
@@ -105,7 +106,7 @@ export default function VerificationClient() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Rechercher une réf, un client ou un produit..."
+            placeholder="Rechercher une réf, un client, un livreur ou un produit..."
             className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-sm font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
             value={search}
             onChange={e => setSearch(e.target.value)}
