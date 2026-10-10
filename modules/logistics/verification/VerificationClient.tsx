@@ -89,18 +89,18 @@ export default function VerificationClient() {
   const isDateActive = (offset: number) =>
     date === new Date(Date.now() + offset * 86400000).toISOString().split("T")[0];
   const dateBtnClass = (active: boolean) =>
-    `flex-1 md:flex-none px-2.5 py-1.5 md:py-1 rounded-md md:rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
+    `flex-1 md:flex-none px-2.5 py-1 rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
   const filterBtnClass = (active: boolean) =>
-    `whitespace-nowrap px-2 md:px-2.5 py-1.5 md:py-1 rounded-md md:rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
+    `whitespace-nowrap px-2 md:px-2.5 py-1 rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
 
   return (
-    <div className="w-full p-3 md:p-5 animate-fade-in print:bg-white print:p-0">
-      <p className="mb-3 text-xs md:text-sm text-gray-600 print:hidden">La vérification est un contrôle distinct : cocher un article ici ne modifie pas son emballage.</p>
+    <div className="w-full p-2 md:p-4 animate-fade-in print:bg-white print:p-0">
+      <p className="mb-2 text-xs md:text-sm text-gray-600 print:hidden">La vérification est un contrôle distinct : cocher un article ici ne modifie pas son emballage.</p>
       {/* CONTROLS */}
-      <div className="mb-3 md:mb-6 print:hidden">
-        <div className="flex flex-col gap-2.5 bg-white p-3 rounded-xl border border-gray-200 shadow-sm md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3 md:p-4 md:rounded-md md:shadow-none">
+      <div className="mb-2 md:mb-4 print:hidden">
+        <div className="flex flex-col gap-2 bg-white p-2 rounded border border-gray-200 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-2.5 md:p-3">
           <div className="flex items-center gap-2">
-            <div className="flex flex-1 md:flex-none gap-1 bg-gray-100 p-1 rounded-lg md:rounded-md border border-gray-200">
+            <div className="flex flex-1 md:flex-none gap-1 bg-gray-100 p-0.5 rounded border border-gray-200">
               <button className={dateBtnClass(isDateActive(-1))} onClick={setYesterday}>Hier</button>
               <button className={dateBtnClass(isDateActive(0))} onClick={setToday}>Auj.</button>
               <button className={dateBtnClass(isDateActive(1))} onClick={setTomorrow}>Dem.</button>
@@ -108,7 +108,7 @@ export default function VerificationClient() {
             <input
               type="date"
               aria-label="Date"
-              className="h-9 md:h-auto px-2 md:px-2.5 md:py-1 rounded-lg md:rounded-md border border-orange-200 text-sm font-bold text-gray-800 bg-orange-50/30 focus:border-orange-500 focus:bg-white focus:outline-none transition-colors"
+              className="h-8 md:h-auto px-2 md:px-2.5 md:py-1 rounded border border-orange-200 text-sm font-bold text-gray-800 bg-orange-50/30 focus:border-orange-500 focus:bg-white focus:outline-none transition-colors"
               value={date}
               onChange={e => setDate(e.target.value)}
             />
@@ -120,7 +120,7 @@ export default function VerificationClient() {
             <input
               type="search"
               placeholder="Réf, commune, livreur, produit..."
-              className="w-full h-10 md:h-auto pl-9 pr-3 md:py-1.5 bg-gray-50 border border-gray-200 rounded-lg md:rounded-md text-base md:text-sm font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
+              className="w-full h-9 md:h-auto pl-9 pr-3 md:py-1.5 bg-gray-50 border border-gray-200 rounded text-base md:text-sm font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -129,7 +129,7 @@ export default function VerificationClient() {
           <div className="flex items-center gap-2">
             <select
               aria-label="État de la commande"
-              className="h-9 md:h-auto min-w-0 flex-1 md:flex-none px-2.5 md:py-1.5 bg-gray-50 border border-gray-200 rounded-lg md:rounded-md text-sm font-bold text-gray-800 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
+              className="h-8 md:h-auto min-w-0 flex-1 md:flex-none px-2.5 md:py-1.5 bg-gray-50 border border-gray-200 rounded text-sm font-bold text-gray-800 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
               value={orderStatusFilter}
               onChange={e => setOrderStatusFilter(e.target.value)}
             >
@@ -139,14 +139,14 @@ export default function VerificationClient() {
               <option value="ON_DELIVERY">En livraison</option>
               <option value="DELIVERED">Livrées</option>
             </select>
-            <div className="flex flex-shrink-0 gap-1 bg-gray-100 p-1 rounded-lg md:rounded-md border border-gray-200 md:hidden">
+            <div className="flex flex-shrink-0 gap-1 bg-gray-100 p-0.5 rounded border border-gray-200 md:hidden">
               <button className={filterBtnClass(verificationFilter === "all")} onClick={() => setVerificationFilter("all")}>Tous</button>
               <button className={filterBtnClass(verificationFilter === "unchecked")} onClick={() => setVerificationFilter("unchecked")}>À vérifier</button>
               <button className={filterBtnClass(verificationFilter === "checked")} onClick={() => setVerificationFilter("checked")}>Faits</button>
             </div>
           </div>
 
-          <div className="hidden md:flex gap-1 bg-gray-100 p-1 rounded-md border border-gray-200">
+          <div className="hidden md:flex gap-1 bg-gray-100 p-0.5 rounded border border-gray-200">
             <button className={filterBtnClass(verificationFilter === "all")} onClick={() => setVerificationFilter("all")}>Tous</button>
             <button className={filterBtnClass(verificationFilter === "unchecked")} onClick={() => setVerificationFilter("unchecked")}>À vérifier</button>
             <button className={filterBtnClass(verificationFilter === "checked")} onClick={() => setVerificationFilter("checked")}>Vérifiés</button>
@@ -154,7 +154,7 @@ export default function VerificationClient() {
 
           {visibleOrders.length > 0 && (
             <button
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white hover:bg-gray-800 rounded-md text-sm font-bold transition-colors cursor-pointer"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white hover:bg-gray-800 rounded text-sm font-bold transition-colors cursor-pointer"
               onClick={() => window.open(`/zangochap-manager/logistics/verification/print?date=${date}&type=created&autoprint=true`, '_blank')}
             >
               <Printer size={15} /> Imprimer Fiche
@@ -167,7 +167,7 @@ export default function VerificationClient() {
       {/* Progression du jour, collante (mobile) */}
       {visibleOrders.length > 0 && (
         <div
-          className="md:hidden print:hidden sticky z-[9] -mx-3 px-3 py-2 mb-3 bg-[var(--cream)] border-b border-gray-200/70"
+          className="md:hidden print:hidden sticky z-[9] -mx-2 px-2 py-1.5 mb-2 bg-[var(--cream)] border-b border-gray-200/70"
           style={{ top: stickyTop }}
         >
           <div className="flex items-baseline justify-between text-xs font-bold">
@@ -179,9 +179,9 @@ export default function VerificationClient() {
               {checkedItemsCount}/{totalItems} · {Math.round(progress)}%
             </span>
           </div>
-          <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="mt-1 h-1 bg-gray-200 rounded overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-300 ease-out ${progress >= 100 ? "bg-emerald-500" : "bg-orange-500"}`}
+              className={`h-full rounded transition-all duration-300 ease-out ${progress >= 100 ? "bg-emerald-500" : "bg-orange-500"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -190,10 +190,10 @@ export default function VerificationClient() {
 
       {/* STATS (ordinateur) */}
       {visibleOrders.length > 0 && (
-        <div className="hidden md:grid grid-cols-3 gap-3 mb-6 print:hidden">
+        <div className="hidden md:grid grid-cols-3 gap-2 mb-3 print:hidden">
           <StatCard label="Colis du jour" value={totalOrders} accent />
           <StatCard label="Articles du jour" value={totalItems} />
-          <div className="bg-white rounded-md p-3 md:p-4 border border-gray-200 flex flex-col justify-center">
+          <div className="bg-white rounded p-3 border border-gray-200 flex flex-col justify-center">
             <div className="flex justify-between items-center mb-1.5">
               <span className="text-xs font-semibold text-gray-500">Vérification terminée</span>
               <span className="text-xs font-extrabold text-orange-500">{checkedItemsCount} / {totalItems}</span>
@@ -296,7 +296,7 @@ export default function VerificationClient() {
       </div>
 
       {/* ORDERS LIST */}
-      <div className="w-full space-y-3 md:space-y-4 print:space-y-4">
+      <div className="w-full space-y-2 md:space-y-2.5 print:space-y-4">
         {visibleOrders.length === 0 ? (
           <EmptyState
             icon="📋"

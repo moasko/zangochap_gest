@@ -27,7 +27,7 @@ function ItemThumb({ item, size, onPreview }: { item: OrderItemWithProduct; size
         e.stopPropagation();
         if (imageUrl) onPreview({ url: imageUrl, name: item.name, size: item.size || undefined, color: item.color || undefined });
       }}
-      className={`${size} bg-gray-100 rounded-md flex items-center justify-center overflow-hidden border border-gray-200 flex-shrink-0 ${
+      className={`${size} bg-gray-100 rounded flex items-center justify-center overflow-hidden border border-gray-200 flex-shrink-0 ${
         imageUrl ? "cursor-zoom-in hover:opacity-80 transition-opacity" : "cursor-default"
       }`}
       aria-label={imageUrl ? `Agrandir la photo de ${item.name}` : undefined}
@@ -72,46 +72,84 @@ export default function OrderCard({
   const isTogglingAll = verifyingOrderId === order.id;
   const progress = totalQty > 0 ? (checkedCount / totalQty) * 100 : 0;
 
+  const communeBadge = order.commune ? (
+    <span className="text-xs font-bold flex items-center gap-1 bg-orange-50 text-orange-800 px-1.5 py-0.5 rounded border border-orange-100 print:border-none print:bg-transparent print:p-0">
+      <MapPin size={12} className="text-orange-500" /> {order.commune}
+    </span>
+  ) : null;
+
+  const riderBadge = (
+    <span
+      className={`text-xs font-bold flex items-center gap-1 px-1.5 py-0.5 rounded border print:border-none print:bg-transparent print:p-0 ${
+        order.deliverymanName ? "bg-blue-50 text-blue-800 border-blue-100" : "bg-gray-50 text-gray-500 border-gray-200"
+      }`}
+      title="Livreur a qui la commande est attribuee"
+    >
+      <Bike size={12} className={order.deliverymanName ? "text-blue-500" : "text-gray-400"} />
+      {order.deliverymanName || "Non attribuée"}
+    </span>
+  );
+
+  const toggleAllButton = (sizeClass: string) => (
+    <button
+      className={`flex items-center justify-center gap-1 ${sizeClass} flex-shrink-0 rounded border font-bold transition-all cursor-pointer whitespace-nowrap print:hidden ${
+        isAllChecked
+          ? "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+          : "bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600"
+      }`}
+      onClick={() => onToggleAll(order, !isAllChecked)}
+      disabled={isTogglingAll}
+    >
+      {isTogglingAll ? <Loader2 size={13} className="animate-spin" /> : isAllChecked ? "Dé-vérifier ✕" : "Tout vérifier ✓"}
+    </button>
+  );
+
   return (
     <div
-      className={`bg-white border rounded-xl md:rounded-md overflow-hidden print:overflow-visible print:border-gray-300 print:break-inside-avoid animate-fade-in transition-colors ${
+      className={`bg-white border rounded overflow-hidden print:overflow-visible print:border-gray-300 print:break-inside-avoid animate-fade-in transition-colors ${
         isAllChecked ? "border-emerald-300" : "border-gray-200"
       }`}
     >
-      {/* HEADER : reference et etat, puis commune et livreur, puis progression et action */}
-      <div className="bg-[#FCFBF9] p-3 md:px-4 md:py-3 border-b border-gray-200 flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between md:gap-4 print:bg-gray-50 print:p-2.5">
-        <div className="flex flex-col gap-2 min-w-0 md:flex-row md:items-center md:gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-sm md:text-xs font-bold bg-gray-200/70 text-gray-800 px-2 py-0.5 rounded border border-gray-300 print:bg-gray-200">
+      {/* HEADER — MOBILE : 2 lignes (reference, etat, compteur / commune, livreur, action) */}
+      <div className="md:hidden print:hidden bg-[#FCFBF9] border-b border-gray-200">
+        <div className="px-2.5 pt-2 pb-1.5 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[13px] font-bold bg-gray-200/70 text-gray-800 px-1.5 py-0.5 rounded border border-gray-300">
               {order.ref}
             </span>
-            <span className="md:hidden print:hidden">
-              <StatusBadge status={order.status} />
+            <StatusBadge status={order.status} />
+            <span className={`ml-auto text-xs font-bold ${isAllChecked ? "text-emerald-600" : "text-gray-500"}`}>
+              {checkedCount}/{totalQty}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-            {order.commune && (
-              <span className="text-xs font-bold flex items-center gap-1 bg-orange-50 text-orange-800 px-2 py-1 md:py-0.5 rounded border border-orange-100 print:border-none print:bg-transparent print:p-0">
-                <MapPin size={12} className="text-orange-500" /> {order.commune}
-              </span>
-            )}
-            <span
-              className={`text-xs font-bold flex items-center gap-1 px-2 py-1 md:py-0.5 rounded border print:border-none print:bg-transparent print:p-0 ${
-                order.deliverymanName ? "bg-blue-50 text-blue-800 border-blue-100" : "bg-gray-50 text-gray-500 border-gray-200"
-              }`}
-              title="Livreur a qui la commande est attribuee"
-            >
-              <Bike size={12} className={order.deliverymanName ? "text-blue-500" : "text-gray-400"} />
-              {order.deliverymanName || "Non attribuée"}
-            </span>
+          <div className="flex items-center gap-1.5">
+            <div className="flex flex-1 min-w-0 flex-wrap items-center gap-1">
+              {communeBadge}
+              {riderBadge}
+            </div>
+            {toggleAllButton("h-8 px-2.5 text-xs")}
           </div>
         </div>
+        <div className="h-0.5 bg-gray-200">
+          <div
+            className={`h-full transition-all duration-300 ${isAllChecked ? "bg-emerald-500" : "bg-orange-500"}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
 
-        <div className="flex items-center gap-3 md:flex-shrink-0">
-          <span className="hidden md:inline-flex print:inline-flex">
-            <StatusBadge status={order.status} />
+      {/* HEADER — ORDINATEUR ET IMPRESSION : une ligne */}
+      <div className="hidden md:flex print:flex bg-[#FCFBF9] px-3 py-2 border-b border-gray-200 items-center justify-between gap-3 print:bg-gray-50 print:p-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-xs font-bold bg-gray-200/70 text-gray-800 px-2 py-0.5 rounded border border-gray-300 print:bg-gray-200">
+            {order.ref}
           </span>
-          <div className="flex-1 md:flex-none md:w-28 min-w-0">
+          {communeBadge}
+          {riderBadge}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <StatusBadge status={order.status} />
+          <div className="w-28">
             <div className={`text-xs font-bold ${isAllChecked ? "text-emerald-600" : "text-gray-500"}`}>
               {checkedCount} / {totalQty} vérifié(s)
             </div>
@@ -122,23 +160,7 @@ export default function OrderCard({
               />
             </div>
           </div>
-          <button
-            className={`flex items-center justify-center gap-1.5 h-10 px-4 md:h-8 md:px-3 rounded-lg md:rounded-md border text-sm md:text-xs font-bold transition-all cursor-pointer whitespace-nowrap print:hidden ${
-              isAllChecked
-                ? "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                : "bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600"
-            }`}
-            onClick={() => onToggleAll(order, !isAllChecked)}
-            disabled={isTogglingAll}
-          >
-            {isTogglingAll ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : isAllChecked ? (
-              "Dé-vérifier tout ✕"
-            ) : (
-              "Tout vérifier ✓"
-            )}
-          </button>
+          {toggleAllButton("h-7 px-2.5 text-xs")}
         </div>
       </div>
 
@@ -161,12 +183,12 @@ export default function OrderCard({
                     onToggleItem(item.id, isChecked);
                   }
                 }}
-                className={`flex items-center gap-3 px-3 py-2.5 min-h-[64px] cursor-pointer select-none transition-colors active:bg-gray-100 ${
+                className={`flex items-center gap-2.5 px-2.5 py-1.5 min-h-[56px] cursor-pointer select-none transition-colors active:bg-gray-100 ${
                   isChecked ? "bg-emerald-50/70" : "bg-white"
                 }`}
               >
                 <span
-                  className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  className={`w-7 h-7 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                     isVerifying
                       ? "border-orange-400 text-orange-500 bg-orange-50"
                       : isChecked
@@ -176,7 +198,7 @@ export default function OrderCard({
                 >
                   {isVerifying ? <Loader2 size={15} className="animate-spin" /> : isChecked && <Check size={17} strokeWidth={3} />}
                 </span>
-                <ItemThumb item={item} size="w-12 h-12" onPreview={onPreview} />
+                <ItemThumb item={item} size="w-11 h-11" onPreview={onPreview} />
                 <div className="min-w-0 flex-1">
                   <div className={`font-bold text-[13px] leading-snug line-clamp-2 ${isChecked ? "text-gray-500" : "text-gray-900"}`}>
                     {item.name}
@@ -197,9 +219,9 @@ export default function OrderCard({
         <table className="w-full border-collapse text-left print:w-full">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-500 print:bg-gray-100">
-              <th className="w-10 py-2 px-3 text-center">✓</th>
-              <th className="py-2 px-3">Article</th>
-              <th className="w-16 py-2 px-3 text-center">Qté</th>
+              <th className="w-10 py-1.5 px-2.5 text-center">✓</th>
+              <th className="py-1.5 px-2.5">Article</th>
+              <th className="w-16 py-1.5 px-2.5 text-center">Qté</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -211,7 +233,7 @@ export default function OrderCard({
                   key={item.id}
                   className={`transition-colors ${isChecked ? "bg-amber-50/60 print:bg-transparent" : "hover:bg-gray-50/50"}`}
                 >
-                  <td className="py-2.5 px-3 text-center align-middle">
+                  <td className="py-2 px-2.5 text-center align-middle">
                     <button
                       className={`w-6 h-6 rounded border flex items-center justify-center transition-all cursor-pointer print:w-4 print:h-4 print:rounded-xs print:border ${
                         isVerifying
@@ -231,7 +253,7 @@ export default function OrderCard({
                       )}
                     </button>
                   </td>
-                  <td className="py-2.5 px-3 align-middle">
+                  <td className="py-2 px-2.5 align-middle">
                     <div className="flex items-center gap-2.5">
                       <ItemThumb item={item} size="w-9 h-9" onPreview={onPreview} />
                       <div className="min-w-0 flex-1">
@@ -240,7 +262,7 @@ export default function OrderCard({
                       </div>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-center align-middle">
+                  <td className="py-2 px-2.5 text-center align-middle">
                     <div className="text-base font-black text-orange-500 print:text-black">{item.qty}</div>
                   </td>
                 </tr>
