@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import DeliveryDemo from "./DeliveryDemo";
 import PlanningDemo from "./PlanningDemo";
+import VerificationClient from "@/modules/logistics/verification/VerificationClient";
 import "@/app/zangochap-manager/manager-layout.css";
 
 // Apercu local de l'ecran Livraisons et du Planning avec donnees fictives (aucune base,
 // aucune session ; actions simulees en memoire, repartition par le vrai moteur).
 // Actif uniquement en developpement avec DELIVERY_PREVIEW=1. ?view=planning pour le Planning,
-// ?clean=1 pour masquer le bandeau (enregistrement video).
+// ?clean=1 pour masquer le bandeau (enregistrement video). ?view=verification : fiche de
+// verification logistique (donnees de la base de dev en lecture ; cocher exige une session).
 export const dynamic = "force-dynamic";
 
 export default async function DeliveryPreview({ searchParams }: { searchParams: Promise<{ view?: string; clean?: string }> }) {
@@ -20,7 +22,7 @@ export default async function DeliveryPreview({ searchParams }: { searchParams: 
           Apercu local — donnees fictives, actions simulees (aucune base, aucune session).
         </p>
       )}
-      {view === "planning" ? <PlanningDemo /> : <DeliveryDemo />}
+      {view === "planning" ? <PlanningDemo /> : view === "verification" ? <VerificationClient /> : <DeliveryDemo />}
     </>
   );
 }

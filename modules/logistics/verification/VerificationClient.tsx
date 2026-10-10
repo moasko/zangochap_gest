@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Printer, Search, Loader2 } from "lucide-react";
 import { EmptyState, StatCard } from "@/components/UI";
 import { formatDay } from "@/lib/constants";
@@ -18,6 +18,18 @@ export default function VerificationClient() {
 
   const { orders, isLoading, verifyingOrderId, verifyingItemIds, toggleItem, toggleAllOrderItems } =
     useVerificationData(date);
+
+  // La barre de progression mobile colle sous la topbar (elle-meme collante) : on suit sa hauteur.
+  const [stickyTop, setStickyTop] = useState(0);
+  useEffect(() => {
+    const topbar = document.querySelector<HTMLElement>(".topbar");
+    if (!topbar) return;
+    const update = () => setStickyTop(topbar.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(topbar);
+    return () => observer.disconnect();
+  }, []);
 
   // ── Date shortcuts ──
   const setToday = () => setDate(new Date().toISOString().split("T")[0]);
@@ -41,8 +53,7 @@ export default function VerificationClient() {
       const matchesSearch =
         !q ||
         (order.ref || "").toLowerCase().includes(q) ||
-        (order.customerName || "").toLowerCase().includes(q) ||
-        (order.customerPhone || "").toLowerCase().includes(q) ||
+        (order.commune || "").toLowerCase().includes(q) ||
         (order.deliverymanName || "").toLowerCase().includes(q) ||
         order.items?.some(item => (item.name || "").toLowerCase().includes(q));
 
@@ -78,74 +89,108 @@ export default function VerificationClient() {
   const isDateActive = (offset: number) =>
     date === new Date(Date.now() + offset * 86400000).toISOString().split("T")[0];
   const dateBtnClass = (active: boolean) =>
-    `px-2.5 py-1 rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
+    `flex-1 md:flex-none px-2.5 py-1.5 md:py-1 rounded-md md:rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
   const filterBtnClass = (active: boolean) =>
-    `px-2.5 py-1 rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
+    `whitespace-nowrap px-2 md:px-2.5 py-1.5 md:py-1 rounded-md md:rounded text-xs font-bold transition-all ${active ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-white hover:text-gray-900"}`;
 
   return (
-    <div className="w-full p-5 animate-fade-in print:bg-white print:p-0">
-      <p className="mb-3 text-sm text-gray-600 print:hidden">La vérification est un contrôle distinct : cocher un article ici ne modifie pas son emballage.</p>
+    <div className="w-full p-3 md:p-5 animate-fade-in print:bg-white print:p-0">
+      <p className="mb-3 text-xs md:text-sm text-gray-600 print:hidden">La vérification est un contrôle distinct : cocher un article ici ne modifie pas son emballage.</p>
       {/* CONTROLS */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 md:p-4 rounded-md mb-6 border border-gray-200 print:hidden">
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-md border border-gray-200">
-            <button className={dateBtnClass(isDateActive(0))} onClick={setToday}>Auj.</button>
-            <button className={dateBtnClass(isDateActive(-1))} onClick={setYesterday}>Hier</button>
-            <button className={dateBtnClass(isDateActive(1))} onClick={setTomorrow}>Dem.</button>
+      <div className="mb-3 md:mb-6 print:hidden">
+        <div className="flex flex-col gap-2.5 bg-white p-3 rounded-xl border border-gray-200 shadow-sm md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3 md:p-4 md:rounded-md md:shadow-none">
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 md:flex-none gap-1 bg-gray-100 p-1 rounded-lg md:rounded-md border border-gray-200">
+              <button className={dateBtnClass(isDateActive(-1))} onClick={setYesterday}>Hier</button>
+              <button className={dateBtnClass(isDateActive(0))} onClick={setToday}>Auj.</button>
+              <button className={dateBtnClass(isDateActive(1))} onClick={setTomorrow}>Dem.</button>
+            </div>
+            <input
+              type="date"
+              aria-label="Date"
+              className="h-9 md:h-auto px-2 md:px-2.5 md:py-1 rounded-lg md:rounded-md border border-orange-200 text-sm font-bold text-gray-800 bg-orange-50/30 focus:border-orange-500 focus:bg-white focus:outline-none transition-colors"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+            {isLoading && <Loader2 size={16} className="animate-spin text-orange-500 flex-shrink-0" />}
           </div>
-          <input
-            type="date"
-            className="px-2.5 py-1 rounded-md border border-orange-200 text-sm font-bold text-gray-800 bg-orange-50/30 focus:border-orange-500 focus:bg-white focus:outline-none transition-colors"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-          />
-          {isLoading && <Loader2 size={16} className="animate-spin text-orange-500" />}
-        </div>
 
-        <div className="relative flex-1 min-w-[220px]">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Rechercher une réf, un client, un livreur ou un produit..."
-            className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-sm font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
+          <div className="relative md:flex-1 md:min-w-[220px]">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              placeholder="Réf, commune, livreur, produit..."
+              className="w-full h-10 md:h-auto pl-9 pr-3 md:py-1.5 bg-gray-50 border border-gray-200 rounded-lg md:rounded-md text-base md:text-sm font-medium text-gray-800 placeholder-gray-400 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
 
-        <div className="flex items-center gap-2.5">
-          <select
-            className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-sm font-bold text-gray-800 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
-            value={orderStatusFilter}
-            onChange={e => setOrderStatusFilter(e.target.value)}
-          >
-            <option value="all">Tous les états</option>
-            <option value="CONFIRMED">Confirmées</option>
-            <option value="PACKED">Emballées</option>
-            <option value="ON_DELIVERY">En livraison</option>
-            <option value="DELIVERED">Livrées</option>
-          </select>
-        </div>
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="État de la commande"
+              className="h-9 md:h-auto min-w-0 flex-1 md:flex-none px-2.5 md:py-1.5 bg-gray-50 border border-gray-200 rounded-lg md:rounded-md text-sm font-bold text-gray-800 focus:bg-white focus:border-orange-500 focus:outline-none transition-colors"
+              value={orderStatusFilter}
+              onChange={e => setOrderStatusFilter(e.target.value)}
+            >
+              <option value="all">Tous les états</option>
+              <option value="CONFIRMED">Confirmées</option>
+              <option value="PACKED">Emballées</option>
+              <option value="ON_DELIVERY">En livraison</option>
+              <option value="DELIVERED">Livrées</option>
+            </select>
+            <div className="flex flex-shrink-0 gap-1 bg-gray-100 p-1 rounded-lg md:rounded-md border border-gray-200 md:hidden">
+              <button className={filterBtnClass(verificationFilter === "all")} onClick={() => setVerificationFilter("all")}>Tous</button>
+              <button className={filterBtnClass(verificationFilter === "unchecked")} onClick={() => setVerificationFilter("unchecked")}>À vérifier</button>
+              <button className={filterBtnClass(verificationFilter === "checked")} onClick={() => setVerificationFilter("checked")}>Faits</button>
+            </div>
+          </div>
 
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-md border border-gray-200">
-          <button className={filterBtnClass(verificationFilter === "all")} onClick={() => setVerificationFilter("all")}>Tous</button>
-          <button className={filterBtnClass(verificationFilter === "unchecked")} onClick={() => setVerificationFilter("unchecked")}>À vérifier</button>
-          <button className={filterBtnClass(verificationFilter === "checked")} onClick={() => setVerificationFilter("checked")}>Vérifiés</button>
-        </div>
+          <div className="hidden md:flex gap-1 bg-gray-100 p-1 rounded-md border border-gray-200">
+            <button className={filterBtnClass(verificationFilter === "all")} onClick={() => setVerificationFilter("all")}>Tous</button>
+            <button className={filterBtnClass(verificationFilter === "unchecked")} onClick={() => setVerificationFilter("unchecked")}>À vérifier</button>
+            <button className={filterBtnClass(verificationFilter === "checked")} onClick={() => setVerificationFilter("checked")}>Vérifiés</button>
+          </div>
 
-        {visibleOrders.length > 0 && (
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white hover:bg-gray-800 rounded-md text-sm font-bold transition-colors cursor-pointer"
-            onClick={() => window.open(`/zangochap-manager/logistics/verification/print?date=${date}&type=created&autoprint=true`, '_blank')}
-          >
-            <Printer size={15} /> Imprimer Fiche
-          </button>
-        )}
+          {visibleOrders.length > 0 && (
+            <button
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white hover:bg-gray-800 rounded-md text-sm font-bold transition-colors cursor-pointer"
+              onClick={() => window.open(`/zangochap-manager/logistics/verification/print?date=${date}&type=created&autoprint=true`, '_blank')}
+            >
+              <Printer size={15} /> Imprimer Fiche
+            </button>
+          )}
+
+        </div>
       </div>
 
-      {/* STATS */}
+      {/* Progression du jour, collante (mobile) */}
       {visibleOrders.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 print:hidden">
+        <div
+          className="md:hidden print:hidden sticky z-[9] -mx-3 px-3 py-2 mb-3 bg-[var(--cream)] border-b border-gray-200/70"
+          style={{ top: stickyTop }}
+        >
+          <div className="flex items-baseline justify-between text-xs font-bold">
+            <span className="text-gray-600">
+              {totalOrders} colis · {totalItems} articles
+              {filteredOrders.length !== totalOrders && <span className="text-gray-400"> · {filteredOrders.length} affiché(s)</span>}
+            </span>
+            <span className={progress >= 100 ? "text-emerald-600" : "text-orange-500"}>
+              {checkedItemsCount}/{totalItems} · {Math.round(progress)}%
+            </span>
+          </div>
+          <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ease-out ${progress >= 100 ? "bg-emerald-500" : "bg-orange-500"}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* STATS (ordinateur) */}
+      {visibleOrders.length > 0 && (
+        <div className="hidden md:grid grid-cols-3 gap-3 mb-6 print:hidden">
           <StatCard label="Colis du jour" value={totalOrders} accent />
           <StatCard label="Articles du jour" value={totalItems} />
           <div className="bg-white rounded-md p-3 md:p-4 border border-gray-200 flex flex-col justify-center">
@@ -251,7 +296,7 @@ export default function VerificationClient() {
       </div>
 
       {/* ORDERS LIST */}
-      <div className="w-full space-y-4 print:space-y-4">
+      <div className="w-full space-y-3 md:space-y-4 print:space-y-4">
         {visibleOrders.length === 0 ? (
           <EmptyState
             icon="📋"
