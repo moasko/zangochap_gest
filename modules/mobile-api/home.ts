@@ -21,8 +21,11 @@ export function hrefToTarget(href: string | undefined, categories: Category[]): 
   if (product) return { type: "product", id: decodeURIComponent(product[1]) };
   const category = new URLSearchParams(search).get("category");
   if (category) {
-    const fold = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-    const match = categories.find((c) => fold(c.name) === fold(category)) ?? categories.find((c) => fold(c.name).startsWith(fold(category)));
+    // Le CMS du site ecrit « Accessoires » quand la categorie s'appelle « ACCESSOIRE » : casse,
+    // accents et pluriel ignores, puis correspondance par debut de nom (« Vetements » → « Vêtements homme »).
+    const fold = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/s\b/g, "");
+    const wanted = fold(category);
+    const match = categories.find((c) => fold(c.name) === wanted) ?? categories.find((c) => fold(c.name).startsWith(wanted));
     if (match) return { type: "category", id: match.id };
   }
   return { type: "collection", key: "new", title: "Nouveautes" };
