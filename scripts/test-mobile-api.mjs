@@ -69,6 +69,8 @@ const ids = (result) => result.items.map((item) => item.id);
 
 // Populaire : mis en avant puis ventes ; ruptures toujours a la fin.
 assert.deepEqual(plain(ids(catalog.queryCatalog(entries, {}))), ["vedette", "jacket", "sandale", "jean-lee", "recent", "rupture"]);
+// Meilleures ventes : ventes pures, la mise en avant ne compte pas.
+assert.deepEqual(plain(ids(catalog.queryCatalog(entries, { collection: "best" }))), ["jacket", "sandale", "jean-lee", "vedette", "recent", "rupture"]);
 // Recherche tolerante, pertinence d'abord.
 assert.deepEqual(plain(ids(catalog.queryCatalog(entries, { q: "jeens" }))), ["jean-lee", "rupture"]);
 // Offres : uniquement les prix barres, classees par ventes.
