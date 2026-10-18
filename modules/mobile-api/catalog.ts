@@ -77,7 +77,8 @@ export function mainImage(product: { mainImageId: string | null; images: { id: s
 
 async function loadSnapshot(): Promise<Snapshot> {
   const since = new Date(Date.now() - SALES_WINDOW_DAYS * 86_400_000);
-  const [products, sales] = await Promise.all([
+  const soldWhere = { isGift: false, order: { deletedAt: null, createdAt: { gte: since }, status: { notIn: ["CANCELLED" as const, "RETURNED" as const] } } };
+  const [products, sales, unlinkedSales] = await Promise.all([
     prisma.product.findMany({
       where: publicProductWhere,
       select: {
@@ -89,17 +90,26 @@ async function loadSnapshot(): Promise<Snapshot> {
       },
     }),
     // Ventes 30 jours (hors cadeaux, annulations et retours) : base de « populaire » et « meilleures ventes ».
-    prisma.orderItem.groupBy({
-      by: ["productId"],
-      where: {
-        productId: { not: null },
-        isGift: false,
-        order: { deletedAt: null, createdAt: { gte: since }, status: { notIn: ["CANCELLED", "RETURNED"] } },
-      },
-      _sum: { qty: true },
-    }),
+    prisma.orderItem.groupBy({ by: ["productId"], where: { ...soldWhere, productId: { not: null } }, _sum: { qty: true } }),
+    // Lignes saisies sans lien produit (call center) : rattachees ensuite par nom normalise.
+    prisma.orderItem.groupBy({ by: ["name"], where: { ...soldWhere, productId: null }, _sum: { qty: true } }),
   ]);
   const sold = new Map(sales.map((row) => [row.productId!, row._sum.qty ?? 0]));
+  const soldByName = new Map<string, number>();
+  for (const row of unlinkedSales) {
+    const key = normalizeText(row.name);
+    soldByName.set(key, (soldByName.get(key) ?? 0) + (row._sum.qty ?? 0));
+  }
+  // Un nom porte par plusieurs produits n'est attribue a aucun : pas de ventes gonflees pour des homonymes.
+  const nameCount = new Map<string, number>();
+  for (const product of products) {
+    const key = normalizeText(product.name);
+    nameCount.set(key, (nameCount.get(key) ?? 0) + 1);
+  }
+  const soldFor = (product: { id: string; name: string }) => {
+    const key = normalizeText(product.name);
+    return (sold.get(product.id) ?? 0) + (nameCount.get(key) === 1 ? soldByName.get(key) ?? 0 : 0);
+  };
   const entries = products.map((product): CatalogEntry => ({
     id: product.id,
     slug: product.slug,
@@ -111,7 +121,7 @@ async function loadSnapshot(): Promise<Snapshot> {
     categoryId: product.categoryId,
     categoryName: product.category?.name ?? null,
     stock: sellableStock(product),
-    soldCount: sold.get(product.id) ?? 0,
+    soldCount: soldFor(product),
     isFeatured: product.isFeatured,
     createdAt: product.createdAt.toISOString(),
     searchText: normalizeText(
@@ -176,10 +186,12 @@ export function queryCatalog(entries: CatalogEntry[], query: ProductQuery) {
         return a.entry.price - b.entry.price || byNewest;
       case "price_desc":
         return b.entry.price - a.entry.price || byNewest;
-      default:
-        // Populaire : mis en avant, puis ventes 30 j, puis (offres) remise, puis nouveaute.
-        return Number(b.entry.isFeatured) - Number(a.entry.isFeatured) || bySales
-          || (query.collection === "deals" ? discountRate(b.entry) - discountRate(a.entry) : 0) || byNewest;
+      default: {
+        // « Meilleures ventes » : ventes 30 j uniquement. Ailleurs (populaire, offres) : mis en avant
+        // d'abord, puis ventes, puis (offres) remise, puis nouveaute.
+        const featured = query.collection === "best" ? 0 : Number(b.entry.isFeatured) - Number(a.entry.isFeatured);
+        return featured || bySales || (query.collection === "deals" ? discountRate(b.entry) - discountRate(a.entry) : 0) || byNewest;
+      }
     }
   });
 
