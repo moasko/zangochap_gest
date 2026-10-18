@@ -31,8 +31,15 @@ export async function getDeliveryZones() {
   return buildZones(rows);
 }
 
+/** Points relais actifs, sans doublon de casse (« port bouet » / « Port bouet » = un seul point). */
 export async function getRelayPoints() {
-  return getActiveRelayPoints();
+  const seen = new Map<string, string>();
+  for (const name of await getActiveRelayPoints()) {
+    const key = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    // Garde la variante la mieux ecrite (majuscule initiale).
+    if (!seen.has(key) || /^[A-Z]/.test(name)) seen.set(key, name);
+  }
+  return [...seen.values()];
 }
 
 /** Zone officielle d'une commune saisie (null si inconnue ou inactive). */
