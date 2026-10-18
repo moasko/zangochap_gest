@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-373 fichiers de code, 79104 lignes.
+394 fichiers de code, 80504 lignes.
 
 
 ## ./
@@ -58,6 +58,58 @@
 ## app/api/import/
 
 - `route.ts` (148) — POST:39
+
+## app/api/mobile/v1/brands/
+
+- `route.ts` (11) — dynamic:3, OPTIONS:5, GET:8
+
+## app/api/mobile/v1/cart/validate/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/mobile/v1/categories/
+
+- `route.ts` (11) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/mobile/v1/delivery/relay-points/
+
+- `route.ts` (11) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/mobile/v1/delivery/zones/
+
+- `route.ts` (11) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/mobile/v1/home/
+
+- `route.ts` (11) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/mobile/v1/orders/
+
+- `route.ts` (18) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/mobile/v1/orders/[id]/
+
+- `route.ts` (17) — dynamic:6, OPTIONS:8, GET:10
+
+## app/api/mobile/v1/products/
+
+- `route.ts` (32) — dynamic:6, OPTIONS:8, GET:12
+
+## app/api/mobile/v1/products/[id]/
+
+- `route.ts` (17) — dynamic:5, OPTIONS:7, GET:9
+
+## app/api/mobile/v1/products/[id]/related/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, GET:10
+
+## app/api/mobile/v1/promos/validate/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/mobile/v1/search/suggestions/
+
+- `route.ts` (17) — dynamic:6, OPTIONS:8, GET:10
 
 ## app/api/order-exchange-reminder/
 
@@ -125,7 +177,7 @@
 
 - `DeliveryDemo.tsx` (190) [client] — DEMO_RIDERS:21, DeliveryDemo:68
 - `PlanningDemo.tsx` (48) [client] — PlanningDemo:15
-- `page.tsx` (27) — dynamic:10, DeliveryPreview:12
+- `page.tsx` (29) — dynamic:12, DeliveryPreview:14
 
 ## app/dev/personnel-preview/
 
@@ -385,7 +437,7 @@
 
 ## app/zangochap-manager/logistics/verification/print/
 
-- `page.tsx` (132) — dynamic:7, VerificationPrintPage:9
+- `page.tsx` (135) — dynamic:7, VerificationPrintPage:9
 
 ## app/zangochap-manager/logistics/warehouses/
 
@@ -648,9 +700,9 @@
 ## modules/logistics/verification/
 
 - `ImageLightbox.tsx` (96) [client] — ImageLightbox:11
-- `OrderCard.tsx` (165) [client] — OrderCard:16
+- `OrderCard.tsx` (277) [client] — OrderCard:60
 - `PrintActions.tsx` (26) [client] — PrintActions:5
-- `VerificationClient.tsx` (282) [client] — VerificationClient:12
+- `VerificationClient.tsx` (328) [client] — VerificationClient:12
 - `actions.ts` (109) [server] — toggleItemVerification:12, toggleItemPacking:102, markItemNotPacked:106
 - `hooks.ts` (123) [client] — useVerificationData:15
 - `index.ts` (9)
@@ -663,6 +715,16 @@
 ## modules/media/
 
 - `actions.ts` (87) [server] — getMediaFiles:23, deleteMediaFile:53, uploadMediaFile:75
+
+## modules/mobile-api/
+
+- `catalog.ts` (312) — HIDDEN_CATEGORY_NAMES:10, CatalogEntry:15, ProductSort:33, ProductQuery:35, publicProductWhere:55, sellableStock:62, absoluteImage:66, mainImage:73, getCatalog:135, isDeal:144, queryCatalog:153, toSummary:203, isNew:222, getProductDetail:227, getRelated:267, getPublicCategories:279, getSuggestions:303
+- `delivery.ts` (50) — DeliveryZone:6, buildZones:15, getDeliveryZones:29, getRelayPoints:35, findZone:46
+- `errors.ts` (8) — MobileApiError:2
+- `home.ts` (81) — hrefToTarget:16, getMobileHome:34
+- `http.ts` (66) — json:15, preflight:25, handle:30, rateLimit:50, intParam:61
+- `orders.ts` (310) — cartValidationSchema:24, promoValidationSchema:26, createOrderSchema:33, CreateOrderInput:54, normalizeCiPhone:59, isValidCiPhone:64, validateCart:114, validatePromo:135, createMobileOrder:153, CustomerOrder:261, toCustomerOrder:264, trackOrder:296
+- `text.ts` (72) — normalizeText:4, editDistance:14, fuzzyScore:35, compareSizes:59
 
 ## modules/notes/
 
@@ -690,7 +752,7 @@
 
 ## modules/orders/components/
 
-- `DeliveryDispatchAuditModal.tsx` (219) [client] — DispatchAuditActions:16, DeliveryDispatchAuditModal:38
+- `DeliveryDispatchAuditModal.tsx` (230) [client] — DispatchAuditActions:16, DeliveryDispatchAuditModal:38
 - `DeliveryDispatchModal.tsx` (383) [client] — DispatchActions:16, DeliveryDispatchModal:38
 - `ExchangePendingReminder.tsx` (69) [client] — ExchangePendingReminder:9
 - `ExchangeRequestsClient.tsx` (120) [client] — ExchangeRequestsClient:15
@@ -782,6 +844,7 @@
 - `test-delivery-dispatch.mjs` (500)
 - `test-exchange-reminder.mjs` (47)
 - `test-expedition-day.cjs` (27)
+- `test-mobile-api.mjs` (123)
 - `test-order-exchanges.mjs` (445)
 - `test-order-reprogramming.mjs` (3)
 - `test-rider-alerts.mjs` (62)

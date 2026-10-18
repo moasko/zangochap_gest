@@ -1,5 +1,12 @@
 # Journal de reprise
 
+## 2026-10-18 — API publique de l’application mobile client (`/api/mobile/v1`)
+
+- Nouveau module interne `modules/mobile-api/` (catalogue, accueil CMS, livraison, commandes, HTTP) et 13 routes minces `app/api/mobile/v1/` pour l’app Expo `zangochap_mobile` (dossier voisin). Mêmes règles de visibilité que la vitrine (PUBLISHED, hors « Entrepôts »/cadeaux) ; catalogue en mémoire 60 s (recherche tolérante aux fautes, tris, collections popular/best/new/deals ; ventes 30 j par produit complétées par le nom pour les lignes call center sans lien produit).
+- Commande : prix, frais (table `Commune` dédoublonnée par nom officiel), code promo ou meilleure remise automatique (`lib/promo-engine.ts`) **recalculés côté serveur** ; stock vérifié ; idempotence (clé dans `Order.history` + verrou mémoire) ; création via `createOrderWithContext` (`TO_PROCESS`, sans référence) ; trace « Commande passée depuis l’application mobile ». Suivi par id, référence ou numéro court + téléphone. Retrait = commune « Boutique » + point relais. Limitation de débit par IP (mémoire du processus, une instance).
+- Vérifié : `node scripts/test-mobile-api.mjs` (texte, tailles, filtres/tris, communes, liens CMS), TypeScript, lint ciblé ; appels réels sur la base de dev (13 routes ; 2 commandes de test « TEST APP MOBILE » au téléphone 0700000000, en `TO_PROCESS`, **à annuler** ; double envoi simultané = 1 commande ; prix falsifié ignoré ; mauvais téléphone = 404). Non déployé.
+- Données à corriger (analyse détaillée : `zangochap_mobile/docs/ANALYSE_BACKEND.md`) : catégories en double/test (« Sandale »/« Sandales », « panrtalon », « wognin »), best-seller « COMPLET JACKET NOIR » classé dans « Entrepôts », communes et points relais en double, annonce CMS « ZANGO10 » alors qu’aucun code promo n’est actif.
+
 ## 2026-10-09 — Contrôle et correction d’un mauvais partage
 
 - Ajout d’un **contrôle de la répartition** : bouton « Contrôler » (en-tête et vue « Par livreur » de `/zangochap-manager/admin/delivery`, et après une répartition auto). Il relit les colis déjà attribués de la date (sans règlement) et signale : livreur **absent** (planning), colis **hors zone** (livreur pas dans l’équipe de la commune), **au-dessus du plafond**, **alternance déséquilibrée** (écart ≥ 2 entre livreurs présents d’une commune). Chaque cas propose un livreur de la zone (même règle que la répartition, via `createTeamResolver`) ; sans livreur disponible, aucune cible (jamais hors zone) et la ligne n’est pas cochée.

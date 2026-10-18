@@ -1,5 +1,9 @@
 # Journal de mémoire IA
 
+## 2026-10-18 — API mobile client
+
+- `/api/mobile/v1` (catalogue, accueil CMS, zones, points relais, panier, promo, commande idempotente, suivi) pour l’app Expo ; totaux recalculés côté serveur. Raison : brancher l’application mobile sur les vraies données. Deux commandes de test sur la base de dev à annuler.
+
 ## 2026-10-09 — Correction d’un mauvais partage
 
 - Bouton « Contrôler » sur l’écran Livraisons : détecte absent / hors zone / plafond / alternance déséquilibrée sur les colis attribués et propose un livreur de la zone ; l’admin coche et applique. Raison : demande du propriétaire (« système de correction en cas de mauvais partage »).
