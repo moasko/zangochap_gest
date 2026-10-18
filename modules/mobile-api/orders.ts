@@ -294,11 +294,16 @@ export function toCustomerOrder(order: OrderWithItems) {
 
 /** Suivi : identifiant (ou reference) ET telephone doivent correspondre ; sinon introuvable. */
 export async function trackOrder(idOrRef: string, phone: string) {
-  const order = await prisma.order.findFirst({
-    where: { deletedAt: null, OR: [{ id: idOrRef }, { ref: idOrRef }] },
+  const value = idOrRef.trim().replace(/^#/, "");
+  // Numero court affiche au client (6 derniers caracteres de l'identifiant) tant qu'il n'y a pas de reference.
+  const shortNumber = /^[a-z0-9]{6}$/i.test(value) ? value.toLowerCase() : null;
+  const candidates = await prisma.order.findMany({
+    where: { deletedAt: null, OR: [{ id: value }, { ref: value }, ...(shortNumber ? [{ id: { endsWith: shortNumber } }] : [])] },
     include: { items: true },
+    take: 10,
   });
-  const matches = order && normalizeCiPhone(order.customerPhone).slice(-10) === normalizeCiPhone(phone).slice(-10);
-  if (!order || !matches) throw new MobileApiError("Commande introuvable. Verifiez le numero et le telephone.", 404, "NOT_FOUND");
+  const wanted = normalizeCiPhone(phone).slice(-10);
+  const order = candidates.find((candidate) => normalizeCiPhone(candidate.customerPhone).slice(-10) === wanted);
+  if (!order || wanted.length !== 10) throw new MobileApiError("Commande introuvable. Verifiez le numero et le telephone.", 404, "NOT_FOUND");
   return toCustomerOrder(order);
 }
