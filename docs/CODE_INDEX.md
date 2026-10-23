@@ -4,14 +4,14 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-394 fichiers de code, 80504 lignes.
+406 fichiers de code, 82571 lignes.
 
 
 ## ./
 
 - `eslint.config.mjs` (27)
 - `global.d.ts` (5)
-- `instrumentation-node.ts` (26)
+- `instrumentation-node.ts` (29)
 - `instrumentation.ts` (10) — register:5
 - `middleware.ts` (11) — middleware:4, config:8
 - `next.config.ts` (48)
@@ -107,6 +107,18 @@
 
 - `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
 
+## app/api/mobile/v1/push/opened/
+
+- `route.ts` (20) — dynamic:7, OPTIONS:9, POST:12
+
+## app/api/mobile/v1/push/register/
+
+- `route.ts` (18) — dynamic:7, OPTIONS:9, POST:11
+
+## app/api/mobile/v1/push/unregister/
+
+- `route.ts` (19) — dynamic:7, OPTIONS:9, POST:11
+
 ## app/api/mobile/v1/search/suggestions/
 
 - `route.ts` (17) — dynamic:6, OPTIONS:8, GET:10
@@ -182,6 +194,10 @@
 ## app/dev/personnel-preview/
 
 - `page.tsx` (19) — dynamic:8, PersonnelPreview:9
+
+## app/dev/push-preview/
+
+- `page.tsx` (36) — dynamic:5, PushPreview:8
 
 ## app/downloads/
 
@@ -292,6 +308,11 @@
 
 - `PromoClient.tsx` (491) [client] — PromoClient:12
 - `page.tsx` (43) — dynamic:7, PromosPage:9
+
+## app/zangochap-manager/admin/push/
+
+- `PushClient.tsx` (939) [client] — PushClient:423
+- `page.tsx` (24) — dynamic:7, PushPage:9
 
 ## app/zangochap-manager/admin/rider-map/
 
@@ -541,7 +562,7 @@
 - `ReasonModal.tsx` (94) [client] — ReasonModal:9
 - `ReceiptModal.tsx` (118) [client] — ReceiptModal:15
 - `RiderMessageAlertOverlay.tsx` (191) [client] — RiderMessageAlert:7, RiderMessageAlertOverlay:29
-- `Sidebar.tsx` (542) [client] — Sidebar:151
+- `Sidebar.tsx` (543) [client] — Sidebar:152
 - `Toast.tsx` (59) [client] — useToast:21, ToastProvider:25
 - `Topbar.tsx` (99) [client] — Topbar:15
 - `UI.tsx` (133) — TableCard:6, StatusBadge:27, StatCard:39, EmptyState:66, SectionLabel:74, DetailCard:78, ItemLine:85, InfoBanner:109, LocationBadge:117
@@ -602,7 +623,7 @@
 ## modules/automations/
 
 - `actions.ts` (212) [server] — AutomationRuleInput:56, getAutomationsConsoleData:84, updateAutomationSettings:107, cancelQueuedAutomation:115, saveAutomationRule:123, toggleAutomationRule:163, deleteAutomationRule:174, sendAutomationTest:185
-- `engine.ts` (630) — AUTOMATION_RULES_KEY:26, AUTOMATION_LOG_KEY:27, AUTOMATION_STATE_KEY:28, AUTOMATION_SETTINGS_KEY:29, AUTOMATION_QUEUE_KEY:30, AutomationEvent:36, readAutomationRules:43, writeAutomationRules:48, readAutomationLog:73, getAutomationSettings:79, writeAutomationSettings:97, readAutomationQueue:116, cancelQueuedJob:138, buildScheduleVariables:266, triggerAutomations:478, checkLowStockAfterOrder:490, markScheduleFiredToday:533, runScheduledAutomations:545, processAutomationQueue:589, runAutomationTick:626
+- `engine.ts` (633) — AUTOMATION_RULES_KEY:27, AUTOMATION_LOG_KEY:28, AUTOMATION_STATE_KEY:29, AUTOMATION_SETTINGS_KEY:30, AUTOMATION_QUEUE_KEY:31, AutomationEvent:37, readAutomationRules:44, writeAutomationRules:49, readAutomationLog:74, getAutomationSettings:80, writeAutomationSettings:98, readAutomationQueue:117, cancelQueuedJob:139, buildScheduleVariables:267, triggerAutomations:479, checkLowStockAfterOrder:493, markScheduleFiredToday:536, runScheduledAutomations:548, processAutomationQueue:592, runAutomationTick:629
 - `types.ts` (214) — AutomationTriggerType:7, AutomationConditionOp:13, AutomationCondition:15, AutomationAction:21, AutomationTrigger:36, AutomationRule:46, AutomationLogEntry:59, AutomationSettings:74, DEFAULT_AUTOMATION_SETTINGS:81, AutomationQueueJob:89, describeDelay:105, TRIGGER_LABELS:113, TRIGGER_DESCRIPTIONS:120, ORDER_STATUS_LABELS:128, OPERATOR_LABELS:147, ConditionFieldDef:157, CONDITION_FIELDS:166, conditionFieldsForTrigger:177, AUTOMATION_VARIABLES:182, DAY_LABELS:199, describeTrigger:201
 
 ## modules/boutique/
@@ -724,6 +745,7 @@
 - `home.ts` (81) — hrefToTarget:16, getMobileHome:34
 - `http.ts` (66) — json:15, preflight:25, handle:30, rateLimit:50, intParam:61
 - `orders.ts` (310) — cartValidationSchema:24, promoValidationSchema:26, createOrderSchema:33, CreateOrderInput:54, normalizeCiPhone:59, isValidCiPhone:64, validateCart:114, validatePromo:135, createMobileOrder:153, CustomerOrder:261, toCustomerOrder:264, trackOrder:296
+- `push.ts` (16) — registerPushSchema:4, unregisterPushSchema:13, openedPushSchema:15
 - `text.ts` (72) — normalizeText:4, editDistance:14, fuzzyScore:35, compareSizes:59
 
 ## modules/notes/
@@ -803,6 +825,14 @@
 - `ProductForm.tsx` (1112) [client] — ProductForm:150
 - `ProductsClient.tsx` (568) [client] — ProductsClient:33
 - `ShortagesClient.tsx` (106) [client] — ShortagesClient:12
+
+## modules/push/
+
+- `actions.ts` (229) [server] — PushCampaignInput:49, getPushConsoleData:58, savePushCampaign:77, cancelPushCampaign:133, deletePushCampaign:144, previewPushAudience:156, sendPushTest:176, updatePushSettings:203, searchPushProducts:215, resolvePushLink:224
+- `engine.ts` (329) — orderNumber:62, RegisterInput:68, registerDevice:77, unregisterDevice:105, resolveAudience:150, sendCampaign:184, processDueCampaigns:214, recordCampaignOpen:223, notifyOrderStatusPush:230, sendTestPush:262, processReceipts:277, runPushTick:291, devicesOverview:300
+- `expo.ts` (76) — ExpoMessage:9, ExpoTicket:22, isExpoPushToken:26, sendExpoMessages:38, ExpoReceipt:59, getExpoReceipts:62
+- `store.ts` (175) — withLock:49, deviceId:58, readDevice:62, writeDevice:66, readAllDevices:70, deactivateDevices:75, readCampaigns:84, updateCampaigns:89, patchCampaign:101, readPushSettings:109, writePushSettings:119, appendPushLog:125, readPushLog:129, PendingReceipt:135, addPendingReceipts:137, takeDueReceipts:146, readDailyCounts:161, bumpDailyCounts:166
+- `types.ts` (179) — PushTarget:6, PushTopic:15, TOPIC_LABELS:17, PushPlatform:23, PushDevice:25, PushAudience:43, PushCampaignStatus:54, PushCampaign:56, OrderStatusTemplate:73, PushSettings:75, ORDER_PUSH_STATUSES:89, DEFAULT_ORDER_TEMPLATES:100, DEFAULT_PUSH_SETTINGS:111, ORDER_PUSH_VARIABLES:121, PUSH_COLLECTIONS:129, PushLogEntry:136, TITLE_MAX:145, BODY_MAX:146, describeAudience:148, describeTarget:163
 
 ## modules/rider-tracking/
 

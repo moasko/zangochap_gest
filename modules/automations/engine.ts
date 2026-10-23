@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import prisma from "@/lib/prisma";
 import { appendCmsLog, readCmsLog, sendWhatsAppContent } from "@/modules/whatsapp/send";
 import { normalizeIvorianPhone, orderTemplateVariables, renderTemplate } from "@/modules/whatsapp/message-builder";
+import { notifyOrderStatusPush } from "@/modules/push/engine";
 import {
   type AutomationCondition,
   type AutomationLogEntry,
@@ -481,6 +482,8 @@ export async function triggerAutomations(event: AutomationEvent) {
   } catch (error) {
     console.error("[automations] Erreur moteur :", error);
   }
+  // Suivi de commande dans l'application mobile (modeles reglables dans la console Push).
+  if (event.type === "order.status_changed") await notifyOrderStatusPush(event.order, event.toStatus);
 }
 
 // ============ STOCK BAS ============

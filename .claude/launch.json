@@ -4,8 +4,30 @@
     {
       "name": "zangochap-dev",
       "runtimeExecutable": "npx.cmd",
-      "runtimeArgs": ["next", "dev", "-p", "3100"],
-      "port": 3100
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "-p",
+        "3100"
+      ],
+      "port": 3100,
+      "env": {
+        "PUSH_PREVIEW": "1"
+      }
+    },
+    {
+      "name": "zangochap-mobile-web",
+      "runtimeExecutable": "npm.cmd",
+      "runtimeArgs": [
+        "--prefix",
+        "G:/projet reel/zangochap_mobile",
+        "run",
+        "web",
+        "--",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
     }
   ]
 }

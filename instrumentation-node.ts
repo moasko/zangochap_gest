@@ -5,6 +5,7 @@
 // puis regles planifiees, chacune avec son propre anti-doublon en CmsContent.
 
 import { runAutomationTick } from "@/modules/automations/engine";
+import { runPushTick } from "@/modules/push/engine";
 
 // En dev, ce module peut etre recharge lors des recompilations : un seul timer.
 const globalScope = globalThis as typeof globalThis & { __zangochapAutomationTimer?: boolean };
@@ -18,6 +19,8 @@ if (!globalScope.__zangochapAutomationTimer) {
     running = true;
     try {
       await runAutomationTick();
+      // Campagnes push programmees et accuses Expo.
+      await runPushTick();
     } finally {
       running = false;
     }

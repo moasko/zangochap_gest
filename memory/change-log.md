@@ -1,5 +1,9 @@
 # Journal de mémoire IA
 
+## 2026-10-23 — Notifications push mobiles
+
+- `modules/push/`, console `admin/push`, routes `api/mobile/v1/push/*`, hook dans `triggerAutomations` et tick minute. Stockage CmsContent (pas de migration). Raison : demande du propriétaire (« push notifications avancées et gérables depuis zangochap gest »).
+
 ## 2026-10-18 — API mobile client
 
 - `/api/mobile/v1` (catalogue, accueil CMS, zones, points relais, panier, promo, commande idempotente, suivi) pour l’app Expo ; totaux recalculés côté serveur. Raison : brancher l’application mobile sur les vraies données. Deux commandes de test sur la base de dev à annuler.

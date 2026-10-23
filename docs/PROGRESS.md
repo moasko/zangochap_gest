@@ -1,5 +1,13 @@
 # Journal de reprise
 
+## 2026-10-23 — Notifications push de l’application mobile, pilotées depuis la gestion
+
+- Module `modules/push/` (types purs, stockage CmsContent sans migration, client Expo Push, moteur, server actions admin/développeur) et console `/zangochap-manager/admin/push` (menu « Notifications push ») : campagnes (titre, message, image, cible produit/rayon/collection/lien du site, audience tous/clients récents/inactifs/plateforme/numéros, envoi immédiat, programmé ou brouillon, test sur un téléphone, duplication, annulation, statistiques envoyées/ouvertes), modèles de **suivi de commande** par statut (variables `{reference}` `{client}` `{montant}` `{statut}`), appareils (numéros masqués), réglages (interrupteur général, plage horaire des campagnes programmées, plafond quotidien par appareil) et journal.
+- Stockage : `push:device:<sha256 du jeton>` (un enregistrement par appareil), `push:campaigns`, `push:settings`, `push:log`, `push:receipts`, `push:daily`. Désabonnés des offres jamais ciblés par les campagnes. Appareils désinstallés désactivés via tickets et accusés Expo (`DeviceNotRegistered`).
+- Suivi de commande : `triggerAutomations` appelle `notifyOrderStatusPush` à chaque `order.status_changed` (appareils liés par identifiant de commande ou numéro, abonnés au suivi). Planificateur : `runPushTick` ajouté au tick minute de `instrumentation-node.ts` (campagnes programmées + accusés).
+- API mobile : `POST /api/mobile/v1/push/register`, `/push/unregister`, `/push/opened`. Variable facultative `EXPO_ACCESS_TOKEN` (seulement si la sécurité des envois push est activée sur Expo).
+- Vérifié : TypeScript, lint ciblé (0 erreur), routes appelées sur la base de dev (validation, enregistrement, ouverture ; 1 appareil fictif `ExponentPushToken[zc-local-test-0001]` enregistré en dev), format de réponse Expo contrôlé, console vue via `/dev/push-preview` (données fictives, `PUSH_PREVIEW=1`). **Non vérifié** : envoi réel sur un téléphone (nécessite Firebase/FCM dans EAS et un nouveau build de l’app). Non déployé.
+
 ## 2026-10-18 — API publique de l’application mobile client (`/api/mobile/v1`)
 
 - Nouveau module interne `modules/mobile-api/` (catalogue, accueil CMS, livraison, commandes, HTTP) et 13 routes minces `app/api/mobile/v1/` pour l’app Expo `zangochap_mobile` (dossier voisin). Mêmes règles de visibilité que la vitrine (PUBLISHED, hors « Entrepôts »/cadeaux) ; catalogue en mémoire 60 s (recherche tolérante aux fautes, tris, collections popular/best/new/deals ; ventes 30 j par produit complétées par le nom pour les lignes call center sans lien produit).
