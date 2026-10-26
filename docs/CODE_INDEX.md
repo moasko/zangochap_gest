@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-406 fichiers de code, 82571 lignes.
+411 fichiers de code, 82759 lignes.
 
 
 ## ./
@@ -59,6 +59,14 @@
 
 - `route.ts` (148) — POST:39
 
+## app/api/mobile/v1/auth/login/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/mobile/v1/auth/register/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
+
 ## app/api/mobile/v1/brands/
 
 - `route.ts` (11) — dynamic:3, OPTIONS:5, GET:8
@@ -82,6 +90,14 @@
 ## app/api/mobile/v1/home/
 
 - `route.ts` (11) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/mobile/v1/me/
+
+- `route.ts` (13) — dynamic:6, OPTIONS:8, GET:10
+
+## app/api/mobile/v1/me/orders/
+
+- `route.ts` (14) — dynamic:6, OPTIONS:8, GET:11
 
 ## app/api/mobile/v1/orders/
 
@@ -740,11 +756,12 @@
 ## modules/mobile-api/
 
 - `catalog.ts` (312) — HIDDEN_CATEGORY_NAMES:10, CatalogEntry:15, ProductSort:33, ProductQuery:35, publicProductWhere:55, sellableStock:62, absoluteImage:66, mainImage:73, getCatalog:135, isDeal:144, queryCatalog:153, toSummary:203, isNew:222, getProductDetail:227, getRelated:267, getPublicCategories:279, getSuggestions:303
+- `customer.ts` (139) — registerSchema:41, loginSchema:48, registerCustomer:76, loginCustomer:93, requireCustomer:106, customerProfile:124, customerOrders:129
 - `delivery.ts` (50) — DeliveryZone:6, buildZones:15, getDeliveryZones:29, getRelayPoints:35, findZone:46
 - `errors.ts` (8) — MobileApiError:2
 - `home.ts` (81) — hrefToTarget:16, getMobileHome:34
 - `http.ts` (66) — json:15, preflight:25, handle:30, rateLimit:50, intParam:61
-- `orders.ts` (310) — cartValidationSchema:24, promoValidationSchema:26, createOrderSchema:33, CreateOrderInput:54, normalizeCiPhone:59, isValidCiPhone:64, validateCart:114, validatePromo:135, createMobileOrder:153, CustomerOrder:261, toCustomerOrder:264, trackOrder:296
+- `orders.ts` (300) — cartValidationSchema:24, promoValidationSchema:26, createOrderSchema:33, CreateOrderInput:54, normalizeCiPhone:59, isValidCiPhone:64, validateCart:116, validatePromo:135, createMobileOrder:153, CustomerOrder:251, toCustomerOrder:254, trackOrder:286
 - `push.ts` (16) — registerPushSchema:4, unregisterPushSchema:13, openedPushSchema:15
 - `text.ts` (72) — normalizeText:4, editDistance:14, fuzzyScore:35, compareSizes:59
 

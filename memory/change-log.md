@@ -1,5 +1,9 @@
 # Journal de mémoire IA
 
+## 2026-10-26 — API mobile v1.1.1
+
+- Ruptures commandables, retrait en boutique refusé, comptes clients (`modules/mobile-api/customer.ts`, routes `auth/*`, `me`, `me/orders`). Raison : demande du propriétaire pour la mise à jour 1.1.1 de l'app.
+
 ## 2026-10-23 — Notifications push mobiles
 
 - `modules/push/`, console `admin/push`, routes `api/mobile/v1/push/*`, hook dans `triggerAutomations` et tick minute. Stockage CmsContent (pas de migration). Raison : demande du propriétaire (« push notifications avancées et gérables depuis zangochap gest »).

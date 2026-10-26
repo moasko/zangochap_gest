@@ -1,5 +1,12 @@
 # Journal de reprise
 
+## 2026-10-26 — API mobile : ruptures commandables, fin du retrait en boutique, comptes clients
+
+- Commandes depuis l'app : les articles en rupture sont acceptés (comme sur le site, collecte/réassort avant l'emballage) ; seul un produit retiré ou une taille supprimée est refusé (`UNAVAILABLE`). `cart/validate` ne signale plus le stock.
+- Retrait en boutique supprimé : `POST /orders` en mode `pickup` → 400 `PICKUP_UNAVAILABLE` (y compris pour l'app 1.1.0).
+- Comptes clients : `modules/mobile-api/customer.ts` + routes `auth/register`, `auth/login`, `me`, `me/orders`. Mêmes comptes que le site (User `CUSTOMER`, téléphone + bcrypt) ; e-mail technique `<tel>@clients.zangochap.invalid` si absent (jamais renvoyé). Jeton porteur HS256 (audience `zangochap-mobile-customer`, 180 j) signé avec une clé **dérivée** de `JWT_SECRET` (distincte des sessions staff). `me/orders` = commandes au numéro du compte, tous canaux. CORS : en-tête `Authorization` autorisé. Limites : 5 inscriptions / 30 min, 10 connexions / 15 min par IP.
+- Vérifié : TypeScript, lint ciblé, `node scripts/test-mobile-api.mjs`, appels réels sur la base de dev (compte de test « Test App Compte » 0759152112 créé en dev ; doublon, mauvais mot de passe, jeton absent/forgé refusés ; panier avec variante en rupture accepté ; retrait refusé).
+
 ## 2026-10-23 — Notifications push de l’application mobile, pilotées depuis la gestion
 
 - Module `modules/push/` (types purs, stockage CmsContent sans migration, client Expo Push, moteur, server actions admin/développeur) et console `/zangochap-manager/admin/push` (menu « Notifications push ») : campagnes (titre, message, image, cible produit/rayon/collection/lien du site, audience tous/clients récents/inactifs/plateforme/numéros, envoi immédiat, programmé ou brouillon, test sur un téléphone, duplication, annulation, statistiques envoyées/ouvertes), modèles de **suivi de commande** par statut (variables `{reference}` `{client}` `{montant}` `{statut}`), appareils (numéros masqués), réglages (interrupteur général, plage horaire des campagnes programmées, plafond quotidien par appareil) et journal.
