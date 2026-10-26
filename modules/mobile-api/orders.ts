@@ -7,7 +7,7 @@ import { getBestAutomaticDiscount, validatePromoCode, type CartItem } from "@/li
 import { createOrderWithContext } from "@/modules/orders/actions/order-creation-service";
 
 import { absoluteImage, publicProductWhere } from "./catalog";
-import { findZone, getRelayPoints } from "./delivery";
+import { findZone } from "./delivery";
 import { MobileApiError } from "./errors";
 
 // ---------- Schemas d'entree ----------
@@ -104,7 +104,9 @@ async function resolveLines(lines: z.infer<typeof lineSchema>[]): Promise<Resolv
       unitPrice: product ? Number(product.price) : 0,
       stock,
       qty: line.qty,
-      available: Boolean(product) && variant !== undefined && stock > 0,
+      // Les articles en rupture restent commandables (collecte/reassort avant l'emballage,
+      // comme sur le site) : seul un produit retire ou une taille supprimee est indisponible.
+      available: Boolean(product) && variant !== undefined,
     };
   });
 }
@@ -117,11 +119,9 @@ export async function validateCart(input: z.infer<typeof cartValidationSchema>) 
     const clientPrice = input.lines[index].unitPrice;
     const message = !line.available
       ? "Cet article n'est plus disponible."
-      : line.stock < line.qty
-        ? `Plus que ${line.stock} disponible(s).`
-        : clientPrice !== undefined && clientPrice !== line.unitPrice
-          ? "Le prix a change."
-          : undefined;
+      : clientPrice !== undefined && clientPrice !== line.unitPrice
+        ? "Le prix a change."
+        : undefined;
     return { key: line.key, available: line.available, stock: line.stock, unitPrice: line.unitPrice, ...(message ? { message } : {}) };
   });
   return { ok: lines.every((line) => !("message" in line)), lines };
@@ -174,33 +174,23 @@ async function createOnce(input: CreateOrderInput): Promise<CustomerOrder> {
   const phone = normalizeCiPhone(input.customer.phone);
   const phone2 = input.customer.phone2 && isValidCiPhone(input.customer.phone2) ? normalizeCiPhone(input.customer.phone2) : undefined;
 
-  // Livraison : commune officielle et frais du serveur ; retrait = point relais existant.
-  const pickup = input.delivery.mode === "pickup";
-  const zone = await findZone(pickup ? "Boutique" : input.delivery.commune);
-  if (!zone) throw new MobileApiError("Cette commune n'est pas desservie.", 400, "INVALID_COMMUNE");
-  let location: string;
-  if (pickup) {
-    const relays = await getRelayPoints();
-    const relay = relays.find((name) => name.toLowerCase() === (input.delivery.relayPoint ?? "").toLowerCase()) ?? (relays.length === 1 ? relays[0] : null);
-    if (!relay) throw new MobileApiError("Choisissez la boutique de retrait.", 400, "RELAY_REQUIRED");
-    location = relay;
-  } else {
-    if (input.delivery.address.length < 3 || input.delivery.landmark.length < 3) {
-      throw new MobileApiError("Indiquez votre quartier et un repere.", 400, "ADDRESS_REQUIRED");
-    }
-    location = `${input.delivery.address} — Repere : ${input.delivery.landmark}`;
+  // Livraison a domicile uniquement (le retrait en boutique n'est plus propose) ;
+  // commune officielle et frais lus cote serveur.
+  if (input.delivery.mode === "pickup") {
+    throw new MobileApiError("Le retrait en boutique n'est plus disponible. Choisissez la livraison.", 400, "PICKUP_UNAVAILABLE");
   }
+  const zone = await findZone(input.delivery.commune);
+  if (!zone) throw new MobileApiError("Cette commune n'est pas desservie.", 400, "INVALID_COMMUNE");
+  if (input.delivery.address.length < 3 || input.delivery.landmark.length < 3) {
+    throw new MobileApiError("Indiquez votre quartier et un repere.", 400, "ADDRESS_REQUIRED");
+  }
+  const location = `${input.delivery.address} — Repere : ${input.delivery.landmark}`;
 
   // Articles : prix et disponibilite lus en base.
   const lines = await resolveLines(input.lines);
-  const unavailable = lines.find((line) => !line.available || line.stock < line.qty);
-  if (unavailable) {
-    throw new MobileApiError(
-      unavailable.available ? `Stock insuffisant pour ${unavailable.name} (${unavailable.stock} disponible(s)).` : `${unavailable.name} n'est plus disponible.`,
-      409,
-      "OUT_OF_STOCK",
-    );
-  }
+  // Rupture acceptee (article collecte avant l'emballage) ; produit retire refuse.
+  const unavailable = lines.find((line) => !line.available);
+  if (unavailable) throw new MobileApiError(`${unavailable.name} n'est plus disponible.`, 409, "UNAVAILABLE");
 
   // Remise : code saisi (valide par le moteur), sinon meilleure remise automatique, comme sur le site.
   const cart = toPromoCart(lines);
