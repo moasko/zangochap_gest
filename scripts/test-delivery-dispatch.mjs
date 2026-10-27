@@ -247,6 +247,7 @@ let session;
 let store;
 let automationCalls;
 let stockCalls;
+const riderPushes = [];
 let concurrentTx;
 let maxConcurrentTx;
 const at = (iso) => new Date(iso);
@@ -321,6 +322,7 @@ const actions = load("modules/orders/actions/delivery-actions.ts", {
   "../helpers": { isRole: (s, ...roles) => roles.includes(String(s.role).toLowerCase()) },
   "./stock": { decrementStockForOrder: async () => { stockCalls++; } },
   "@/modules/automations/engine": { triggerAutomations: async () => { automationCalls++; } },
+  "@/modules/push/engine": { notifyRiderAssignments: async (list) => { riderPushes.push(...list); } },
   "../helpers/delivery-dispatch": engine,
   "./dispatch-context": dispatchContext,
 });

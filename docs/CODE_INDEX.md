@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-427 fichiers de code, 83243 lignes.
+432 fichiers de code, 83646 lignes.
 
 
 ## ./
@@ -191,6 +191,14 @@
 
 - `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
 
+## app/api/rider/v1/cash-report/
+
+- `route.ts` (27) — dynamic:7, OPTIONS:9, GET:12, POST:21
+
+## app/api/rider/v1/history/
+
+- `route.ts` (44) — dynamic:8, OPTIONS:10, GET:22
+
 ## app/api/rider/v1/me/
 
 - `route.ts` (14) — dynamic:4, OPTIONS:6, GET:8
@@ -202,6 +210,10 @@
 ## app/api/rider/v1/orders/[id]/alert/
 
 - `route.ts` (14) — dynamic:6, OPTIONS:8, POST:11
+
+## app/api/rider/v1/orders/[id]/note/
+
+- `route.ts` (18) — dynamic:7, OPTIONS:9, POST:12
 
 ## app/api/rider/v1/orders/[id]/partial/
 
@@ -694,7 +706,7 @@
 
 ## modules/chat/
 
-- `actions.ts` (734) [server] — ChatRoomKey:11, ChatMessageView:13, ChatUserView:28, ChatSnapshot:38, RiderMessageAlertView:52, getChatSnapshot:102, getUnreadRiderAlerts:192, getLatestUnreadRiderMessage:224, sendChatMessage:257, toggleCommercialPause:317, getCurrentCommercialPauseStatus:337, recordCommercialContactReport:358, acceptOrderAfterCommercialIntervention:427, sendOrderSupportAlert:549, markChatMessagesRead:690, deleteChatMessage:715
+- `actions.ts` (741) [server] — ChatRoomKey:12, ChatMessageView:14, ChatUserView:29, ChatSnapshot:39, RiderMessageAlertView:53, getChatSnapshot:103, getUnreadRiderAlerts:193, getLatestUnreadRiderMessage:225, sendChatMessage:258, toggleCommercialPause:318, getCurrentCommercialPauseStatus:338, recordCommercialContactReport:359, acceptOrderAfterCommercialIntervention:428, sendOrderSupportAlert:556, markChatMessagesRead:697, deleteChatMessage:722
 
 ## modules/cms/
 
@@ -887,17 +899,18 @@
 ## modules/push/
 
 - `actions.ts` (229) [server] — PushCampaignInput:49, getPushConsoleData:58, savePushCampaign:77, cancelPushCampaign:133, deletePushCampaign:144, previewPushAudience:156, sendPushTest:176, updatePushSettings:203, searchPushProducts:215, resolvePushLink:224
-- `engine.ts` (361) — orderNumber:62, RegisterInput:68, registerDevice:78, unregisterDevice:107, resolveAudience:152, sendCampaign:186, processDueCampaigns:216, recordCampaignOpen:225, notifyOrderStatusPush:232, notifyRiderAssignments:265, sendTestPush:292, processReceipts:307, runPushTick:321, devicesOverview:330
+- `engine.ts` (373) — orderNumber:62, RegisterInput:68, registerDevice:78, unregisterDevice:107, resolveAudience:152, sendCampaign:186, processDueCampaigns:216, recordCampaignOpen:225, notifyOrderStatusPush:232, notifyRiderAssignments:265, notifyRider:291, sendTestPush:304, processReceipts:319, runPushTick:333, devicesOverview:342
 - `expo.ts` (76) — ExpoMessage:9, ExpoTicket:22, isExpoPushToken:26, sendExpoMessages:38, ExpoReceipt:59, getExpoReceipts:62
 - `store.ts` (175) — withLock:49, deviceId:58, readDevice:62, writeDevice:66, readAllDevices:70, deactivateDevices:75, readCampaigns:84, updateCampaigns:89, patchCampaign:101, readPushSettings:109, writePushSettings:119, appendPushLog:125, readPushLog:129, PendingReceipt:135, addPendingReceipts:137, takeDueReceipts:146, readDailyCounts:161, bumpDailyCounts:166
 - `types.ts` (181) — PushTarget:6, PushTopic:15, TOPIC_LABELS:17, PushPlatform:23, PushDevice:25, PushAudience:45, PushCampaignStatus:56, PushCampaign:58, OrderStatusTemplate:75, PushSettings:77, ORDER_PUSH_STATUSES:91, DEFAULT_ORDER_TEMPLATES:102, DEFAULT_PUSH_SETTINGS:113, ORDER_PUSH_VARIABLES:123, PUSH_COLLECTIONS:131, PushLogEntry:138, TITLE_MAX:147, BODY_MAX:148, describeAudience:150, describeTarget:165
 
 ## modules/rider-app/
 
-- `api.ts` (85) — requireRider:11, statusSchema:18, partialSchema:26, alertSchema:33, setMissionStatus:52, setPartialDelivery:64, sendMissionAlert:75
+- `api.ts` (87) — requireRider:11, statusSchema:18, partialSchema:26, alertSchema:33, setMissionStatus:54, setPartialDelivery:66, sendMissionAlert:77
 - `auth.ts` (44) — riderLoginSchema:11, loginRider:22
 - `orders.ts` (161) — loadRiderOrders:8
 - `proof.ts` (64) — proofSchema:15, addDeliveryProof:34, readDeliveryProof:59
+- `tour.ts` (121) — noteSchema:13, addMissionNote:25, cashDaySchema:44, cashReportSchema:45, cashSummary:54, submitCashReport:97
 
 ## modules/rider-tracking/
 
@@ -937,13 +950,14 @@
 - `import-wix.ts` (167)
 - `repair-stock.ts` (222)
 - `rider-demo.mjs` (91)
-- `test-delivery-dispatch.mjs` (500)
+- `test-delivery-dispatch.mjs` (502)
 - `test-exchange-reminder.mjs` (47)
 - `test-expedition-day.cjs` (27)
 - `test-mobile-api.mjs` (123)
 - `test-order-exchanges.mjs` (445)
 - `test-order-reprogramming.mjs` (3)
-- `test-rider-alerts.mjs` (62)
+- `test-rider-alerts.mjs` (63)
+- `test-rider-app.mjs` (169)
 - `test-rider-history.mjs` (54)
 - `test-rider-personnel.mjs` (162)
 - `test-rider-place.mjs` (35)

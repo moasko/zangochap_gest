@@ -45,7 +45,9 @@ async function alreadyApplied(orderId: string, riderId: string, target: string[]
 
 function rethrow(error: unknown): never {
   if (error instanceof MobileApiError) throw error;
-  const message = error instanceof Error ? error.message : "Action impossible.";
+  // Message metier des actions existantes (« mission plus active », « deja reglee »...).
+  const raw = error && typeof (error as { message?: unknown }).message === "string" ? (error as { message: string }).message : "";
+  const message = raw || "Action impossible.";
   throw new MobileApiError(message, 422, "REJECTED");
 }
 
