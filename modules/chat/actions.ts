@@ -1,5 +1,6 @@
 "use server";
 
+import { notifyRider } from "@/modules/push/engine";
 import { revalidatePath } from "next/cache";
 import type { ChatMessageScope, Prisma, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -534,6 +535,12 @@ export async function acceptOrderAfterCommercialIntervention(data: {
     scope: "DIRECT",
     targetRole: null,
     recipientId: order.deliverymanId,
+  });
+  // Application livreur : la confirmation arrive aussi en notification push.
+  await notifyRider(order.deliverymanId, {
+    title: "Client disponible ✅",
+    body: `Commande ${order.ref || order.id} : livraison confirmee par ${user.name}.`,
+    data: { kind: "rider.confirmation", orderId: order.id },
   });
 
   revalidatePath("/zangochap-manager/chat");

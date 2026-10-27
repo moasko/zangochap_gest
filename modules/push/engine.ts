@@ -287,6 +287,18 @@ export async function notifyRiderAssignments(assignments: Array<{ riderId: strin
   }
 }
 
+/** Message direct a un livreur (confirmation commerciale, consigne du bureau). */
+export async function notifyRider(riderId: string | null | undefined, message: { title: string; body: string; data?: Record<string, unknown> }) {
+  try {
+    if (!riderId || !(await readPushSettings()).enabled) return;
+    const devices = (await readAllDevices()).filter((device) => device.active && device.riderId === riderId);
+    if (!devices.length) return;
+    await deliver(devices.map((device) => ({ device, title: message.title, body: message.body, channelId: "missions", data: message.data ?? {} })));
+  } catch (error) {
+    console.error("[push] Message livreur :", error);
+  }
+}
+
 // ============ TEST ============
 
 export async function sendTestPush(input: { phone?: string; deviceId?: string; title: string; body: string; target: PushTarget; image?: string | null }) {
