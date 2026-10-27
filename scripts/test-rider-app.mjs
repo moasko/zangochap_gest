@@ -21,6 +21,8 @@ const users = [
 let orders = [];
 let trackingState = null;
 let points = [];
+const cms = new Map();
+const chat = [];
 
 const matches = (row, where) => Object.entries(where).every(([key, condition]) => {
   if (key === "AND") return condition.every((c) => matches(row, c));
@@ -36,14 +38,18 @@ const matches = (row, where) => Object.entries(where).every(([key, condition]) =
 
 const database = {
   $queryRaw: async () => [],
-  $transaction: async (fn) => fn(database),
+  $transaction: async (fn) => (Array.isArray(fn) ? Promise.all(fn) : fn(database)),
   user: {
     findUnique: async ({ where }) => users.find((u) => (where.id ? u.id === where.id : u.email === where.email)) ?? null,
     findFirst: async ({ where }) => users.find((u) => (where.email ? u.email === where.email : where.phone?.in?.includes(u.phone)) && (!where.role || u.role === where.role)) ?? null,
   },
   order: {
     findUnique: async ({ where }) => orders.find((o) => o.id === where.id) ?? null,
+    update: async ({ where, data }) => { const order = orders.find((o) => o.id === where.id); Object.assign(order, data); return order; },
+    findMany: async ({ where }) => orders.filter((o) => o.deliverymanId === where.deliverymanId || o.lastDeliveryAttemptRiderId === where.lastDeliveryAttemptRiderId).filter((o) => where.status.in.includes(o.status)).filter((o) => (where.settlementId === null ? !o.settlementId : true)),
   },
+  cmsContent: { findUnique: async ({ where }) => cms.get(where.key) ?? null, create: async ({ data }) => { cms.set(data.key, data); return data; } },
+  chatMessage: { create: async ({ data }) => { chat.push(data); return data; } },
   riderTrackingState: {
     upsert: async ({ create, update }) => { trackingState = trackingState ? { ...trackingState, ...update } : { ...create }; },
     updateMany: async ({ where, data }) => { if (!trackingState || !matches(trackingState, where)) return { count: 0 }; trackingState = { ...trackingState, ...data }; return { count: 1 }; },
@@ -135,4 +141,28 @@ assert.deepEqual(accepted, [true, true, false, true], "lot hors ligne : points e
 assert.equal(points.length, 3);
 assert.equal((await ingest.ingestTracking("rider-1", point(9, 0))).accepted, false, "envoi direct d'un point ancien refuse (comportement web inchange)");
 
+// ---------- Traces de tournee et cloture de caisse ----------
+const tour = load("modules/rider-app/tour.ts");
+const rider = { id: "rider-1", email: "rider@example.invalid", name: "Livreur Test" };
+orders = [
+  { id: "o-3", ref: "AB1", customerName: "Client A", status: "ON_DELIVERY", deliverymanId: "rider-1", history: [], total: 10000, deliveryFee: 1500, discount: 0, amountReceived: null, settlementId: null },
+  { id: "o-4", ref: "AB2", customerName: "Client B", status: "DELIVERED", deliverymanId: "rider-1", history: [], total: 8000, deliveryFee: 1500, discount: 500, amountReceived: 9000, settlementId: null },
+  { id: "o-5", ref: "AB3", customerName: "Client C", status: "ON_DELIVERY", deliverymanId: "rider-2", history: [] },
+];
+const at = new Date().toISOString();
+await tour.addMissionNote(rider, "o-3", { kind: "en_route", at });
+assert.equal((await tour.addMissionNote(rider, "o-3", { kind: "en_route", at })).replayed, true, "trace rejouee : pas de doublon");
+assert.equal(orders[0].history.length, 1);
+await tour.addMissionNote(rider, "o-3", { kind: "call_no_answer", calls: 2 });
+assert.match(orders[0].history[1].action, /2 appel/);
+await assert.rejects(tour.addMissionNote(rider, "o-5", { kind: "en_route" }), (error) => error.status === 403, "trace sur la mission d'un autre livreur refusee");
+const day = new Date().toISOString().slice(0, 10);
+const report = await tour.submitCashReport(rider, { date: day, note: "RAS" });
+assert.equal(report.toSettle, 9000, "montant a regulariser calcule par le serveur (montant encaisse saisi)");
+assert.equal(chat.length, 2, "cloture envoyee aux administrateurs et aux comptables");
+assert.ok(chat.every((message) => message.scope === "ROLE" && message.body.startsWith("[CAISSE LIVREUR]")));
+assert.equal((await tour.submitCashReport(rider, { date: day })).alreadySubmitted, true, "une seule cloture par jour");
+assert.equal(chat.length, 2);
+
+console.log("OK: traces de tournee (rejeu, droits), cloture de caisse (calcul serveur, envoi bureau, unicite).");
 console.log("OK: connexion livreur (e-mail/telephone, roles, pas d'enumeration), jeton d'app en en-tete (audience obligatoire, cookie staff intact), rejeu hors ligne idempotent, refus metier en 422, GPS par lots. Base simulee uniquement.");

@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-429 fichiers de code, 83450 lignes.
+432 fichiers de code, 83646 lignes.
 
 
 ## ./
@@ -191,6 +191,10 @@
 
 - `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
 
+## app/api/rider/v1/cash-report/
+
+- `route.ts` (27) — dynamic:7, OPTIONS:9, GET:12, POST:21
+
 ## app/api/rider/v1/history/
 
 - `route.ts` (44) — dynamic:8, OPTIONS:10, GET:22
@@ -206,6 +210,10 @@
 ## app/api/rider/v1/orders/[id]/alert/
 
 - `route.ts` (14) — dynamic:6, OPTIONS:8, POST:11
+
+## app/api/rider/v1/orders/[id]/note/
+
+- `route.ts` (18) — dynamic:7, OPTIONS:9, POST:12
 
 ## app/api/rider/v1/orders/[id]/partial/
 
@@ -902,6 +910,7 @@
 - `auth.ts` (44) — riderLoginSchema:11, loginRider:22
 - `orders.ts` (161) — loadRiderOrders:8
 - `proof.ts` (64) — proofSchema:15, addDeliveryProof:34, readDeliveryProof:59
+- `tour.ts` (121) — noteSchema:13, addMissionNote:25, cashDaySchema:44, cashReportSchema:45, cashSummary:54, submitCashReport:97
 
 ## modules/rider-tracking/
 
@@ -948,7 +957,7 @@
 - `test-order-exchanges.mjs` (445)
 - `test-order-reprogramming.mjs` (3)
 - `test-rider-alerts.mjs` (63)
-- `test-rider-app.mjs` (139)
+- `test-rider-app.mjs` (169)
 - `test-rider-history.mjs` (54)
 - `test-rider-personnel.mjs` (162)
 - `test-rider-place.mjs` (35)
