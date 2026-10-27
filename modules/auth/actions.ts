@@ -1,12 +1,13 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { getJwtSecret, RIDER_APP_AUDIENCE } from "@/lib/jwt-secret";
 import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 
@@ -28,36 +29,6 @@ const accountUpdateSchema = accountSchema.partial().refine(
 function optionalText(value: string | undefined) {
   const normalized = value?.trim();
   return normalized || null;
-}
-
-// Le secret de signature ne doit JAMAIS retomber sur une valeur connue : l'ancien
-// fallback etait present dans le repo, donc n'importe qui pouvait forger un cookie
-// de session admin. On accepte tout secret defini par l'exploitant (sa longueur est
-// son choix) ; on refuse seulement l'absence de secret ou l'ancienne valeur fuitee.
-const LEAKED_DEFAULT_SECRET = "zangochap-super-secret-key-change-me-in-prod";
-
-function resolveJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (secret && secret !== LEAKED_DEFAULT_SECRET) return secret;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "JWT_SECRET manquant ou egal a l'ancienne valeur par defaut compromise. Definissez un secret unique avant de demarrer en production.",
-    );
-  }
-  console.warn("[auth] JWT_SECRET absent : secret de developpement ephemere utilise. Ne pas utiliser en production.");
-  return "dev-only-insecure-secret-do-not-use-in-production";
-}
-
-// Resolution paresseuse : `next build` importe ce module (NODE_ENV=production)
-// sans disposer des secrets d'exploitation. La verification ne doit donc
-// s'executer qu'au premier usage reel (login / lecture de session), pas a l'import.
-let cachedJwtSecret: Uint8Array | null = null;
-
-function getJwtSecret() {
-  if (!cachedJwtSecret) {
-    cachedJwtSecret = new TextEncoder().encode(resolveJwtSecret());
-  }
-  return cachedJwtSecret;
 }
 
 export async function loginAction(formData: FormData) {
@@ -119,11 +90,20 @@ export async function logoutAction() {
   redirect("/zangochap-manager");
 }
 
+async function readSessionPayload() {
+  const sessionToken = (await cookies()).get("zc_session")?.value;
+  if (sessionToken) return (await jwtVerify(sessionToken, getJwtSecret())).payload;
+  // Application livreur : jeton en en-tete Authorization, audience dediee obligatoire.
+  const authorization = (await headers()).get("authorization") ?? "";
+  if (!authorization.startsWith("Bearer ")) return null;
+  const { payload } = await jwtVerify(authorization.slice(7).trim(), getJwtSecret(), { audience: RIDER_APP_AUDIENCE });
+  return payload;
+}
+
 export async function getSession() {
   try {
-    const sessionToken = (await cookies()).get("zc_session")?.value;
-    if (!sessionToken) return null;
-    const { payload } = await jwtVerify(sessionToken, getJwtSecret());
+    const payload = await readSessionPayload();
+    if (!payload) return null;
 
     const sessionId = typeof payload.id === "string" ? payload.id : "";
     const sessionEmail = typeof payload.email === "string"

@@ -32,6 +32,8 @@ export type PushDevice = {
   // l'appareil aux notifications de suivi de ces commandes.
   phones: string[];
   orderIds: string[];
+  // Appareil de l'application livreur (compte LIVREUR) : jamais cible par les campagnes clients.
+  riderId?: string | null;
   active: boolean;
   createdAt: string;
   lastSeenAt: string;

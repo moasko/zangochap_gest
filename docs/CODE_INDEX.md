@@ -4,7 +4,7 @@
 > Format : `fichier` (lignes) [server|client] — symboles exportés `nom:ligne`. Les lignes sont indicatives : confirmer avec Grep avant édition.
 > Gros fichiers (≥ 1500 lignes) : plan interne (**composant**, handler, «SECTION JSX») ; lire uniquement la plage utile (Read offset/limit).
 > CSS, SQL, JSON, Markdown, `public/`, `scratch/` exclus. Contexte métier : `docs/PROJECT_MAP.md`.
-411 fichiers de code, 82759 lignes.
+427 fichiers de code, 83243 lignes.
 
 
 ## ./
@@ -26,6 +26,10 @@
 - `page.tsx` (163) — dynamic:21, generateMetadata:23, HomePage:88
 - `robots.ts` (25) — robots:4
 - `sitemap.ts` (81) — dynamic:5, sitemap:7
+
+## app/api/admin/delivery-proof/[key]/
+
+- `route.ts` (20) — dynamic:6, GET:11
 
 ## app/api/admin/rider-tracking/
 
@@ -181,7 +185,43 @@
 
 ## app/api/rider-tracking/
 
-- `route.ts` (89) — dynamic:7, POST:10
+- `route.ts` (37) — dynamic:7, POST:10
+
+## app/api/rider/v1/auth/login/
+
+- `route.ts` (16) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/rider/v1/me/
+
+- `route.ts` (14) — dynamic:4, OPTIONS:6, GET:8
+
+## app/api/rider/v1/missions/
+
+- `route.ts` (16) — dynamic:5, OPTIONS:7, GET:10
+
+## app/api/rider/v1/orders/[id]/alert/
+
+- `route.ts` (14) — dynamic:6, OPTIONS:8, POST:11
+
+## app/api/rider/v1/orders/[id]/partial/
+
+- `route.ts` (13) — dynamic:6, OPTIONS:8, POST:10
+
+## app/api/rider/v1/orders/[id]/proof/
+
+- `route.ts` (19) — dynamic:7, OPTIONS:9, POST:12
+
+## app/api/rider/v1/orders/[id]/status/
+
+- `route.ts` (14) — dynamic:6, OPTIONS:8, POST:11
+
+## app/api/rider/v1/push/register/
+
+- `route.ts` (22) — dynamic:8, OPTIONS:10, POST:15
+
+## app/api/rider/v1/tracking/
+
+- `route.ts` (37) — dynamic:9, OPTIONS:11, POST:19
 
 ## app/api/sidebar-counts/
 
@@ -545,7 +585,7 @@
 - `DeliveryClient.tsx` (589) [client] — DeliveryClient:81
 - `history-actions.ts` (66) [server] — getRiderHistory:10
 - `layout.tsx` (65) — metadata:9, viewport:15, RiderLayout:22
-- `page.tsx` (174) — dynamic:9, DeliveryPage:11
+- `page.tsx` (23) — dynamic:7, DeliveryPage:9
 - `types.ts` (80) — RiderOrderItem:3, RiderOrder:17, RiderStats:61, RiderRevenueDay:70
 - `utils.ts` (40) — calculateOrderDueTotal:3, calculateOrderCollectionTotal:13, calculatePartialSummary:24
 
@@ -613,6 +653,7 @@
 - `constants.ts` (148) — COMMUNES:2, DELIVERY_FEES:24, ROLE_LABELS:44, STATUS_LABELS:56, STATUS_CSS:75, CATEGORIES:93, formatPrice:102, accountingActionLabel:124, formatDate:128, formatDay:137, getInitials:145
 - `hooks.ts` (33) — useResponsiveMode:3, useIsMobile:30
 - `image-upload-helper.ts` (40) — processImageFile:1
+- `jwt-secret.ts` (35) — RIDER_APP_AUDIENCE:12, getJwtSecret:31
 - `prisma.ts` (41)
 - `promo-engine.ts` (341) — CartItem:3, getBestAutomaticDiscount:10, validatePromoCode:179
 - `registry.tsx` (23) [client] — StyledJsxRegistry:7
@@ -633,7 +674,7 @@
 
 ## modules/auth/
 
-- `actions.ts` (348) [server] — loginAction:63, logoutAction:117, getSession:122, getAccounts:185, createAccount:209, updateAccount:273, deleteAccount:331
+- `actions.ts` (328) [server] — loginAction:34, logoutAction:88, getSession:103, getAccounts:165, createAccount:189, updateAccount:253, deleteAccount:311
 - `customer-actions.ts` (71) [server] — registerCustomer:9, loginCustomer:42, logoutCustomer:66
 
 ## modules/automations/
@@ -775,7 +816,7 @@
 - `actions.ts` (86) [server] — generateUniqueRef:35, getOrCreateDefaultWarehouse:38, getOrder:43, createOrder:44, createPublicOrder:45, deleteOrder:46, updateOrderDetails:47, addOrderHistoryEntry:48, duplicateOrder:49, reprogramOrder:50, takeToProcessOrder:51, reassignOrderLead:52, updateRoundRobinActiveCommercials:53, updateOrderStatus:56, reopenDeliveryOrder:57, markPartialDelivery:58, assignOrderToDeliveryman:61, bulkAssignOrders:62, autoAssignDeliveryOrders:63, getDeliveryDispatchPlan:64, applyDeliveryDispatchPlan:65, getDeliveryDispatchAudit:66, applyDeliveryDispatchCorrections:67, getPendingSettlements:70, getSettlementHistory:71, createSettlement:72, getSettlementStats:73, getRiderSettlementStats:74, getDeliverySettlementDashboard:75, toggleCommercialContacted:76, getSidebarCounts:79, getDashboardStats:80, getPerformanceStats:81, getUserPerformanceDetails:82, getStockHistory:85
 - `analytics-actions.ts` (692) [server] — getSidebarCounts:14, getDashboardStats:23, getPerformanceStats:335, getUserPerformanceDetails:525
 - `auto-assign-on-confirm.ts` (77) — AutoAssignResult:12, autoAssignAtConfirmation:16
-- `delivery-actions.ts` (609) [server] — assignOrderToDeliveryman:87, bulkAssignOrders:148, DeliveryDispatchOptions:239, DeliveryDispatchApplyOptions:248, getDeliveryDispatchPlan:254, DeliveryDispatchAssignmentInput:346, applyDeliveryDispatchPlan:348, DeliveryDispatchAuditOptions:439, getDeliveryDispatchAudit:441, DeliveryDispatchCorrectionInput:504, applyDeliveryDispatchCorrections:512, autoAssignDeliveryOrders:598
+- `delivery-actions.ts` (628) [server] — assignOrderToDeliveryman:106, bulkAssignOrders:167, DeliveryDispatchOptions:258, DeliveryDispatchApplyOptions:267, getDeliveryDispatchPlan:273, DeliveryDispatchAssignmentInput:365, applyDeliveryDispatchPlan:367, DeliveryDispatchAuditOptions:458, getDeliveryDispatchAudit:460, DeliveryDispatchCorrectionInput:523, applyDeliveryDispatchCorrections:531, autoAssignDeliveryOrders:617
 - `dispatch-context.ts` (105) — DISPATCH_HISTORY_DAYS:12, DISPATCH_PRESENCE_DAYS:13, DISPATCH_LOAD_STATUSES:15, parseDispatchDay:17, DispatchContext:26, loadDispatchContext:39
 - `exchange-actions.ts` (208) [server] — getExchangeRequests:37, requestOrderExchange:56, reviewOrderExchange:107
 - `index.ts` (212) [server] — getExchangeRequests:8, getExchangeRequestsForUi:9, reviewOrderExchange:16, reviewOrderExchangeForUi:18, getReprogrammingRequests:37, reviewOrderReprogramming:41, generateUniqueRef:47, getOrCreateDefaultWarehouse:51, getOrder:55, createOrder:59, createPublicOrder:63, deleteOrder:67, updateOrderDetails:71, addOrderHistoryEntry:75, duplicateOrder:79, duplicateOrderForUi:84, reprogramOrder:95, takeToProcessOrder:99, reassignOrderLead:103, updateRoundRobinActiveCommercials:107, updateOrderStatus:111, reopenDeliveryOrder:115, markPartialDelivery:119, assignOrderToDeliveryman:129, bulkAssignOrders:133, autoAssignDeliveryOrders:137, getDeliveryDispatchPlan:141, applyDeliveryDispatchPlan:145, getDeliveryDispatchAudit:152, applyDeliveryDispatchCorrections:156, getPendingSettlements:160, getSettlementHistory:164, createSettlement:168, getSettlementStats:177, getRiderSettlementStats:181, getDeliverySettlementDashboard:185, toggleCommercialContacted:189, getSidebarCounts:193, getDashboardStats:197, getPerformanceStats:201, getUserPerformanceDetails:205, getStockHistory:209
@@ -846,14 +887,22 @@
 ## modules/push/
 
 - `actions.ts` (229) [server] — PushCampaignInput:49, getPushConsoleData:58, savePushCampaign:77, cancelPushCampaign:133, deletePushCampaign:144, previewPushAudience:156, sendPushTest:176, updatePushSettings:203, searchPushProducts:215, resolvePushLink:224
-- `engine.ts` (329) — orderNumber:62, RegisterInput:68, registerDevice:77, unregisterDevice:105, resolveAudience:150, sendCampaign:184, processDueCampaigns:214, recordCampaignOpen:223, notifyOrderStatusPush:230, sendTestPush:262, processReceipts:277, runPushTick:291, devicesOverview:300
+- `engine.ts` (361) — orderNumber:62, RegisterInput:68, registerDevice:78, unregisterDevice:107, resolveAudience:152, sendCampaign:186, processDueCampaigns:216, recordCampaignOpen:225, notifyOrderStatusPush:232, notifyRiderAssignments:265, sendTestPush:292, processReceipts:307, runPushTick:321, devicesOverview:330
 - `expo.ts` (76) — ExpoMessage:9, ExpoTicket:22, isExpoPushToken:26, sendExpoMessages:38, ExpoReceipt:59, getExpoReceipts:62
 - `store.ts` (175) — withLock:49, deviceId:58, readDevice:62, writeDevice:66, readAllDevices:70, deactivateDevices:75, readCampaigns:84, updateCampaigns:89, patchCampaign:101, readPushSettings:109, writePushSettings:119, appendPushLog:125, readPushLog:129, PendingReceipt:135, addPendingReceipts:137, takeDueReceipts:146, readDailyCounts:161, bumpDailyCounts:166
-- `types.ts` (179) — PushTarget:6, PushTopic:15, TOPIC_LABELS:17, PushPlatform:23, PushDevice:25, PushAudience:43, PushCampaignStatus:54, PushCampaign:56, OrderStatusTemplate:73, PushSettings:75, ORDER_PUSH_STATUSES:89, DEFAULT_ORDER_TEMPLATES:100, DEFAULT_PUSH_SETTINGS:111, ORDER_PUSH_VARIABLES:121, PUSH_COLLECTIONS:129, PushLogEntry:136, TITLE_MAX:145, BODY_MAX:146, describeAudience:148, describeTarget:163
+- `types.ts` (181) — PushTarget:6, PushTopic:15, TOPIC_LABELS:17, PushPlatform:23, PushDevice:25, PushAudience:45, PushCampaignStatus:56, PushCampaign:58, OrderStatusTemplate:75, PushSettings:77, ORDER_PUSH_STATUSES:91, DEFAULT_ORDER_TEMPLATES:102, DEFAULT_PUSH_SETTINGS:113, ORDER_PUSH_VARIABLES:123, PUSH_COLLECTIONS:131, PushLogEntry:138, TITLE_MAX:147, BODY_MAX:148, describeAudience:150, describeTarget:165
+
+## modules/rider-app/
+
+- `api.ts` (85) — requireRider:11, statusSchema:18, partialSchema:26, alertSchema:33, setMissionStatus:52, setPartialDelivery:64, sendMissionAlert:75
+- `auth.ts` (44) — riderLoginSchema:11, loginRider:22
+- `orders.ts` (161) — loadRiderOrders:8
+- `proof.ts` (64) — proofSchema:15, addDeliveryProof:34, readDeliveryProof:59
 
 ## modules/rider-tracking/
 
 - `colors.ts` (7) — riderColor:2
+- `ingest.ts` (78) — IngestResult:15, ingestTracking:21
 - `segments.ts` (23) — trackSegments:2
 - `types.ts` (47) — RiderTrackPoint:1, RiderTrackState:11, RiderTrackingResponse:23, trackingStatus:32, positionAge:38
 - `validation.ts` (37) — trackingInput:3, validCaptureTime:17, historyRange:22, distanceMeters:30
@@ -899,5 +948,5 @@
 - `test-rider-personnel.mjs` (162)
 - `test-rider-place.mjs` (35)
 - `test-rider-stream.mjs` (46)
-- `test-rider-tracking.mjs` (145)
+- `test-rider-tracking.mjs` (147)
 - `test-stale-server-action.mjs` (50)

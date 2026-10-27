@@ -47,12 +47,14 @@ function load(path) {
   const scope = { exports: {}, Date, require: name => {
     if (name === "@/lib/prisma") return { __esModule: true, default: database };
     if (name === "@/modules/auth/actions") return { getSession: async () => session };
-    if (name === "@/modules/rider-tracking/validation") return validation;
+    if (name === "@/modules/rider-tracking/validation" || name === "./validation") return validation;
+    if (name === "@/modules/rider-tracking/ingest") return ingest;
     return require(name);
   } };
   vm.runInNewContext(compiled, scope); return scope.exports;
 }
 const validation = load("modules/rider-tracking/validation.ts");
+const ingest = load("modules/rider-tracking/ingest.ts");
 const { trackingStatus } = load("modules/rider-tracking/types.ts");
 const { POST } = load("app/api/rider-tracking/route.ts");
 const { GET } = load("app/api/admin/rider-tracking/route.ts");

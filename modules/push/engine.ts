@@ -72,6 +72,7 @@ export type RegisterInput = {
   topics?: Partial<Record<PushTopic, boolean>>;
   phones?: string[];
   orderIds?: string[];
+  riderId?: string | null;
 };
 
 export async function registerDevice(input: RegisterInput) {
@@ -91,8 +92,9 @@ export async function registerDevice(input: RegisterInput) {
       promotions: input.topics?.promotions ?? existing?.topics.promotions ?? true,
       cartReminders: input.topics?.cartReminders ?? existing?.topics.cartReminders ?? true,
     },
-    phones,
-    orderIds,
+    phones: input.riderId ? [] : phones,
+    orderIds: input.riderId ? [] : orderIds,
+    riderId: input.riderId ?? null,
     active: true,
     createdAt: existing?.createdAt ?? now,
     lastSeenAt: now,
@@ -149,7 +151,7 @@ async function deliver(outgoing: Outgoing[]) {
 
 export async function resolveAudience(audience: PushAudience, options: { applyDailyLimit?: boolean } = {}) {
   const settings = await readPushSettings();
-  const devices = (await readAllDevices()).filter((device) => device.active && device.topics.promotions);
+  const devices = (await readAllDevices()).filter((device) => device.active && !device.riderId && device.topics.promotions);
   let selected: PushDevice[] = devices;
 
   if (audience.kind === "platform" && audience.platform) {
@@ -235,7 +237,7 @@ export async function notifyOrderStatusPush(order: any, toStatus: string) {
 
     const phone = normalizeIvorianPhone(order.customerPhone || "");
     const devices = (await readAllDevices()).filter(
-      (device) => device.active && device.topics.orders && (device.orderIds.includes(order.id) || (phone && device.phones.includes(phone))),
+      (device) => device.active && !device.riderId && device.topics.orders && (device.orderIds.includes(order.id) || (phone && device.phones.includes(phone))),
     );
     if (!devices.length) return;
 
@@ -254,6 +256,46 @@ export async function notifyOrderStatusPush(order: any, toStatus: string) {
     await appendPushLog({ at: new Date().toISOString(), kind: "order", label: `${orderNumber(order)} → ${variables["{statut}"]}`, sent: result.sent, failed: result.failed, error: result.errors[0] ?? null });
   } catch (error) {
     console.error("[push] Notification de commande :", error);
+  }
+}
+
+// ============ LIVREURS ============
+
+/** Notifie chaque livreur de ses nouvelles missions (attribution, repartition, deplacement). */
+export async function notifyRiderAssignments(assignments: Array<{ riderId: string; orderId: string; commune: string | null }>) {
+  try {
+    if (!assignments.length) return;
+    const settings = await readPushSettings();
+    if (!settings.enabled) return;
+    const devices = (await readAllDevices()).filter((device) => device.active && device.riderId);
+    const byRider = new Map<string, typeof assignments>();
+    for (const item of assignments) byRider.set(item.riderId, [...(byRider.get(item.riderId) ?? []), item]);
+
+    const outgoing: Outgoing[] = [];
+    for (const [riderId, items] of byRider) {
+      const communes = Array.from(new Set(items.map((item) => item.commune).filter(Boolean))).slice(0, 3).join(", ");
+      const title = items.length > 1 ? `${items.length} nouvelles missions` : "Nouvelle mission";
+      const body = communes ? `A livrer : ${communes}. Ouvrez votre tournee.` : "Ouvrez votre tournee pour voir le detail.";
+      for (const device of devices.filter((item) => item.riderId === riderId)) {
+        outgoing.push({ device, title, body, channelId: "missions", data: { kind: "rider.assignment", orderIds: items.map((item) => item.orderId) } });
+      }
+    }
+    const result = await deliver(outgoing);
+    if (outgoing.length) await appendPushLog({ at: new Date().toISOString(), kind: "order", label: `Livreurs : ${assignments.length} mission(s) attribuee(s)`, sent: result.sent, failed: result.failed, error: result.errors[0] ?? null });
+  } catch (error) {
+    console.error("[push] Notification livreur :", error);
+  }
+}
+
+/** Message direct a un livreur (confirmation commerciale, consigne du bureau). */
+export async function notifyRider(riderId: string | null | undefined, message: { title: string; body: string; data?: Record<string, unknown> }) {
+  try {
+    if (!riderId || !(await readPushSettings()).enabled) return;
+    const devices = (await readAllDevices()).filter((device) => device.active && device.riderId === riderId);
+    if (!devices.length) return;
+    await deliver(devices.map((device) => ({ device, title: message.title, body: message.body, channelId: "missions", data: message.data ?? {} })));
+  } catch (error) {
+    console.error("[push] Message livreur :", error);
   }
 }
 
@@ -299,7 +341,8 @@ export async function runPushTick() {
 
 export async function devicesOverview() {
   const devices = await readAllDevices();
-  const active = devices.filter((device) => device.active);
+  // Statistiques clients : les appareils de l'application livreur sont comptes a part.
+  const active = devices.filter((device) => device.active && !device.riderId);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
   return {
     total: devices.length,
@@ -310,7 +353,8 @@ export async function devicesOverview() {
     orders: active.filter((device) => device.topics.orders).length,
     linked: active.filter((device) => device.phones.length > 0).length,
     activeThisWeek: active.filter((device) => device.lastSeenAt >= weekAgo).length,
-    recent: [...devices]
+    riders: devices.filter((device) => device.active && device.riderId).length,
+    recent: [...devices.filter((device) => !device.riderId)]
       .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))
       .slice(0, 30)
       .map((device) => ({

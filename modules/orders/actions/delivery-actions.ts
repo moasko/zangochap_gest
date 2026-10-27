@@ -7,6 +7,7 @@ import { getSession } from "@/modules/auth/actions";
 import { isRole } from "../helpers";
 import { decrementStockForOrder } from "./stock";
 import { triggerAutomations } from "@/modules/automations/engine";
+import { notifyRiderAssignments } from "@/modules/push/engine";
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   auditDeliveryDispatch,
@@ -29,6 +30,8 @@ type DeliveryAssignmentOrderWithItems = DeliveryAssignmentOrder & {
   ref: string | null;
   stockDecremented: boolean;
   items: unknown[];
+  // Livreur avant l'attribution (instantane lu avant l'ecriture) : sert a ne notifier que les nouvelles missions.
+  deliverymanId?: string | null;
 };
 
 function assertCanManageDeliveryAssignment(session: Awaited<ReturnType<typeof getSession>>) {
@@ -64,6 +67,22 @@ async function ensureDeliveryStock(order: DeliveryAssignmentOrderWithItems, sess
 // updateOrderStatus) : on emet donc l'evenement d'automatisation nous-memes.
 // Best-effort : ne doit jamais faire echouer l'attribution.
 async function emitOnDeliveryAutomations(orders: DeliveryAssignmentOrderWithItems[]) {
+  // Application livreur : push « nouvelle mission » au livreur desormais attribue.
+  try {
+    const assigned = await prisma.order.findMany({
+      where: { id: { in: orders.map((order) => order.id) }, deliverymanId: { not: null } },
+      select: { id: true, deliverymanId: true, commune: true },
+    });
+    const before = new Map(orders.map((order) => [order.id, order.deliverymanId]));
+    await notifyRiderAssignments(
+      assigned
+        .filter((order) => order.deliverymanId !== before.get(order.id))
+        .map((order) => ({ riderId: order.deliverymanId!, orderId: order.id, commune: order.commune })),
+    );
+  } catch (error) {
+    console.error("[delivery] Notification livreur :", error);
+  }
+
   const transitioned = orders.filter((order) =>
     READY_FOR_DELIVERY_STATUSES.includes(order.status as typeof READY_FOR_DELIVERY_STATUSES[number])
   );
