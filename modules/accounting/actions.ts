@@ -230,19 +230,21 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
   const session = await ensureSessionForDate(db, date, actor);
   await syncDeliveryOperations(session);
 
-  const [recentSessions, openSessionsRaw, categories, operations, audits, reports, riders, customers] = await Promise.all([
-    db.accountingSession.findMany({
-      orderBy: { date: "desc" },
-      take: 30,
-      include: { operations: { select: { type: true, amount: true, source: true, riderId: true, reason: true } } },
+  // Historique COMPLET des sessions (tous les mois) : l'ancienne limite aux 30 dernieres
+  // faisait disparaitre les mois precedents de l'ecran (donnees intactes en base mais
+  // invisibles). Les totaux par session sont agreges en SQL pour rester leger.
+  const [allSessions, sessionTotals, pendingDeliverySessions, categories, operations, audits, reports, riders, customers] = await Promise.all([
+    db.accountingSession.findMany({ orderBy: { date: "desc" } }),
+    db.accountingOperation.groupBy({
+      by: ["sessionId", "type"],
+      _sum: { amount: true },
+      _count: { _all: true },
     }),
-    // Toutes les sessions encore ouvertes (a cloturer), meme hors fenetre recente,
-    // pour qu'aucune session non cloturee oubliee n'echappe au journal.
-    db.accountingSession.findMany({
-      where: { status: { not: "CLOSED" } },
-      orderBy: { date: "desc" },
-      take: 120,
-      include: { operations: { select: { type: true, amount: true, source: true, riderId: true, reason: true } } },
+    // Ecriture de livraison groupee encore positive = livreurs a valider sur la session.
+    db.accountingOperation.findMany({
+      where: { source: "DELIVERY", riderId: null, deliveryOrderId: null, amount: { gt: 0 } },
+      select: { sessionId: true },
+      distinct: ["sessionId"],
     }),
     db.accountingCategory.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
     db.accountingOperation.findMany({
@@ -270,23 +272,51 @@ export async function getAccountingWorkspace(date = dateInputValue()) {
 
   const totals = summarizeOperations(operations);
 
-  // Fusionne sessions ouvertes (toutes) + sessions recentes, dedupliquees, triees
-  // par date decroissante. Les ouvertes hors des 30 derniers jours restent visibles.
-  const sessionsById = new Map<string, any>();
-  [...openSessionsRaw, ...recentSessions].forEach((item: any) => sessionsById.set(item.id, item));
-  const mergedSessions = Array.from(sessionsById.values())
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Corrections : le signe decide du cote (credit / debit), comme summarizeOperations.
+  const correctionSides = await db.accountingOperation.groupBy({
+    by: ["sessionId"],
+    where: { type: "CORRECTION", amount: { lt: 0 } },
+    _sum: { amount: true },
+  });
+  const negativeCorrection = new Map<string, number>(correctionSides.map((row: any) => [row.sessionId, Math.abs(Number(row._sum?.amount || 0))]));
+  const summaryBySession = new Map<string, { totalIncome: number; totalExpense: number; balance: number; count: number }>();
+  for (const row of sessionTotals as any[]) {
+    const entry = summaryBySession.get(row.sessionId) || { totalIncome: 0, totalExpense: 0, balance: 0, count: 0 };
+    const sum = Number(row._sum?.amount || 0);
+    entry.count += Number(row._count?._all || 0);
+    if (row.type === "INCOME") entry.totalIncome += Math.abs(sum);
+    else if (row.type === "EXPENSE") entry.totalExpense += Math.abs(sum);
+    else {
+      // CORRECTION : somme signee = positives - negatives ; on separe les deux cotes.
+      const negative = negativeCorrection.get(row.sessionId) || 0;
+      entry.totalIncome += sum + negative;
+      entry.totalExpense += negative;
+    }
+    entry.balance = entry.totalIncome - entry.totalExpense;
+    summaryBySession.set(row.sessionId, entry);
+  }
+  const pendingIds = new Set(pendingDeliverySessions.map((row: any) => row.sessionId));
+  // Motifs des debits (sorties, corrections negatives) : expliquent un solde negatif
+  // dans la liste des sessions. Seules ces ecritures sont jointes, pas tout le journal.
+  const debitMotifs = await db.accountingOperation.findMany({
+    where: { reason: { not: null }, OR: [{ type: "EXPENSE" }, { type: "CORRECTION", amount: { lt: 0 } }] },
+    select: { sessionId: true, type: true, amount: true, reason: true },
+  });
+  const motifsBySession = new Map<string, any[]>();
+  for (const op of debitMotifs as any[]) motifsBySession.set(op.sessionId, [...(motifsBySession.get(op.sessionId) || []), op]);
+  const emptySummary = { totalIncome: 0, totalExpense: 0, balance: 0, count: 0 };
 
   return JSON.parse(JSON.stringify({
     session,
-    sessions: mergedSessions.map((item: any) => ({
+    sessions: allSessions.map((item: any) => ({
       ...item,
-      summary: summarizeOperations(item.operations),
+      summary: summaryBySession.get(item.id) || emptySummary,
+      operations: motifsBySession.get(item.id) || [],
       // Une ecriture de livraison groupee (riderId null) avec un montant > 0 signifie
       // qu'il reste des livreurs a valider sur cette session.
-      pendingDelivery: item.operations.some((op: any) => op.source === "DELIVERY" && !op.riderId && Number(op.amount) > 0),
+      pendingDelivery: pendingIds.has(item.id),
     })),
-    openSessionsCount: openSessionsRaw.length,
+    openSessionsCount: allSessions.filter((item: any) => item.status !== "CLOSED").length,
     categories,
     operations,
     audits,
