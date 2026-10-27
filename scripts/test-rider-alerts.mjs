@@ -23,6 +23,7 @@ const api = load("modules/chat/actions.ts", {
   "next/cache": { revalidatePath() {} },
   "@/modules/auth/actions": { getSession: async () => session },
   "@/lib/rider-alert-events": { emitRiderAlert() {} },
+  "@/modules/push/engine": { notifyRider: async () => undefined },
   "@/lib/prisma": { user: { findUnique: async () => ({ isPaused: paused }) }, chatMessage: { findMany: async args => {
     query = args;
     return [{ id: "a", body: "[ALERTE LIVREUR] Test", senderName: "Livreur test", sender: { phone: null }, createdAt: date }];
